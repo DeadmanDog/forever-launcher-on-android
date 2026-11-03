@@ -20,7 +20,7 @@
 - 🔥 **Tuned for Adreno 8xx:** the TurnRIP Turnip driver with GPU power modes, wait boost and ADPF.
 - 🎯 **Smooth frame pacing:** an app-side limiter locked to the display's refresh, measured frame by frame on the device.
 - 🪶 **Ultralight:** one game and one container. Everything WoW does not use is removed: OpenGL, x86 emulation, store backends, unused DirectX and media modules.
-- 📲 **No PC needed:** download the whole game in the app at full speed (about 47 GB, written straight into the game's own storage), or upgrade a Classic beta install in place; game updates are in-app too.
+- 📲 **No PC needed:** download the whole game in the app at full speed (about 47 GB, written straight into the game's own storage); game updates are in-app too.
 - 🧰 **Built in:** performance HUD, a diagnostics recorder, an addon manager, Battle.net sign-in, voice chat repair.
 
 > ⚠️ **Unofficial community project.** Not affiliated with or endorsed by Blizzard Entertainment. World of Warcraft is a trademark of Blizzard Entertainment. You need your own Battle.net account with World of Warcraft: Forever. This repository and its releases contain **no** Blizzard game files.
@@ -59,8 +59,6 @@ Pick one:
   Then the **Game data** card downloads the rest of the game, about 47 GB, at the speed of your connection from Blizzard's CDN, straight
   into the game's own storage: with percent, speed and time left, with the screen off, and it can be stopped and continued. You can also
   play at any time: the download pauses, and while you play the game fetches only what it needs itself, at a lower speed.
-- **Upgrade a Classic beta install:** the launcher offers **Upgrade to WoW Forever**. Both use the same `Data/` archives, so only the new
-  client downloads and a `wowf` row is added to `.build.info`; your `Config.wtf` settings come across.
 - **Copy from a PC:** copy `.build.info` (a hidden file) and the `Data/` folder of your Battle.net install to the phone, for example to
   `/storage/emulated/0/World of Warcraft/`. **Locate Game Files** picks any other folder, on internal storage or an SD card; its name does not
   matter, only that `.build.info` and `Data/` are inside.
