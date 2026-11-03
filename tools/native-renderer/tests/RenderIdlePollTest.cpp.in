@@ -1,0 +1,59 @@
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <mutex>
+#include <vector>
+using VkResult=int;using VkFence=int;using VkDevice=int;
+constexpr int VK_SUCCESS=0,VK_NOT_READY=1,VK_NULL_HANDLE=0;
+constexpr unsigned MAX_FRAMES_IN_FLIGHT=2;
+struct VulkanRendererContext {
+ struct WinTex {int ds=0,view=0,img=0,mem=0,stg=0,stgMem=0;bool isAHB=false;int64_t idleToken=0;};
+ struct Dispatch {VkResult (*GetFenceStatus)(VkDevice,VkFence)=nullptr;} vk_;
+ VkDevice device=1;
+ std::mutex renderMutex;
+ VkFence inFlightFences[MAX_FRAMES_IN_FLIGHT]{1,2};
+ std::vector<WinTex> submittedRetirements[MAX_FRAMES_IN_FLIGHT];
+ std::vector<int64_t> idleReleased;
+ int freed[MAX_FRAMES_IN_FLIGHT]{0,0};
+ void freeRetiredTextures(std::vector<WinTex>&v){for(auto&t:v)if(t.idleToken)idleReleased.push_back(t.idleToken);v.clear();}
+ bool hasIdleTokensInFlight();
+ void pollIdleTokens();
+};
+/* PRODUCTION */
+static int done[3]={0,0,0};   // fence 1, 2 -> done?
+static VkResult status(VkDevice,VkFence f){return done[f]?VK_SUCCESS:VK_NOT_READY;}
+static VkResult failing(VkDevice,VkFence){return -4;}
+static void check(bool b,const char*m){if(!b){fprintf(stderr,"FAIL %s\n",m);exit(2);}}
+static VulkanRendererContext::WinTex tok(int64_t t){VulkanRendererContext::WinTex w;w.idleToken=t;return w;}
+int main(){
+ {VulkanRendererContext c;c.vk_.GetFenceStatus=status;
+  check(!c.hasIdleTokensInFlight(),"nothing in flight when nothing was submitted");
+  c.submittedRetirements[0].push_back(VulkanRendererContext::WinTex{});
+  check(!c.hasIdleTokensInFlight(),"ordinary resources are not hand-back tokens");
+  c.submittedRetirements[1].push_back(tok(7));
+  check(c.hasIdleTokensInFlight(),"a submitted frame carrying a token is in flight");
+  c.submittedRetirements[1].clear();c.idleReleased.push_back(8);
+  check(c.hasIdleTokensInFlight(),"a token waiting for delivery counts too");}
+ {VulkanRendererContext c;c.vk_.GetFenceStatus=status;done[1]=1;done[2]=0;
+  c.submittedRetirements[0]={tok(1),tok(2)};c.submittedRetirements[1]={tok(3)};
+  c.pollIdleTokens();
+  check(c.idleReleased==std::vector<int64_t>({1,2})&&c.submittedRetirements[0].empty(),"a finished frame hands back its tokens without any new render request");
+  check(c.submittedRetirements[1].size()==1,"a frame whose fence is not done keeps its tokens");
+  done[2]=1;c.pollIdleTokens();
+  check(c.idleReleased==std::vector<int64_t>({1,2,3})&&c.submittedRetirements[1].empty(),"it is released once its fence completes");
+  check(!c.hasIdleTokensInFlight()||!c.idleReleased.empty(),"nothing left to poll for in the slots");}
+ {VulkanRendererContext c;c.vk_.GetFenceStatus=status;done[1]=1;
+  c.submittedRetirements[0]={VulkanRendererContext::WinTex{}};   // ordinary resources only
+  c.pollIdleTokens();
+  check(c.submittedRetirements[0].size()==1,"ordinary resources wait for their slot's normal turn, as before");}
+ {VulkanRendererContext c;c.vk_.GetFenceStatus=failing;c.submittedRetirements[0]={tok(5)};
+  c.pollIdleTokens();
+  check(c.idleReleased.empty()&&c.submittedRetirements[0].size()==1,"a fence error never releases a buffer");}
+ {VulkanRendererContext c;c.submittedRetirements[0]={tok(5)};   // no GetFenceStatus entry point
+  c.pollIdleTokens();
+  check(c.idleReleased.empty(),"without a fence query nothing is released");}
+ {VulkanRendererContext c;c.vk_.GetFenceStatus=status;done[1]=1;c.inFlightFences[0]=VK_NULL_HANDLE;c.submittedRetirements[0]={tok(6)};
+  c.pollIdleTokens();
+  check(c.idleReleased.empty(),"a missing fence handle never releases a buffer");}
+ puts("PASS idle poll");
+}

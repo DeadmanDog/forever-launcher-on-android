@@ -1,0 +1,85 @@
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <mutex>
+#include <shared_mutex>
+#include <thread>
+#include <vector>
+#include "RenderWakeSignal.h"
+constexpr int VK_NULL_HANDLE=0;
+struct VulkanRendererContext{
+ std::shared_mutex frameMutex;std::mutex renderMutex;std::vector<uint32_t>cursorPixels;
+ std::atomic<bool>isCursorImageDirty{false},needsRender{false},entered{false},cursorMoved{false};std::atomic<uint64_t>sceneGen{1},contentGen{0};void markSceneDirty(){sceneGen.fetch_add(1);needsRender.store(true);}std::atomic<uint64_t>cursorStageGen{0};short cursorHotX=0,cursorHotY=0,cursorTexW=0,cursorTexH=0,cursorW=0,cursorH=0;static constexpr short kCursorCapacity=256;int cursorImg=0;RenderWakeSignal renderWake;
+ uint64_t cursorSnapshotGen=0;bool cursorNeedsTransition=true;
+ bool ensureCursorTex(short,short){entered=true;return true;}
+ void updateCursorImage(void*,short,short,short,short);
+ void noteSlowCursorUpdate(std::chrono::steady_clock::time_point,short,short,bool){}
+ void commitCursorUpload();
+};
+/* PRODUCTION */
+int main(int argc,char**argv){int which=argc>1?atoi(argv[1]):0;VulkanRendererContext c;uint32_t pixels[4]={1,2,3,4};std::atomic<bool>started{false};
+ if(which==1){
+  // A cursor of the same size only changes CPU state: it must not wait for a frame that holds the shared lock.
+  c.cursorImg=1;c.cursorTexW=2;c.cursorTexH=2;c.cursorW=2;c.cursorH=2;c.cursorPixels={9,9,9,9};
+  std::shared_lock<std::shared_mutex>reader(c.frameMutex);
+  std::atomic<bool>done{false};
+  std::thread writer([&]{c.updateCursorImage(pixels,2,2,1,1);done=true;});
+  auto end=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+  while(!done&&std::chrono::steady_clock::now()<end)std::this_thread::yield();
+  bool finished=done;reader.unlock();writer.join();
+  if(!finished){fputs("FAIL same-size cursor change waited for the frame\n",stderr);return 4;}
+  if(c.entered||c.cursorPixels[3]!=4||!c.isCursorImageDirty||c.cursorStageGen!=1||c.cursorHotX!=1)return 5;
+  c.isCursorImageDirty=false;c.needsRender=false;c.updateCursorImage(pixels,2,2,1,1);
+  if(c.isCursorImageDirty||c.cursorStageGen!=1){fputs("FAIL identical cursor image must not dirty\n",stderr);return 6;}
+  c.updateCursorImage(pixels,2,2,0,0);
+  if(c.isCursorImageDirty||!c.needsRender||c.cursorHotX!=0){fputs("FAIL hotspot-only change\n",stderr);return 7;}
+  puts("PASS same-size cursor image never waits for a frame");return 0;}
+ if(which==2){
+  // A frame uploaded generation 1; a newer image (generation 2) was staged before the frame committed: it must stay dirty.
+  c.cursorImg=1;c.cursorTexW=2;c.cursorTexH=2;c.cursorW=2;c.cursorH=2;c.cursorPixels={9,9,9,9};
+  c.cursorStageGen=1;c.cursorSnapshotGen=1;c.isCursorImageDirty=true;
+  c.cursorStageGen=2;c.isCursorImageDirty=true;
+  c.commitCursorUpload();
+  if(!c.isCursorImageDirty){fputs("FAIL a newer staged cursor image lost its dirty flag\n",stderr);return 8;}
+  c.cursorSnapshotGen=2;c.commitCursorUpload();
+  if(c.isCursorImageDirty||c.cursorNeedsTransition){fputs("FAIL commit of the current generation must clear\n",stderr);return 9;}
+  puts("PASS commit keeps a newer staged cursor image dirty");return 0;}
+ if(which==3){
+  // The generation check and the clear are one step under renderMutex: the commit must wait for a holder of that mutex
+  // (a stager), so no image can be staged between the check and the clear.
+  c.cursorStageGen=5;c.cursorSnapshotGen=5;c.isCursorImageDirty=true;
+  std::atomic<bool>finished{false};
+  c.renderMutex.lock();
+  std::thread committer([&]{c.commitCursorUpload();finished=true;});
+  auto until=std::chrono::steady_clock::now()+std::chrono::milliseconds(100);
+  while(std::chrono::steady_clock::now()<until)std::this_thread::yield();
+  bool waited=!finished;
+  c.cursorStageGen=6;c.isCursorImageDirty=true;          // a stager finishes its work while holding the mutex
+  c.renderMutex.unlock();committer.join();
+  if(!waited){fputs("FAIL commit did not take renderMutex\n",stderr);return 10;}
+  if(!c.isCursorImageDirty){fputs("FAIL the image staged under the mutex lost its dirty flag\n",stderr);return 11;}
+  puts("PASS cursor commit is atomic with staging");return 0;}
+ if(which==4){
+  // A smaller or larger cursor that fits the reserved texture is CPU state only as well: no frame wait, no new texture.
+  c.cursorImg=1;c.cursorTexW=256;c.cursorTexH=256;c.cursorW=1;c.cursorH=1;c.cursorPixels={9};
+  std::shared_lock<std::shared_mutex>reader(c.frameMutex);
+  std::atomic<bool>done{false};
+  std::thread writer([&]{c.updateCursorImage(pixels,2,2,1,1);done=true;});
+  auto end=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+  while(!done&&std::chrono::steady_clock::now()<end)std::this_thread::yield();
+  bool finished=done;reader.unlock();writer.join();
+  if(!finished){fputs("FAIL cursor size change waited for the frame\n",stderr);return 12;}
+  if(c.entered||c.cursorW!=2||c.cursorH!=2||c.cursorPixels.size()!=4||c.cursorPixels[3]!=4||!c.isCursorImageDirty){fputs("FAIL size change not staged as CPU state\n",stderr);return 13;}
+  puts("PASS cursor size change within capacity never waits for a frame");return 0;}
+ std::shared_lock<std::shared_mutex>reader(c.frameMutex);
+ std::thread writer([&]{started=true;c.updateCursorImage(pixels,2,2,1,1);});
+ while(!started)std::this_thread::yield();
+ auto end=std::chrono::steady_clock::now()+std::chrono::milliseconds(30);
+ while(std::chrono::steady_clock::now()<end&&!c.entered)std::this_thread::yield();
+ bool concurrent=c.entered;reader.unlock();writer.join();
+ if(concurrent){fputs("FAIL cursor image changes during a frame\n",stderr);return 2;}
+ if(c.cursorPixels.size()!=4||c.cursorPixels[3]!=4||!c.isCursorImageDirty||!c.needsRender)return 3;
+ puts("PASS cursor image lifetime excludes active frame");}

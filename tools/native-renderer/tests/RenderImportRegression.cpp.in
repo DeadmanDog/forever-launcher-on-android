@@ -1,0 +1,52 @@
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_android.h>
+#include <algorithm>
+#include <atomic>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <mutex>
+#include <stdexcept>
+#include <vector>
+#include <unordered_set>
+#define RLOG_E(...)
+struct AHardwareBuffer { int id; };
+struct AHardwareBuffer_Desc { uint32_t width=32,height=16; };
+static void AHardwareBuffer_describe(AHardwareBuffer*, AHardwareBuffer_Desc* d){*d={};}
+static int failure=0, descriptorUpdates=0;
+static bool invalidFormat=false;
+static VkFormat suppliedFormat=VK_FORMAT_B8G8R8A8_UNORM;
+static uint32_t suppliedMemoryBits=1;
+static std::unordered_set<uint64_t> images,memories,views,sets;
+static uint64_t nextId=10;
+template<class T> static T handle(uint64_t v){return (T)v;}
+struct VulkanRendererContext {
+ struct WinTex {VkImage img=VK_NULL_HANDLE;VkDeviceMemory mem=VK_NULL_HANDLE;VkImageView view=VK_NULL_HANDLE;VkDescriptorSet ds=VK_NULL_HANDLE;VkBuffer stg=VK_NULL_HANDLE;int w=0,h=0;bool isAHB=false,needsTransition=false;};
+ struct Dispatch {
+  VkResult (*GetAndroidHardwareBufferPropertiesANDROID)(VkDevice,AHardwareBuffer*,VkAndroidHardwareBufferPropertiesANDROID*)=[](VkDevice,AHardwareBuffer*,VkAndroidHardwareBufferPropertiesANDROID* p){p->allocationSize=4096;p->memoryTypeBits=suppliedMemoryBits;auto f=(VkAndroidHardwareBufferFormatPropertiesANDROID*)p->pNext;f->format=suppliedFormat;f->externalFormat=999;return VK_SUCCESS;};
+  VkResult (*CreateImage)(VkDevice,const VkImageCreateInfo*,const VkAllocationCallbacks*,VkImage*)=[](VkDevice,const VkImageCreateInfo* p,const VkAllocationCallbacks*,VkImage* out){auto emi=(const VkExternalMemoryImageCreateInfo*)p->pNext;if(emi&&emi->pNext){auto ef=(const VkExternalFormatANDROID*)emi->pNext;if(ef->externalFormat!=0)invalidFormat=true;}if(p->format!=suppliedFormat)invalidFormat=true;if(failure==1)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*out=handle<VkImage>(++nextId);images.insert(nextId);return VK_SUCCESS;};
+  VkResult (*AllocateMemory)(VkDevice,const VkMemoryAllocateInfo*,const VkAllocationCallbacks*,VkDeviceMemory*)=[](VkDevice,const VkMemoryAllocateInfo*,const VkAllocationCallbacks*,VkDeviceMemory* out){if(failure==2)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*out=handle<VkDeviceMemory>(++nextId);memories.insert(nextId);return VK_SUCCESS;};
+  VkResult (*BindImageMemory)(VkDevice,VkImage,VkDeviceMemory,VkDeviceSize)=[](VkDevice,VkImage,VkDeviceMemory,VkDeviceSize){return failure==3?VK_ERROR_OUT_OF_DEVICE_MEMORY:VK_SUCCESS;};
+  VkResult (*CreateImageView)(VkDevice,const VkImageViewCreateInfo* p,const VkAllocationCallbacks*,VkImageView* out)=[](VkDevice,const VkImageViewCreateInfo* p,const VkAllocationCallbacks*,VkImageView* out){if(p->format!=suppliedFormat)invalidFormat=true;if(failure==4)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*out=handle<VkImageView>(++nextId);views.insert(nextId);return VK_SUCCESS;};
+  VkResult (*AllocateDescriptorSets)(VkDevice,const VkDescriptorSetAllocateInfo*,VkDescriptorSet*)=[](VkDevice,const VkDescriptorSetAllocateInfo*,VkDescriptorSet* out){if(failure==5)return VK_ERROR_OUT_OF_POOL_MEMORY;*out=handle<VkDescriptorSet>(++nextId);sets.insert(nextId);return VK_SUCCESS;};
+  void (*UpdateDescriptorSets)(VkDevice,uint32_t,const VkWriteDescriptorSet*,uint32_t,const VkCopyDescriptorSet*)=[](VkDevice,uint32_t,const VkWriteDescriptorSet*,uint32_t,const VkCopyDescriptorSet*){descriptorUpdates++;};
+  void (*DestroyImage)(VkDevice,VkImage v,const VkAllocationCallbacks*)=[](VkDevice,VkImage v,const VkAllocationCallbacks*){images.erase((uint64_t)v);};
+  void (*FreeMemory)(VkDevice,VkDeviceMemory v,const VkAllocationCallbacks*)=[](VkDevice,VkDeviceMemory v,const VkAllocationCallbacks*){memories.erase((uint64_t)v);};
+  void (*DestroyImageView)(VkDevice,VkImageView v,const VkAllocationCallbacks*)=[](VkDevice,VkImageView v,const VkAllocationCallbacks*){views.erase((uint64_t)v);};
+  VkResult (*FreeDescriptorSets)(VkDevice,VkDescriptorPool,uint32_t,const VkDescriptorSet* v)=[](VkDevice,VkDescriptorPool,uint32_t,const VkDescriptorSet* v){sets.erase((uint64_t)*v);return VK_SUCCESS;};
+ } vk_;
+ VkDevice device=VK_NULL_HANDLE; VkDescriptorPool winTexPool=VK_NULL_HANDLE;VkDescriptorSetLayout dsLayout=VK_NULL_HANDLE;VkSampler sampler=VK_NULL_HANDLE;
+ bool swapRB=false;VkPhysicalDeviceMemoryProperties memProperties{};std::vector<WinTex>deleteQueue;
+ uint32_t findMemType(uint32_t,VkMemoryPropertyFlags);bool importAHBToWinTex(WinTex&,AHardwareBuffer*);void destroyWinTex(WinTex&);
+};
+/* PRODUCTION */
+static void check(bool b,const char*m){if(!b){fprintf(stderr,"FAIL %s\n",m);exit(2);}}
+int main(int,char**argv){int n=atoi(argv[1]);VulkanRendererContext c;c.memProperties.memoryTypeCount=1;AHardwareBuffer b{1};VulkanRendererContext::WinTex wt;
+ if(n==0||n==1){c.swapRB=n==1;check(c.importAHBToWinTex(wt,&b),"typed import succeeds");check(!invalidFormat,"typed AHB import violates Vulkan format contract");}
+ if(n==2){failure=3;check(!c.importAHBToWinTex(wt,&b),"failed BindImageMemory published an unbound sampled image");check(descriptorUpdates==0,"unbound image reached descriptor update");}
+ if(n==3){suppliedMemoryBits=0;bool escaped=false;try{check(!c.importAHBToWinTex(wt,&b),"invalid memory mask accepted");}catch(...){escaped=true;}check(!escaped,"AHB memory-type failure escapes JNI as C++ exception");check(images.empty()&&memories.empty(),"rejected import leaked allocation");}
+ if(n==4||n==5){failure=n==4?4:5;check(!c.importAHBToWinTex(wt,&b),"failed partial import accepted");check(images.empty()&&memories.empty()&&views.empty()&&sets.empty()&&c.deleteQueue.empty(),"unsubmitted import stays allocated until a future frame");}
+ if(n==6){suppliedFormat=VK_FORMAT_UNDEFINED;check(!c.importAHBToWinTex(wt,&b),"unsupported external/YUV format accepted without sampler conversion");check(images.empty(),"unsupported format allocated an image");}
+ if(n==7||n==8){failure=n==7?1:2;check(!c.importAHBToWinTex(wt,&b),"allocation failure accepted");check(images.empty()&&memories.empty(),"image/allocation failure leaked");}
+ puts("PASS AHB import");
+}

@@ -1,0 +1,27 @@
+import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
+public class VulkanWindowRegression {
+ static class Drawable {final int id;Drawable(int n){id=n;}}
+ static class Attributes {boolean mapped=true,enabled=true;boolean isMapped(){return mapped;}boolean isEnabled(){return enabled;}}
+ static class Window {final Attributes attributes=new Attributes();Drawable content;List<Window>children=new ArrayList<>();Window(Drawable d){content=d;}Drawable getContent(){return content;}List<Window>getChildren(){return children;}String getClassName(){return "WoW";}int getX(){return 0;}int getY(){return 0;}void disableAllDescendants(){}}
+ static class RenderableWindow {final Drawable content;final int rootX,rootY;RenderableWindow(Drawable c,int x,int y){content=c;rootX=x;rootY=y;}}
+ static class XServer {final WindowManager windowManager=new WindowManager();static class WindowManager{Window rootWindow=new Window(new Drawable(0));}}
+ static class View {void queueEvent(Runnable r){r.run();}}
+ final XServer xServer=new XServer();final View xServerView=new View();final Object lock=new Object(),nativeLifetimeLock=new Object();
+ boolean disposed=false,flatPresentationEnabled=true;long nativeHandle=1;String[]unviewableWMClasses=null;
+ private static final AtomicLong ID_GEN=new AtomicLong(1);
+ private final Map<Drawable,Long>drawableIds=new IdentityHashMap<>();Set<Long>textures=new HashSet<>();List<Long>removed=new ArrayList<>();int sceneRequests=0;
+ void queueSceneUpdate(){sceneRequests++;}void nativeRemoveWindow(long h,long id){removed.add(id);textures.remove(id);}
+ /* PRODUCTION */
+ static void check(boolean b,String m){if(!b)throw new AssertionError(m);}
+ public static void main(String[]args){int n=Integer.parseInt(args[0]);var r=new VulkanWindowRegression();var w=new Window(new Drawable(3));
+  if(n==0){var input=new Window(null);input.children.add(w);var list=new ArrayList<RenderableWindow>();r.collectWindows(list,input,0,0);check(list.size()==1&&list.get(0).content==w.content,"input-only window must not enter render list; drawable child must remain");}
+  if(n==1){r.onDestroyWindow(new Window(null));check(r.drawableIds.isEmpty()&&r.removed.isEmpty(),"input-only destruction invents native texture identity");}
+  if(n==2){long id=r.did(w.content);r.textures.add(id);w.attributes.mapped=false;r.onUnmapWindow(w);w.attributes.mapped=true;r.queueSceneUpdate();check(r.textures.contains(id)&&r.removed.isEmpty(),"unmap/remap erases last image without a repaint");check(r.sceneRequests>0,"unmap still requests scene exclusion");}
+  if(n==3){long id=r.did(w.content);r.textures.add(id);r.onDestroyWindow(w);check(r.removed.equals(List.of(id))&&!r.textures.contains(id),"destroy still retires actual image");}
+  if(n==4){var list=new ArrayList<RenderableWindow>();r.collectWindows(list,w,5,6);check(list.size()==1&&list.get(0).rootX==5&&list.get(0).rootY==6,"mapped drawable and coordinates retained");}
+  if(n==5){w.attributes.mapped=false;var list=new ArrayList<RenderableWindow>();r.collectWindows(list,w,0,0);check(list.isEmpty(),"unmapped windows remain excluded");}
+  if(n==6){r.unviewableWMClasses=new String[]{"WoW"};var list=new ArrayList<RenderableWindow>();r.collectWindows(list,w,0,0);check(list.isEmpty(),"class filtering retained");}
+  System.out.println("PASS window lifecycle "+n);
+ }
+}

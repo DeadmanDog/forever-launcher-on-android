@@ -1,0 +1,34 @@
+
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <shared_mutex>
+#include <thread>
+#include <cstdio>
+#include "RenderWakeSignal.h"
+using VkInstance=int;using VkDevice=int;using VkSurfaceKHR=int;constexpr int VK_NULL_HANDLE=0;
+struct ANativeWindow {};static void ANativeWindow_release(ANativeWindow*){}
+struct VulkanRendererContext{
+ std::atomic<bool>surfaceDetached{false};RenderWakeSignal renderWake;std::shared_mutex frameMutex;
+ std::atomic<bool>deviceIdleEntered{false},readerDone{false},readerEntered{false};
+ int device=1,instance=1,surface=1,swapchain=1;ANativeWindow*window=nullptr;
+ struct Table {VulkanRendererContext*ctx;
+ int DeviceWaitIdle(int){ctx->deviceIdleEntered=true;while(!ctx->readerDone)std::this_thread::yield();return 0;}
+ void DestroySurfaceKHR(int,int,void*){}
+ }vk_{this};
+ void cleanupSwapchain(){swapchain=0;}
+ void detachSurface();
+};
+/* DETACH_BODY */
+int main(){
+ VulkanRendererContext context;
+ std::thread observer([&]{while(!context.deviceIdleEntered)std::this_thread::yield();
+  context.readerEntered=context.frameMutex.try_lock_shared();
+  if(context.readerEntered)context.frameMutex.unlock_shared();
+  context.readerDone=true;
+ });
+ context.detachSurface();observer.join();
+ if(context.readerEntered){std::fputs("FAIL frame reader entered while surface resources were retiring\n",stderr);return 2;}
+ if(!context.surfaceDetached ||context.swapchain ||context.surface){std::fputs("FAIL detach state\n",stderr);return 3;}
+ puts("PASS surface cleanup excludes concurrent frame readers");
+}

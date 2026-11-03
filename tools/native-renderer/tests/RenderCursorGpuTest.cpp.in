@@ -1,0 +1,62 @@
+#define VK_USE_64_BIT_PTR_DEFINES 0
+#include <vulkan/vulkan.h>
+#include <atomic>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <mutex>
+#include <stdexcept>
+#include <unordered_map>
+#include <vector>
+#define RLOG_E(...)
+struct MockVk {
+ uint64_t next=100; int waits=0,destroyed=0; bool failWait=false,failMap=false; int failCreate=0;
+ bool gpuPending=true,unsafeDestroy=false; VkImageLayout observedLayout{};VkPipelineStageFlags observedStage{};VkAccessFlags observedAccess{};
+ std::unordered_map<VkDeviceMemory,std::vector<unsigned char>> memory;
+ VkResult CreateImage(VkDevice,const VkImageCreateInfo*,const VkAllocationCallbacks*,VkImage* p){if(failCreate==1)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*p=next++;return VK_SUCCESS;}
+ void GetImageMemoryRequirements(VkDevice,VkImage,VkMemoryRequirements* p){*p={4096,16,1};}
+ VkResult AllocateMemory(VkDevice,const VkMemoryAllocateInfo* i,const VkAllocationCallbacks*,VkDeviceMemory* p){if(failCreate==2)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*p=next++;memory[*p].resize(i->allocationSize);return VK_SUCCESS;}
+ VkResult BindImageMemory(VkDevice,VkImage,VkDeviceMemory,VkDeviceSize){return failCreate==3?VK_ERROR_OUT_OF_DEVICE_MEMORY:VK_SUCCESS;}
+ VkResult CreateImageView(VkDevice,const VkImageViewCreateInfo*,const VkAllocationCallbacks*,VkImageView* p){if(failCreate==4)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*p=next++;return VK_SUCCESS;}
+ void UpdateDescriptorSets(VkDevice,uint32_t,const VkWriteDescriptorSet*,uint32_t,const VkCopyDescriptorSet*){}
+ void DestroyImage(VkDevice,VkImage,const VkAllocationCallbacks*){destroyed++;if(gpuPending)unsafeDestroy=true;}
+ void DestroyImageView(VkDevice,VkImageView,const VkAllocationCallbacks*){}
+ void DestroyBuffer(VkDevice,VkBuffer,const VkAllocationCallbacks*){destroyed++;}
+ void FreeMemory(VkDevice,VkDeviceMemory m,const VkAllocationCallbacks*){memory.erase(m);}
+ VkResult MapMemory(VkDevice,VkDeviceMemory m,VkDeviceSize,VkDeviceSize,VkMemoryMapFlags,void** p){if(failMap)return VK_ERROR_MEMORY_MAP_FAILED;*p=memory.at(m).data();return VK_SUCCESS;}
+ void CmdPipelineBarrier(VkCommandBuffer,VkPipelineStageFlags src,VkPipelineStageFlags,VkDependencyFlags,uint32_t,const VkMemoryBarrier*,uint32_t,const VkBufferMemoryBarrier*,uint32_t,const VkImageMemoryBarrier* b){observedLayout=b->oldLayout;observedStage=src;observedAccess=b->srcAccessMask;}
+ void CmdCopyBufferToImage(VkCommandBuffer,VkBuffer,VkImage,VkImageLayout,uint32_t,const VkBufferImageCopy*){}
+};
+struct VulkanRendererContext {
+ MockVk vk_;VkDevice device{};VkDescriptorPool winTexPool{};VkDescriptorSet cursorDS=9;VkImage cursorImg=0;VkImageView cursorView=0;VkDeviceMemory cursorMem=0;VkSampler sampler=1;
+ short cursorTexW=0,cursorTexH=0,cursorW=0,cursorH=0;static constexpr short kCursorEdgePad=2;uint32_t currentFrame=0;std::vector<VkFence>inFlightFences{1,2};std::atomic<bool>isCursorImageDirty{true};
+ /* STAGING_FIELDS */
+ std::mutex renderMutex;std::atomic<uint64_t>cursorStageGen{0};uint64_t cursorSnapshotGen=0;
+ bool ensureCursorTex(short,short);void cleanupCursorTex();void ensureCursorStaging(VkDeviceSize);void commitCursorUpload();
+ uint32_t findMemType(uint32_t,VkMemoryPropertyFlags){return 0;}
+ bool waitForFrameFence(VkFence){vk_.waits++;if(vk_.failWait)return false;vk_.gpuPending=false;return true;}
+ void createBuffer(VkDeviceSize n,VkBufferUsageFlags,VkMemoryPropertyFlags,VkBuffer& b,VkDeviceMemory& m){b=vk_.next++;VkMemoryAllocateInfo a{};a.allocationSize=n;vk_.AllocateMemory(device,&a,nullptr,&m);}
+ void barrier(bool first){cursorNeedsTransition=first;VkCommandBuffer cb{};VkBuffer cursorUpload=1;short curW=2,curH=2,curUpW=2,curUpH=2;std::vector<VkImageMemoryBarrier>postUpload;
+ /* CURSOR_BARRIER */
+ }
+ VkBuffer slotBuffer(int i){/* SLOT_BUFFER */}
+ void* slotMapped(int i){/* SLOT_MAPPED */}
+ void upload(){/* CURSOR_UPLOAD */}
+};
+/* PRODUCTION */
+static void check(bool ok,const char* s){if(!ok){fprintf(stderr,"FAIL %s\n",s);exit(2);}}
+int main(int argc,char**argv){int n=argc>1?atoi(argv[1]):0;VulkanRendererContext c;
+ if(n==0){c.ensureCursorStaging(16);auto b=c.slotBuffer(0);memset(c.slotMapped(0),1,16);c.currentFrame=1;c.ensureCursorStaging(16);memset(c.slotMapped(1),2,16);check(c.slotBuffer(1)!=b,"overlapping GPU frames use different upload buffers");check(((unsigned char*)c.slotMapped(0))[0]==1,"new cursor does not overwrite preceding GPU upload");}
+ if(n==1){c.ensureCursorStaging(16);auto b=c.slotBuffer(0);c.currentFrame=1;c.ensureCursorStaging(64);check(c.slotBuffer(0)==b,"growing current slot preserves other frame");c.cleanupCursorTex();check(c.vk_.memory.empty(),"all cursor staging memory released");}
+ if(n==2){c.cursorImg=12;c.cursorTexW=2;c.cursorTexH=2;check(c.ensureCursorTex(3,3),"resize succeeds");check(c.vk_.waits==2&&!c.vk_.unsafeDestroy,"resize retires both GPU frames before destruction");}
+ if(n==3){c.cursorImg=12;c.cursorTexW=2;c.cursorTexH=2;c.vk_.failWait=true;check(!c.ensureCursorTex(3,3),"GPU failure rejects resize");check(c.cursorImg==12&&c.vk_.destroyed==0,"failed wait preserves pending GPU resources");}
+ if(n==4){c.cursorImg=12;c.cursorTexW=2;c.cursorTexH=2;check(c.ensureCursorTex(2,2),"same size succeeds");check(c.vk_.waits==0&&c.vk_.destroyed==0,"same size adds no GPU wait/allocation");}
+ if(n==5){c.vk_.gpuPending=false;check(c.ensureCursorTex(2,2),"first cursor succeeds");check(c.vk_.waits==0&&c.cursorNeedsTransition,"new image starts untransitioned without queue wait");}
+ if(n==6){c.cursorImg=12;c.barrier(true);check(c.vk_.observedLayout==VK_IMAGE_LAYOUT_UNDEFINED&&c.vk_.observedStage==VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT&&c.vk_.observedAccess==0,"first cursor upload uses actual initial layout");}
+ if(n==7){c.cursorImg=12;c.barrier(false);check(c.vk_.observedLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL&&c.vk_.observedStage==VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT&&c.vk_.observedAccess==VK_ACCESS_SHADER_READ_BIT,"later upload orders after preceding sampling");}
+ if(n==8){c.upload();check(c.isCursorImageDirty,"aborted frame keeps cursor upload dirty");c.commitCursorUpload();check(!c.isCursorImageDirty&&!c.cursorNeedsTransition,"successful submit commits upload");}
+ if(n>=9&&n<=12){c.vk_.gpuPending=false;c.vk_.failCreate=n-8;check(!c.ensureCursorTex(2,2),"allocation failure rejected");check(c.cursorImg==0&&c.cursorMem==0&&c.cursorView==0&&c.vk_.memory.empty(),"partial cursor allocation cleaned");}
+ if(n==13){c.vk_.failMap=true;bool failed=false;try{c.ensureCursorStaging(16);}catch(...){failed=true;}check(failed&&c.slotBuffer(0)==0&&c.vk_.memory.empty(),"mapping failure cleans buffer and never copies to null");}
+ printf("PASS cursor GPU regression %d\n",n);
+}

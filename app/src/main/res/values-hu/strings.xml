@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hungarian texts of the in-game Quick Menu and its Screen Effects tab. The menu follows the in-app language (WowLocalizedResources). -->
+<resources>
+    <string name="quick_menu_title">Gyorsmenü</string>
+    <string name="quick_menu_back">Vissza</string>
+    <string name="quick_menu_tab_controller">Vezérlés</string>
+    <string name="exit_game">Kilépés</string>
+    <string name="pause_game_on_menu">Játék szüneteltetése, amíg a menü nyitva van</string>
+    <string name="battle_net_sign_in">Belépés a Battle.net-be</string>
+    <string name="bnet_auto_sign_in">Automatikus belépés induláskor</string>
+    <string name="bnet_auto_sign_in_needs_login">Előbb mentsd el a belépésed: egyszer lépj be a Battle.net-be</string>
+    <string name="disable_mouse_input">Egérbevitel kikapcsolása</string>
+    <string name="keyboard">Billentyűzet</string>
+    <string name="input_controls">Érintéses vezérlő</string>
+    <string name="edit_controls">Érintéses vezérlő szerkesztése</string>
+    <string name="edit_physical_controller">Kontroller szerkesztése</string>
+    <string name="touchscreen_mode">Érintőképernyős mód</string>
+    <string name="radial_menu">Körmenü</string>
+    <string name="gesture_settings_title">Érintési gesztusok beállításai</string>
+    <string name="main_loading">Betöltés…</string>
+    <string name="task_manager">Feladatkezelő</string>
+    <string name="tools_wine_processes_empty">Nincs futó EXE.</string>
+    <string name="tools_wine_processes_running_hint">%1$d fut, egy folyamatra koppintva bezárható</string>
+
+    <string name="performance_hud">Teljesítmény-HUD</string>
+    <string name="performance_hud_description">A játék közbeni kijelző megjelenítése vagy elrejtése.</string>
+    <string name="performance_hud_lock">HUD rögzítése</string>
+    <string name="performance_hud_lock_description">A HUD nem reagál az érintésre, így játék közben nem mozdul el véletlenül</string>
+    <string name="performance_hud_presets">Előbeállítások</string>
+    <string name="performance_hud_appearance">Megjelenés</string>
+    <string name="performance_hud_size">Méret</string>
+    <string name="performance_hud_background_opacity">Háttér átlátszatlansága</string>
+    <string name="performance_hud_color_intensity">Színintenzitás</string>
+    <string name="performance_hud_text_outline">Szöveg körvonala</string>
+    <string name="performance_hud_metrics">Megjelenített adatok</string>
+    <string name="performance_hud_fps_limiter">FPS-limit</string>
+    <string name="performance_hud_fps_limiter_target">Cél FPS</string>
+
+    <string name="screen_effects">Képernyőeffektek</string>
+    <string name="display_brightness">Kijelző fényereje</string>
+    <string name="screen_effects_upscaling">Felskálázás</string>
+    <string name="screen_effects_basic_scaling">Alap skálázás</string>
+    <string name="screen_effects_fsr_sharpness">FSR élesség</string>
+    <string name="screen_effects_color_adjustments">Színbeállítások</string>
+    <string name="screen_effects_brightness">Fényerő</string>
+    <string name="screen_effects_contrast">Kontraszt</string>
+    <string name="screen_effects_gamma">Gamma</string>
+    <string name="screen_effects_reset">Visszaállítás</string>
+    <string name="screen_effects_shader_toggles">Shader-effektek</string>
+    <string name="screen_effects_crt_description">Pásztázó sorok és enyhe színi aberráció.</string>
+    <string name="screen_effects_fxaa_description">Elsimítja a recés éleket egy könnyű utólagos élsimítással.</string>
+    <string name="screen_effects_ntsc_description">Retró kompozit TV-hatás: torzítás, színfolyás és pásztázó sorok.</string>
+    <string name="screen_effects_toon">Rajzfilmes körvonal</string>
+    <string name="screen_effects_toon_description">Sötét körvonalak a rajzfilmes hatásért.</string>
+    <string name="screen_effects_vivid">Élénk</string>
+    <string name="screen_effects_vivid_description">Ragyogás és erősebb kontraszt az ütősebb képért.</string>
+    <string name="screen_effects_scaling_mode_none">Nincs skálázás</string>
+    <string name="screen_effects_scaling_mode_none_desc">Nincs skálázás.</string>
+    <string name="screen_effects_scaling_mode_linear">Lineáris</string>
+    <string name="screen_effects_scaling_mode_linear_desc">Sima skálázás.</string>
+    <string name="screen_effects_scaling_mode_nearest">Legközelebbi</string>
+    <string name="screen_effects_scaling_mode_nearest_desc">Éles pixelek (retró).</string>
+    <string name="screen_effects_scaling_mode_natural">Természetes</string>
+    <string name="screen_effects_scaling_mode_natural_desc">Melegebb színtónus.</string>
+    <string name="screen_effects_scaling_mode_fill">Kitöltés</string>
+    <string name="screen_effects_scaling_mode_fill_desc">Kitölti a képernyőt, a széleket levágja.</string>
+    <string name="screen_effects_scaling_mode_stretch">Nyújtás</string>
+    <string name="screen_effects_scaling_mode_stretch_desc">Kitölti a képernyőt, a képarányt nem tartja.</string>
+    <string name="screen_effects_scaling_mode_fsr_desc">Éles felskálázás.</string>
+    <string name="screen_effects_scaling_mode_fsr_aspect">FSR, arányosan</string>
+    <string name="screen_effects_scaling_mode_fsr_aspect_desc">FSR, megtartja a képarányt.</string>
+    <string name="screen_effects_scaling_mode_dls_desc">Élesítő, tisztító lépés.</string>
+</resources>

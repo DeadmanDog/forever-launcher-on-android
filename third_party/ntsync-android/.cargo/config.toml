@@ -1,0 +1,9 @@
+[source.crates-io]
+replace-with = "vendored-sources"
+[source.vendored-sources]
+directory = "vendor"
+
+# The tests share one region and process-wide counters (EXIT_SKIPPED, live_slots, the allocation counter): run them one at a
+# time, or they disturb each other's measurements (AUDIT13-NTSYNC-T1).
+[env]
+RUST_TEST_THREADS = "1"

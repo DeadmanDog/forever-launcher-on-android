@@ -1,0 +1,486 @@
+0| Die App schließt es beim nächsten Start ab.
+1| · AKTUELL
+2|(leer)
+3|(nicht gesetzt)
+4|1 Frame
+5|2 Frames
+6|3 Frames
+7|Ein GitHub-Repository (github.com/owner/repo) oder ein direkter .zip-Link.
+8|Ein in den Umgebungsvariablen eingetragener Wert überschreibt diese Auswahl immer.
+9|ADDONS
+10|ADPF-Compositor-Hinweise (Android 13+)
+11|API-Limiter:
+12|ARM64-Programm (wird beim Spielen geladen)
+13|Aktive Spielsitzung.
+14|Hinzufügen
+15|Variable hinzufügen
+16|Addons
+17|Erweitert
+18|Berechtigung „Zugriff auf alle Dateien“
+19|„Zugriff auf alle Dateien“ ist an, aber Android sperrt diesen Ordner für die laufende App noch. Auf manchen Handys gilt die Berechtigung erst nach einem Neustart der App. Der Ordner wird gespeichert und nach dem Neustart erneut geprüft.
+20|Alles bereit
+21|Amerika
+22|Amerika & Ozeanien
+23|Ein unterbrochenes Verschieben des Spiels konnte nicht fortgesetzt werden: Der Quellordner fehlt.
+24|Android-Standard (unbekannt)
+25|Android lässt die App {0} nicht lesen, obwohl „Zugriff auf alle Dateien“ an ist ({1}).
+26|Android gibt dem Spiel keinen Prozessornamen und keinen Hersteller, daher protokolliert WoW beides als unbekannt. Nur Name, Hersteller und der Text der Maximalfrequenz ändern sich; die echten Kerne und Takte bleiben unberührt. Ein gespeichertes WINE_CPU_NAME / WINE_CPU_VENDOR hat Vorrang.
+27|Android verlangt „Zugriff auf alle Dateien“, damit Forever Launcher die Spieldateien in diesem Ordner lesen und aktualisieren kann.\n\nBitte aktiviere auf dem nächsten Bildschirm „Zugriff zum Verwalten aller Dateien erlauben“.
+28|App-Speicher (Standard)
+29|App, Timer
+30|App, VSync + Phase (experimentell)
+31|App, an VSync gebunden (empfohlen)
+32|Auflösung übernehmen
+33|Audio-Diagnose (Sprachchat / Mikrofon)
+34|Audio-Diagnose gespeichert. Gilt ab dem nächsten Start.
+35|Ausgewogen (Standard)
+36|Blau
+37|Durchsuchen
+38|Build: {0} (aktuell)
+39|Build: {0} (Update {1} verfügbar)
+40|Standardmäßig taktet die App die Frames passend zum Display (siehe „Taktung des FPS-Limits“ unten). Schalte die eigene „Max. Vordergrund-FPS“ von WoW aus.
+41|ABBRECHEN
+42|Cache- und Diagnoseeinstellungen können während einer aktiven Sitzung nicht geändert werden.
+43|Cache-Bereinigung fertig: {0} Einträge entfernt.
+44|Cache-Bereinigung fehlgeschlagen.
+45|Cache-Speicherort
+46|Cache-Speicherort gespeichert.
+47|Abbrechen
+48|Ändern
+49|Ort ändern
+50|Cache-Speicherort ändern?
+51|Suche nach Spielupdates...
+52|Wählt die DirectX-Version, mit der WoW läuft. DX11 nutzt DXVK, DX12 nutzt VKD3D; beide übersetzen nach Vulkan. Ein Wechsel tauscht die DLLs beim nächsten Start.
+53|Leeren
+54|Caches leeren
+55|Ausgewählte Caches leeren
+56|Schließen
+57|Befehl
+58|Installation der Komponente fehlgeschlagen
+59|Komponenten
+60|Container {0} wird eingerichtet...
+61|Verbindung zum Blizzard-CDN...
+62|Container konnte nicht erstellt werden. Prüfe den Speicher und die Logs.
+63|Container fehlt.
+64|Container-Stammordner
+65|Die Addon-Seiten sind nicht erreichbar. Prüfe deine Verbindung.
+66|Prefix-Umgebung wird erstellt (erster Start)...
+67|Der aktuelle Wert passt zu keinem installierten DXVK-Profil.
+68|Der aktuelle Wert passt zu keiner installierten kompatiblen Komponente.
+69|Aktuelles virtuelles Display:
+70|HERUNTERLADEN
+71|SPIEL HERUNTERLADEN
+72|DX11-Shader-Kompilierung
+73|DX12 maximale Latenz
+74|DX12-Vorgang fehlgeschlagen.
+75|DX12-Swapchain-Bilder
+76|DXVK (DX11-Pipeline-Cache)
+77|DXVK 2.7.3 für DirectX 11. Eine ältere Version, nicht mehr enthalten.
+78|DXVK 3.1.1 für DirectX 11, auf Adreno abgestimmt. Die mitgelieferte Standardversion.
+79|DXVK Bind-Skip (DX11)
+80|DXVK gelöscht.
+81|DXVK-Vorgang fehlgeschlagen.
+82|DXVK gewechselt.
+83|Standard
+84|Löschen
+85|DXVK löschen
+86|DXVK löschen?
+87|VKD3D löschen
+88|VKD3D löschen?
+89|Komponente löschen?
+90|Treiber löschen
+91|Runtime löschen
+92|Welches DXVK löschen?
+93|Welches VKD3D löschen?
+94|Welchen Treiber löschen?
+95|Welche Runtime löschen?
+96|Ausführliches Runtime-Logging
+97|Entwickler-Shell
+98|Diagnose-Detailstufe gespeichert. Gilt ab dem nächsten Start.
+99|Diagnosedateien können Pfade und Runtime-Details enthalten. Prüfe sie vor dem Teilen.
+100|Diagnose-Logging
+101|Diagnose-Logging aus. Gilt ab dem nächsten Start.
+102|Diagnose-Logging an. Gilt ab dem nächsten Start.
+103|DirectX 11 — DXVK
+104|DirectX 12 — VKD3D
+105|Anzeige-Experimente
+106|Display-Auflösung
+107|Priorität der Anzeige-Threads
+108|World of Warcraft: Forever herunterladen
+109|Lädt fehlende oder abweichende Sprachchat-Dateien vom Blizzard-CDN in den Utils-Ordner des Spiels. Beende zuerst das Spiel. Deine Haupt-EXE, Config.wtf und die Caches bleiben unverändert.
+110|Treiber-Standard
+111|Laufwerke
+112|UMGEBUNG
+113|EXPERTENWERKZEUGE
+114|Bearbeiten
+115|Variable bearbeiten
+116|Bearbeiten ist während einer aktiven Sitzung nicht möglich.
+117|Umgebung (sensible Werte ausgeblendet):
+118|Umgebungsvariablen
+119|Umgebungsvariablen
+120|Umgebungsvariablen gespeichert.
+121|Fehler:
+122|Europa
+123|Experimentelle Einstellungen. Gelten nur für den nächsten Start; die Container-Einstellungen bleiben erhalten.
+124|FIFO (Standard)
+125|FIFO (Standard): Jeder Frame kommt der Reihe nach auf den Bildschirm; mit der VSync-gebundenen Taktung war das messbar am flüssigsten. Mailbox: Ein neuerer Frame ersetzt einen noch wartenden, etwas weniger Latenz, aber ab und zu fällt ein Frame weg (ein kleiner Ruck).
+126|FIFO-Latenz
+127|FPS-Limit
+128|Taktung des FPS-Limits
+129|FPS-Limit:
+130|Proton- oder Grafikkomponenten konnten nicht entpackt werden.
+131|Schnelleres Laden: direkter Dateizugriff statt der gemeinsamen Speicherschicht von Android. Das Spiel wird VERSCHOBEN (nie doppelt gespeichert); beim Zurückschalten wird es zurückverschoben. Updates funktionieren an beiden Orten.
+132|Ordner:
+133|Für Fortgeschrittene: Bearbeite die Umgebungsvariablen des Containers von Hand oder öffne darin eine Kommando-Shell. Ein von Hand eingetragener Wert überschreibt die Schalter oben.
+134|Forever Launcher läuft
+135|Gespeicherte Anmeldung vergessen
+136|Per Link
+137|Ab dem nächsten Start liegen die Caches hier: {0}. Die bisher erstellten Caches bleiben am alten Ort; das Spiel baut sie am neuen Ort neu auf.
+138|Vollbild
+139|Vollbild: 720 Pixel hoch im eigenen Seitenverhältnis dieses Handys, damit das Spiel den Bildschirm ohne Verzerrung füllt.
+140|Vollbild-Scanout (HUD und Touch-Steuerung ausgeblendet)
+141|Vollbild-Scanout ist an (Tab „Erweitert“). Es skaliert bereits per Hardware, daher wirkt dieser Schalter nicht, solange es an ist.
+142|SPIELUPDATE ERFORDERLICH
+143|GPL (Standard)
+144|GPU / Mesa (Shader-Cache des Treibers)
+145|GPU-Treiber (Turnip)
+146|GPU-Speichermodus
+147|GPU-Energiemodus
+148|GPU, die das Spiel sieht
+149|GPU:
+150|SPEICHERBERECHTIGUNG ERTEILEN
+151|Spiel
+152|Spieldaten-Archive
+153|Spielaccount
+154|„Spielordner“ hält die DXVK-, VKD3D- und Mesa-Caches beim Spiel. Cache-Pfade in den Umgebungsvariablen überschreiben diese Wahl. Änderungen gelten ab dem nächsten Start.
+155|Ordner der Spieldatei
+156|Spielsprache
+157|Spielspeicher
+158|Gibt den Threads der App, die die Frames ausgeben, eine höhere Priorität, damit die Frames pünktlich ankommen.
+159|Grafik-API
+160|Grafik-API gewechselt. Die DLLs werden beim nächsten Start getauscht.
+161|Hardware-Skalierung (experimentell)
+162|Wert verbergen
+163|Startseite
+164|Wie DX11-Shader beim Spielen kompiliert werden. GPL (Standard): verknüpft Pipelines schnell und lässt nie einen Draw aus, daher lädt es schnell und läuft flüssig. Hybrid: lässt Draws aus, solange Shader kompilieren, kompiliert aber jeden Shader vollständig, was auf dieser GPU Ruckler verursachen kann. Async: der ältere Hintergrundmodus.
+165|Wie viele Frames die CPU vor der GPU vorbereiten darf. Weniger = weniger Eingabeverzögerung, aber die GPU wartet dann zwischen den Frames: Auf diesem Handy ließ 1 Frame den GPU-Takt fallen und kostete FPS. Lass „Standard“, außer du testest.
+166|Wie viele Bildpuffer die Swapchain des Spiels anfordert; der Treiber kann sie an seine Grenzen anpassen. Weniger kann die Warteschlange verkürzen, aber auch die GPU ausbremsen; mehr ist gleichmäßiger. Nicht dasselbe wie die maximale Latenz oben.
+167|Wie sich der GPU-Takt beim Spielen verhält. Ausgewogen (Standard): Das Handy steuert den Takt und hebt ihn nur, wenn das Spiel wirklich auf die GPU wartet. Performance: hält die GPU auf höchstem Takt (mehr Wärme und Verbrauch; nützlich, wenn das Handy selbst im Ausgewogen-Modus ist, der die CPU begrenzt). Geregelt: hält den Takt über dem gewählten Anteil des Maximums; braucht Kernel-Unterstützung, sonst verhält es sich wie Ausgewogen.
+168|Hybrid
+169|Hybrid behält GPL (DX11)
+170|Hybrid braucht das mitgelieferte DXVK: Übernimm es im Tab „Komponenten“.
+171|DXVK-WCP importieren
+172|VKD3D-WCP importieren
+173|Wine/Proton-WCP importieren
+174|Treiber importieren
+175|Inkompatibles Spiel ({0}). Forever Launcher benötigt World of Warcraft: Forever (wowf).
+176|Installieren
+177|Installationsinfo (.build.info – Classic-Beta, Upgrade unten)
+178|Installationsinfo (.build.info – benötigt wowf)
+179|Installationsinfo (.build.info unlesbar – Spiel neu installieren oder reparieren)
+180|Installationsinfo (.build.info)
+181|Per Link installieren
+182|Installiere zuerst das Spiel: Die Addons kommen in seinen Ordner Interface/AddOns.
+183|Installation fehlgeschlagen:
+184|Installiert
+185|Installation per Link
+186|{0} wird installiert
+187|Ungültige gespeicherte Grafik-API. Wähle DX11, um sie zu reparieren.
+188|Seine Ordner werden aus Interface/AddOns gelöscht:
+189|Korea
+190|SPRACHE
+191|TROTZDEM STARTEN (VERALTET)
+192|SPIELDATEIEN SUCHEN
+193|Start fehlgeschlagen
+194|Die Live-Server verlangen Build {0}, die lokalen Dateien sind Build {1}. Die Anmeldung kann fehlschlagen oder bei der Realmauswahl abbrechen.
+195|Wird geladen...
+196|Lokaler Verlauf
+197|Niedrige Eingabelatenz (DX11)
+198|Niedriger (experimentell)
+199|Am niedrigsten (experimentell)
+200|Mesa-Turnip-Vulkan-Treiber für Adreno 8xx, auf WoW abgestimmt.
+201|Mikrofon verwenden
+202|Mikrofonmodus für den nächsten Start gespeichert.
+203|Mikrofoneinstellung für den nächsten Start gespeichert.
+204|.build.info fehlt in {0}. Kopiere sie aus deiner WoW-Installation.
+205|Spieldateien werden verschoben:
+206|NÄCHSTER START
+207|NVIDIA-GeForce-Name
+208|Name
+209|Keine .build.info in {0} gefunden. Wähle den Ordner, der .build.info und Data/ enthält.
+210|Kein PC nötig: jetzt etwa 250 MB, den Rest lädt das Spiel beim Spielen.
+211|Noch keine Addons installiert. Öffne „Durchsuchen“, um welche zu finden.
+212|Kein Befehl läuft, bevor „Ausführen“ gedrückt wird. Zeitlimit: 30 Sekunden.
+213|Keine kompatiblen installierten Komponenten.
+214|Keine installierten DXVK-Profile gefunden.
+215|Nicht blockierende X11-Ausgabe (experimentell)
+216|Normalerweise wartet der Display-Server, solange ein Programm seine Antworten oder Ereignisse nicht liest, und dieses Warten kann alle anderen kurz einfrieren. Ist dies an, wird die ungelesene Ausgabe gepuffert und gesendet, sobald das Programm wieder liest (ein Programm, das nie liest, wird nach 64 MB verworfen). Standardmäßig aus: Es ändert den Ausgabeweg des Protokolls; wenn etwas falsch läuft, schalte es aus.
+217|Nicht genug freier Speicher: {0} GB nötig, {1} GB frei.
+218|Nichts für WoW Forever gefunden.
+219|EINSTELLUNGEN ÖFFNEN
+220|Aus (Standard)
+221|Standardmäßig aus. Der aktivierte Modus zeichnet Runtime-Fehler, App-/Android-Beendigungsdaten und Renderer-/CPU-Proben auf. Der ausführliche Modus fügt Wine-Tracing und DXVK-Debugmeldungen für kurze Reproduktionen hinzu; er kann die Leistung beeinflussen.
+222|Aus: der Android-Sprachanruf-Eingang (Echounterdrückung, Rauschunterdrückung). An: das reine Mikrofon. Probiere „An“, wenn deine Stimme nicht erfasst wird oder der Pegel ihr nicht folgt, besonders wenn der Ton aus dem Handylautsprecher kommt.
+223|An
+224|Nur Addons, die für WoW Forever gemacht sind.
+225|Wirkt nur, wenn die DX11-Shader-Kompilierung auf Hybrid steht. Normalerweise kompiliert Hybrid jeden fehlenden Shader vollständig, was den Render-Thread für 100+ ms einfrieren kann. Ist dies an, verknüpft Hybrid Pipelines schnell wie GPL und lässt Draws nur aus, solange ein Shader nicht fertig ist. Experimentell und standardmäßig aus: Wenn das Spiel abstürzt oder der Bildschirm schwarz wird, schalte es aus oder nutze GPL.
+226|Nur die ausgewählten Cache-Dateien werden entfernt. Spieldateien, WTF-Einstellungen, Prefix und Runtime-Profile bleiben erhalten. Die Caches werden beim nächsten Start neu aufgebaut; der erste Lauf kann ruckeln.
+227|Nur Hersteller, Name, ID und gemeldeter Videospeicher (bis 8 GB, mit dem System geteilt) ändern sich; die Arbeit machen die echte Adreno und ihr Treiber. Das Spiel zeigt bei Qualcomm-GPUs absichtlich „family: Unknown“. Wenn sich das Spiel nach einer Änderung seltsam verhält, geh zurück zum Standard. Eine gespeicherte DXVK_VEGAS_*-Variable hat Vorrang.
+228|Nur wenn dein Battle.net-Account mehr als einen WoW-Spielaccount hat (WoW1, WoW2). Der nächste Start meldet sich mit dem hier gewählten Account an.
+229|Nur mit DX11 (DXVK): Das Spiel läuft gerade mit DX12.
+230|Nur mit DX12 (VKD3D): Das Spiel läuft gerade mit DX11.
+231|Nur mit FIFO. Flüssig (Standard): Die Frames reihen sich ein, wie sie kommen, etwa 60 ms vom Frame bis zum Bild bei 60 Hz, nie ein ausgelassener Frame. Niedriger (experimentell): Nach einem Ruckler nimmt die App einen wartenden Frame heraus (ein ausgelassener Frame) und bleibt auf der ersten Stufe, die funktioniert (etwa 43 ms). Am niedrigsten (experimentell): versucht jedes Mal noch eine Stufe tiefer; hält das nicht, kostet es einen weiteren kleinen Ruckler, dann bleibt die App auf der Stufe, die gehalten hat.
+232|Nur mit FIFO: MESA_VK_WSI_PRESENT_MODE in den Umgebungsvariablen setzt {0}.
+233|Nur mit FIFO: Der Present-Modus ist jetzt {0}.
+234|Startseite öffnen
+235|Vorgang abgeschlossen.
+236|Vorgang fehlgeschlagen.
+237|Optional, standardmäßig aus. Beim Einschalten wird die Android-Mikrofonberechtigung angefragt und das Mikrofon beim nächsten Start für Wine freigegeben. Aktiviere auch die Spracheingabe in WoW. Hier wird keine Aufnahme gestartet.
+238|Pfad:
+239|Berechtigung verweigert. Die Mikrofoneinstellung bleibt unverändert. Erlaube die Berechtigung in den Android-App-Einstellungen und versuche es erneut.
+240|Mitgelieferte Komponenten werden vorbereitet...
+241|Wird vorbereitet...
+242|Present-Modus
+243|Prozessor, den das Spiel sieht
+244|Proton 11.0 ARM64EC (Wine) mit ntsync für Android.
+245|Proton-Sync-Weckübergabe
+246|Qualcomm-Adreno-X1-Laptop
+247|Schnell
+248|REGION UND ACCOUNT
+249|NEU STARTEN
+250|Rohes Mikrofon (ohne Echounterdrückung)
+251|Startbereit
+252|Echt: die Adreno dieses Handys (Standard)
+253|Echt: der Snapdragon dieses Handys (Standard)
+254|Zeichnet die Wine-Audiospur (winepulse, mmdevapi), das Log des PulseAudio-Servers und ein Log der Mikrofonbrücke (wie viel Ton das Handymikrofon liefert und wie viel im Spiel ankommt) in den Diagnose-Export auf. Nur für kurze Tests: Es bremst das Spiel und die Logs werden groß. Braucht eingeschaltetes Diagnose-Logging.
+255|Rot
+256|Status aktualisieren
+257|Region
+258|Region (die Spielregion deines Accounts):
+259|Geregelt
+260|Geregelt, min. {0}%
+261|Entfernen
+262|{0} entfernen?
+263|{0} wird entfernt
+264|Reparieren
+265|Die Reparatur lädt und prüft nur den Windows-ARM64-Sprachproxy des installierten Builds und seine Bibliotheken. Sie aktualisiert WoW nicht und ändert keine Spieleinstellungen. Fehler 14 kann auftreten, wenn diese Dateien fehlen.
+266|Sprachdateien reparieren?
+267|Sprach-Hilfsdateien reparieren
+268|Große/kleine CPU-Kerne melden (experimentell)
+269|Auflösung gespeichert. Der nächste Start nutzt
+270|Launcher neu starten?
+271|Aufbewahrte Diagnosesitzungen: {0} (Logs so vieler letzter Starts werden behalten)
+272|Ausführen
+273|Laufendes Spiel
+274|Führt das Windows-Spiel aus. Das mitgelieferte Proton wird empfohlen. Ein Wechsel stellt den Prefix um (kann eine Minute dauern); Spieldateien und Einstellungen bleiben erhalten.
+275|Runtime-Info
+276|Runtime-Logs rotieren bei 2 MiB pro Datei, eine vorherige Datei pro Stream bleibt erhalten. Die ersten 512 KiB der Runtime-Ausgabe werden getrennt in startup.log gespeichert.
+277|EINSTELLUNGEN
+278|Sichere Pufferrückgabe (Present, experimentell)
+279|Speichern
+280|Ein gespeichertes TU_DEBUG überschreibt diese Auswahl. Entferne TU_DEBUG in den Umgebungsvariablen, um sie zu nutzen.
+281|Gespeicherte Benutzereinstellungen haben Vorrang vor den automatischen WoW-/Cache-Einstellungen. Änderungen gelten ab dem nächsten Start.
+282|Gespeichert. Gilt ab dem nächsten Start (auch im Schnellmenü im Spiel änderbar).
+283|Speichern…
+284|Addons suchen
+285|Einstellungen
+286|Diagnose teilen
+287|Wert anzeigen
+288|Lässt eine Pipeline-Bindung aus, wenn der vorige Draw im selben Befehlspuffer schon dieselbe Pipeline genutzt hat; das spart CPU-Arbeit im Render-Thread des Spiels. Experimentell und standardmäßig aus: Wenn Geometrie fehlt oder Grafikfehler auftreten, schalte es aus. Betrifft nur DX11 (DXVK); im Schnellmenü gibt es keinen Schalter dafür.
+289|Flüssig (Standard)
+290|Snapdragon-X-Plus-Laptop
+291|Spiel sofort starten
+292|Stopp
+293|Speicherberechtigung erforderlich
+294|Speicherwechsel unterbrochen:
+295|Spiel im privaten Speicher der App ablegen
+296|Wechseln
+297|DXVK wechseln?
+298|GPU-Treiber wechseln?
+299|VKD3D wechseln?
+300|Wine / Proton wechseln?
+301|Grafik-API wechseln?
+302|System
+303|DESIGN
+304|Taiwan
+305|Taiwan, Hongkong, Macau
+306|Tippe unten auf „Update“, um die neuesten Dateien direkt vom Blizzard-CDN per WLAN zu laden.
+307|Teilt Android mit, wie lange jeder Frame des Compositors dauert, damit es die CPU-Takte anheben kann, bevor Frames zu spät kommen.
+308|Teilt dem Spiel mit, welche Kerne die schnellsten sind (die Prime-Kerne des Handys), wie bei einer Hybrid-Laptop-CPU; dann zeigen die WoW-Logs Hybrid:true und WoW kann seine meistbelasteten Threads darauf legen. Aus = alle Kerne wirken gleich (Standard). Ändert, wie WoW Threads verteilt: Vergleiche die FPS, bevor du es anlässt.
+309|Das PulseAudio-Aufnahmemodul fehlt. Der Mikrofoneingang braucht eine reparierte App-Runtime.
+310|Der Vulkan-Treiber, mit dem das Spiel zeichnet. Sein GPU-Modus ist im Tab „Schnell“.
+311|Der WoW-Container wurde noch nicht erstellt. Drücke zuerst einmal auf Spielen.
+312|Der Mikrofontest von WoW spielt deine Stimme live zurück. Nutze dafür Kopfhörer: Aus dem Handylautsprecher gelangt der Ton zurück ins Mikrofon und pfeift.
+313|Die aktuelle Auflösung ({0}) passt nicht zum Seitenverhältnis des Displays, daher wirkt dies damit nicht.
+314|Der eigene Skalierer des Displays vergrößert das Spielbild statt der GPU, sodass die GPU etwas weniger Arbeit hat. Funktioniert mit HUD und Touch-Steuerung. Nur aktiv, wenn die Auflösung das Seitenverhältnis des Displays hat (die Vollbild-Auflösung) und die Bildschirmeffekte Linear oder keine Skalierung ohne Effekt nutzen (nicht FSR, DLS, Natural, Nearest oder CRT). Gilt ab dem nächsten Start.
+315|Das Spielbild geht ohne den GPU-Compositing-Durchgang der App direkt aufs Display. Funktioniert nur, solange HUD, Touch-Steuerung und Schnellmenü ausgeblendet sind. Solange es an ist, wird die Hardware-Skalierung (auf diesem Tab) nicht genutzt.
+316|Das Spiel läuft: Einstellungen können geändert werden, wenn es beendet ist.
+317|Das Spiel erfährt erst dann, dass ein Bildpuffer wieder frei ist, wenn die App ihn fertig gezeichnet hat, nicht sofort. Das schließt den seltenen Fall aus, dass das Spiel einen Puffer überschreibt, der noch unterwegs zum Bildschirm ist (ein Aufblitzen oder zerrissenes Bild). Es macht nichts schneller: Wenn das Display spät dran ist, kann es etwas Flüssigkeit kosten; lass es also aus, außer du siehst solche Fehler. Gilt ab dem nächsten Start.
+318|Das Spiel hält nur einen Frame Vorsprung vor dem Bildschirm (DXVK-Frame-Latenz 1) statt bis zu drei, sodass Eingaben schneller im Bild ankommen. Aus = das Spiel darf Frames vorausplanen, etwas flüssiger, aber später. Ein in DXVK_CONFIG eingetragenes maxFrameLatency hat Vorrang.
+319|Das Spiel läuft jetzt aus dem privaten Speicher der App.
+320|Das Spiel läuft jetzt aus dem gemeinsamen Speicher.
+321|Die Spielregion, mit der sich der nächste Start verbindet. Die Spieldaten sind in jeder Region gleich, du kannst also jederzeit wechseln. Russische Realms sind in Europa; Ozeanien und Südostasien spielen auf den ozeanischen Realms der Region Amerika. Eine eigene Asien-Region gibt es nicht.
+322|Das Spiel bleibt verbunden, während du eine andere App nutzt.
+323|Die Sprache der Texte und Stimmen des Spiels. Die Realms jeder Sprache liegen in ihrer Region (deutsche, französische, spanische und russische Realms sind in Europa). Eine neue Sprache kann beim ersten Start ihre Dateien laden.
+324|Die Sprache des Launchers und dieser Einstellungen.
+325|Die vorige Spielsitzung wird noch beendet. Versuche es gleich noch einmal.
+326|Die Größe, in der WoW rendert. Niedriger = mehr FPS, aber ein weicheres Bild. Für diesen Container gespeichert; übernimm sie, während das Spiel nicht läuft. Die eigene Auflösung und Renderskalierung von WoW werden beim Start angeglichen.
+327|Dieses Limit gilt ab dem nächsten Start (jetzt: {0})
+328|Übersetzt DirectX 11 nach Vulkan. Das mitgelieferte DXVK 3.1.1 wird empfohlen und ist standardmäßig gewählt.
+329|Übersetzt DirectX 12 nach Vulkan. Wird nur genutzt, wenn die Grafik-API DX12 ist.
+330|UPDATE AUF
+331|UPGRADE
+332|UPGRADE AUF WOW FOREVER
+333|Diagnose-Logs konnten nicht exportiert werden.
+334|Diagnoseeinstellung konnte nicht gespeichert werden.
+335|Display-Auflösung konnte nicht gespeichert werden.
+336|Umgebungsvariablen konnten nicht gespeichert werden.
+337|Update
+338|Alle aktualisieren
+339|Entwurf übernehmen
+340|Update fehlgeschlagen:
+341|Alle Addons werden aktualisiert
+342|{0} wird aktualisiert
+343|Upgrade auf WoW Forever
+344|VKD3D (DX12-Pipeline-Cache)
+345|VKD3D 3.0.1 für DirectX 12, für Windows ARM64 gebaut.
+346|VKD3D gelöscht.
+347|VKD3D gewechselt.
+348|Wert
+349|Geprüfte Sprachdateien installiert:
+350|Sprachchat
+351|Die Sprachdateien passen bereits zum installierten Build.
+352|Sprach-Hilfsdateien:
+353|Reparatur der Sprachdateien fehlgeschlagen.
+354|BEIM ÖFFNEN DER APP
+355|WOW FOREVER ERFORDERLICH
+356|Weckt nur den wartenden Thread, der das Signal bekommt. Aus = ursprüngliches Verhalten.
+357|Wo die GPU zeichnet. Sysmem: direkt im Systemspeicher (empfohlen). GMEM: im kleinen, schnellen On-Chip-Speicher der GPU, Kachel für Kachel. Treiber-Standard: Turnip entscheidet pro Frame.
+358|Wer die Bildrate am Limit hält. App, an VSync gebunden (empfohlen): Die App gibt die Frames im Takt der Displayaktualisierung frei, so bleiben sie gleichmäßig verteilt. App, Timer: Die App nutzt einen eigenen Timer statt der Displayaktualisierung, das kann leicht driften. DXVK / VKD3D: Die Grafikschicht begrenzt mit eigenem Timer, was Bewegungen ruckeln lassen kann. App, VSync + Phase (experimentell): wie VSync-gebunden, und die App misst zusätzlich, wann die Frames das Display erreichen, und verschiebt ihr Timing um einige Millisekunden, damit sie mitten in der Aktualisierung fertig werden: Ein kleines Timing-Wackeln schiebt einen Frame dann nicht mehr in die nächste Aktualisierung (gemessen bei 60 Hz mit FIFO). Ein in den Umgebungsvariablen eingetragener Limiter nutzt immer DXVK / VKD3D.
+359|Wine / Proton
+360|Der WoW-Container wurde noch nicht erstellt
+361|Wird bearbeitet…
+362|Cache-Ordner von World of Warcraft
+363|Deine Classic-Beta-Installation wird direkt zu World of Warcraft: Forever: Nur der neue Client (etwa 250 MB) wird geladen, deine Spieldaten bleiben.
+364|Standard
+365|en
+366|fehlt oder unvollständig
+367|keins
+368|aus
+369|vorhanden
+370|{0} fehlgeschlagen: {1}
+371|{0} importiert. Wähle es in der Liste, um zu wechseln.
+372|{0} wird ab dem nächsten Start verwendet.
+373|{0} wird ab dem nächsten Start verwendet. Der Prefix wird jetzt umgestellt (kann eine Minute dauern); Spieldateien und Einstellungen bleiben erhalten.
+374|{0} wird ab dem nächsten Start verwendet; die DLLs werden dann getauscht.
+375|{0}: fertig.
+T|Tipp: Im Spiel öffnet die Zurück-Geste (oder die Zurück-Taste) das Schnellmenü.
+R0|App, VSync + Phase (Standard)
+R1|App, an VSync gebunden
+R2|Niedriger (Standard)
+R3|Nur mit FIFO. Flüssig: Die Frames reihen sich ein, wie sie kommen, etwa 60 ms vom Frame bis zum Bild bei 60 Hz, nie ein ausgelassener Frame. Niedriger (Standard): Nach einem Ruckler nimmt die App einen wartenden Frame heraus (ein ausgelassener Frame) und bleibt auf der ersten Stufe, die funktioniert (etwa 43 ms). Am niedrigsten (experimentell): versucht jedes Mal noch eine Stufe tiefer; hält das nicht, kostet es einen weiteren kleinen Ruckler, dann bleibt die App auf der Stufe, die gehalten hat.
+R4|Flüssig
+R5|Wer die Bildrate am Limit hält. App, an VSync gebunden: Die App gibt die Frames im Takt der Displayaktualisierung frei, so bleiben sie gleichmäßig verteilt. App, Timer: Die App nutzt einen eigenen Timer statt der Displayaktualisierung, das kann leicht driften. DXVK / VKD3D: Die Grafikschicht begrenzt mit eigenem Timer, was Bewegungen ruckeln lassen kann. App, VSync + Phase (Standard): wie VSync-gebunden, und die App misst zusätzlich, wann die Frames das Display erreichen, und verschiebt ihr Timing um einige Millisekunden, damit sie mitten in der Aktualisierung fertig werden: Ein kleines Timing-Wackeln schiebt einen Frame dann nicht mehr in die nächste Aktualisierung (gemessen bei 60 Hz mit FIFO). Ein in den Umgebungsvariablen eingetragener Limiter nutzt immer DXVK / VKD3D.
+res:quick_menu_title|Schnellmenü
+res:quick_menu_back|Zurück
+res:quick_menu_tab_controller|Steuerung
+res:exit_game|Beenden
+res:pause_game_on_menu|Spiel pausieren, solange das Menü offen ist
+res:battle_net_sign_in|Bei Battle.net anmelden
+res:bnet_auto_sign_in|Automatisch anmelden beim Start
+res:bnet_auto_sign_in_needs_login|Speichere zuerst deine Anmeldung: melde dich einmal bei Battle.net an
+res:disable_mouse_input|Mauseingabe deaktivieren
+res:keyboard|Tastatur
+res:input_controls|Bildschirm-Controller
+res:edit_controls|Bildschirm-Controller bearbeiten
+res:edit_physical_controller|Controller bearbeiten
+res:touchscreen_mode|Touchscreen-Modus
+res:radial_menu|Radialmenü
+res:gesture_settings_title|Einstellungen für Touch-Gesten
+res:main_loading|Wird geladen…
+res:task_manager|Task-Manager
+res:tools_wine_processes_empty|Keine laufenden EXE-Dateien gefunden.
+res:tools_wine_processes_running_hint|%1$d laufen, tippe auf einen Prozess, um ihn zu schließen
+res:performance_hud|Leistungs-HUD
+res:performance_hud_description|Die Einblendung im Spiel zeigen oder ausblenden.
+res:performance_hud_lock|HUD sperren
+res:performance_hud_lock_description|Das HUD ignoriert Berührungen und kann beim Spielen nicht versehentlich verschoben werden
+res:performance_hud_presets|Vorlagen
+res:performance_hud_appearance|Darstellung
+res:performance_hud_size|Größe
+res:performance_hud_background_opacity|Hintergrund-Deckkraft
+res:performance_hud_color_intensity|Farbintensität
+res:performance_hud_text_outline|Textumrandung
+res:performance_hud_metrics|Angezeigte Werte
+res:performance_hud_fps_limiter|FPS-Limiter
+res:performance_hud_fps_limiter_target|Ziel-FPS
+res:screen_effects|Bildschirmeffekte
+res:display_brightness|Displayhelligkeit
+res:screen_effects_upscaling|Hochskalierung
+res:screen_effects_basic_scaling|Einfache Skalierung
+res:screen_effects_fsr_sharpness|FSR-Schärfe
+res:screen_effects_color_adjustments|Farbanpassungen
+res:screen_effects_brightness|Helligkeit
+res:screen_effects_contrast|Kontrast
+res:screen_effects_gamma|Gamma
+res:screen_effects_reset|Zurücksetzen
+res:screen_effects_shader_toggles|Shader-Effekte
+res:screen_effects_crt_description|Fügt Scanlines und leichte chromatische Aberration hinzu.
+res:screen_effects_fxaa_description|Glättet gezackte Kanten mit einem leichten Post-Process-Antialiasing.
+res:screen_effects_ntsc_description|Fügt Retro-Composite-TV-Verzerrung, Farbbluten und Scanlines hinzu.
+res:screen_effects_toon|Toon-Umriss
+res:screen_effects_toon_description|Fügt dunkle Umrisse für einen Cel-Shading-Look hinzu.
+res:screen_effects_vivid|Lebendig
+res:screen_effects_vivid_description|Fügt Bloom und mehr Kontrast für ein kräftigeres Bild hinzu.
+res:screen_effects_scaling_mode_none|Keine Skalierung
+res:screen_effects_scaling_mode_none_desc|Keine Skalierung.
+res:screen_effects_scaling_mode_linear|Linear
+res:screen_effects_scaling_mode_linear_desc|Weiche Skalierung.
+res:screen_effects_scaling_mode_nearest|Nächster Nachbar
+res:screen_effects_scaling_mode_nearest_desc|Scharfe Pixel (Retro).
+res:screen_effects_scaling_mode_natural|Natürlich
+res:screen_effects_scaling_mode_natural_desc|Wärmerer Farbton.
+res:screen_effects_scaling_mode_fill|Füllen
+res:screen_effects_scaling_mode_fill_desc|Füllt den Bildschirm, schneidet Ränder ab.
+res:screen_effects_scaling_mode_stretch|Strecken
+res:screen_effects_scaling_mode_stretch_desc|Füllt den Bildschirm, ignoriert das Seitenverhältnis.
+res:screen_effects_scaling_mode_fsr_desc|Scharfe Super-Res-Hochskalierung.
+res:screen_effects_scaling_mode_fsr_aspect|FSR angepasst
+res:screen_effects_scaling_mode_fsr_aspect_desc|FSR, behält das Seitenverhältnis.
+res:screen_effects_scaling_mode_dls_desc|Schärfe- / Klarheitsdurchgang.
+376|Die Spielregion, mit der sich der nächste Start verbindet. Die Spieldaten sind in jeder Region gleich, du kannst also jederzeit wechseln.
+377|Neuester World-of-Warcraft-Build wird geprüft...
+378|{0} wird geladen ({1}/{2}): {3} / {4} MB · {5} MB/s
+379|Manifest von Build {0} wird geladen...
+380|Spieldaten werden noch geladen
+381|Spieldaten {0}%
+382|Spieldaten {0}% · {1} MB/s
+383|Spieldaten: {0} / {1} GB ({2}%)
+384|Client-Dateien werden gesucht...
+385|Manifest von Build {0} wird gelesen...
+386|Starten
+387|Archiv-Indizes werden geladen ({0}/{1}) · {2} MB/s
+388|Build-Informationen werden aktualisiert...
+389|{0}% der Spieldaten ({1} / {2} GB) sind auf dem Handy. Den Rest lädt WoW während des Spielens, daher laden der erste Start und neue Gebiete langsam. Über WLAN geht der Download am schnellsten.
+390|Etwa {0} GB: WLAN oder ein unbegrenzter Tarif empfohlen.
+391|Noch etwa {0} Std. {1} Min.
+392|SPIELDATEN HERUNTERLADEN
+393|Spieldaten werden geladen
+394|SPIELDATEN
+395|Spieldaten-Download
+396|Lass das Spiel währenddessen geschlossen. Es läuft auch bei ausgeschaltetem Bildschirm weiter; Stopp behält, was schon geladen ist.
+397|Download wird vorbereitet: Dateiliste des Spiels wird gelesen...
+398|Der Download wurde angehalten: 
+399|{0} / {1} GB sind auf dem Handy ({2}%). Lade den Rest jetzt mit voller Geschwindigkeit statt mit dem langsamen Download des Spiels während des Spielens.
+400|Etwa {0} GB mit voller Geschwindigkeit statt mit dem langsamen Download des Spiels während des Spielens. WLAN oder ein unbegrenzter Tarif wird empfohlen.
+401|FORTSETZEN
+402|Geladene Spieldaten löschen?
+403|Entfernt den Datenspeicher des Spiels (Data/data, {0} GB): was diese App und das Spiel geladen haben. Das Spiel selbst, deine Einstellungen und Addons bleiben. Nutze es, bevor du die Spieldaten von einem PC kopierst.
+404|Ordner:
+405|Die Spieldaten sind noch nicht geladen. Größe wird berechnet...
+406|Läuft auch bei ausgeschaltetem Bildschirm weiter. Stopp oder Spielen behält, was schon geladen ist; beim Spielen lädt das Spiel selbst, was es braucht.
+407|Download der Spieldaten wird angehalten...
+408|Lädt mit voller Geschwindigkeit, auch bei ausgeschaltetem Bildschirm. Du kannst das Spiel jederzeit starten: Der Download pausiert, und während du spielst, lädt das Spiel nur, was es braucht, langsamer.
+409|Noch {0} GB. Jetzt geht der Download viel schneller als beim Spielen, wenn das Spiel nur lädt, was es braucht. WLAN empfohlen.
+410|Spieldaten-Archive (noch nicht geladen)
+411|Spieldaten-Archive ({0}%)

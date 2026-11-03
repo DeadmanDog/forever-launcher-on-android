@@ -1,0 +1,59 @@
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <mutex>
+#include <shared_mutex>
+#include <stdexcept>
+#include <thread>
+#include <vector>
+#include "RenderWakeSignal.h"
+#define RLOG_E(...)
+#define RLOG_W(...)
+using VkDeviceSize=uint64_t;using VkBuffer=uint64_t;
+constexpr auto VK_NULL_HANDLE=0;
+struct VulkanRendererContext {
+ std::shared_mutex frameMutex;std::mutex renderMutex;RenderWakeSignal renderWake;
+ std::atomic<bool>cursorVisible{false},cursorMoved{false},isCursorImageDirty{false},needsRender{false},fbResized{false};std::atomic<uint64_t>sceneGen{1},contentGen{0};void markSceneDirty(){sceneGen.fetch_add(1);needsRender.store(true);}
+ int surfaceWidth=2688,surfaceHeight=1216;short cursorTexW=0,cursorTexH=0,cursorHotX=0,cursorHotY=0,cursorW=0,cursorH=0;static constexpr short kCursorCapacity=256;static constexpr short kCursorEdgePad=2;
+ int cursorImg=1;int currentFrame=0;unsigned allocations=0;bool stagingFails=false;
+ std::vector<uint32_t>cursorPixels;
+ std::atomic<uint64_t>cursorStageGen{0};uint64_t cursorSnapshotGen=0;
+ struct Staging{uint32_t storage[4096]{};void*mapped=storage;VkBuffer buffer=4;}cursorStaging[2];
+ bool ensureCursorTex(short w,short h){if(w!=cursorTexW||h!=cursorTexH)allocations++;cursorTexW=w;cursorTexH=h;return true;}
+ void ensureCursorStaging(VkDeviceSize){if(stagingFails)throw std::runtime_error("recoverable OOM");}
+ void noteSlowCursorUpdate(std::chrono::steady_clock::time_point,short,short,bool){}
+ void updateCursorImage(void*,short,short,short,short);void setCursorVisible(bool);void onSurfaceResized(int,int);
+ short lastUpW=0,lastUpH=0;
+ bool uploadSnapshot(){bool hasCurUpload=false,curVis=true;VkBuffer curUpload=0;short curUpW=0,curUpH=0;std::lock_guard<std::mutex>lk(renderMutex);/* UPLOAD */if(stagingFails&&curVis)throw std::runtime_error("uninitialized cursor would be sampled");lastUpW=curUpW;lastUpH=curUpH;return hasCurUpload;}
+};
+/* PRODUCTION */
+static void check(bool b,const char*m){if(!b){fprintf(stderr,"FAIL %s\n",m);exit(2);}}
+int main(int,char**argv){int n=atoi(argv[1]);VulkanRendererContext c;uint32_t pixels[4]={1,2,3,4};
+ if(n==0){c.updateCursorImage(pixels,2,2,1,1);c.isCursorImageDirty=false;c.needsRender=false;c.updateCursorImage(pixels,2,2,1,1);check(!c.isCursorImageDirty&&!c.needsRender,"identical cursor triggers another GPU upload/frame");}
+ if(n==1){c.updateCursorImage(pixels,2,2,1,1);c.isCursorImageDirty=false;c.needsRender=false;c.updateCursorImage(pixels,2,2,0,1);check(c.cursorHotX==0&&!c.isCursorImageDirty&&c.needsRender,"hotspot-only change recopies/reuploads unchanged pixels");}
+ if(n==2){c.setCursorVisible(true);c.needsRender=false;c.setCursorVisible(true);check(!c.needsRender,"unchanged cursor visibility wakes compositor");}
+ if(n==3){c.onSurfaceResized(2688,1216);check(!c.fbResized,"duplicate surface callback schedules full idle/swapchain rebuild");}
+ if(n==4){c.updateCursorImage(pixels,2,2,1,1);c.stagingFails=true;bool escaped=false;try{check(!c.uploadSnapshot(),"failed staging flagged upload");}catch(...){escaped=true;}check(!escaped,"recoverable cursor OOM stops the renderer loop");check(c.isCursorImageDirty,"failed cursor upload lost retry state");c.stagingFails=false;check(c.uploadSnapshot(),"cursor upload does not recover on later frame");}
+ if(n==5){c.updateCursorImage(pixels,2,2,1,1);c.isCursorImageDirty=false;c.needsRender=false;pixels[3]=9;c.updateCursorImage(pixels,2,2,1,1);check(c.isCursorImageDirty&&c.cursorPixels[3]==9,"changed pixels must upload");}
+ if(n==6){c.onSurfaceResized(1800,900);check(c.fbResized&&c.surfaceWidth==1800&&c.surfaceHeight==900,"real resize must rebuild");}
+ if(n==7){c.setCursorVisible(true);c.needsRender=false;c.setCursorVisible(false);check(!c.cursorVisible&&c.needsRender,"hiding cursor must redraw");}
+ if(n==8){c.updateCursorImage(pixels,2,2,1,1);check(c.uploadSnapshot(),"ordinary staging upload required");}
+ if(n==9){unsigned uploads=0;for(int i=0;i<1000;i++){c.updateCursorImage(pixels,2,2,1,1);if(c.isCursorImageDirty){uploads++;c.isCursorImageDirty=false;}}printf("identical_cursor_upload_requests=%u\n",uploads);}
+ if(n==10){unsigned frames=0;for(int i=0;i<1000;i++){c.setCursorVisible(true);if(c.needsRender){frames++;c.needsRender=false;}}printf("unchanged_visibility_frame_requests=%u\n",frames);}
+ if(n==11){c.updateCursorImage(pixels,2,2,1,1);check(c.allocations==1&&c.cursorTexW==256&&c.cursorTexH==256,"first cursor reserves the capacity texture");
+  uint32_t big[9]={1,2,3,4,5,6,7,8,9};std::atomic<bool>held{false};
+  std::thread frame([&]{std::shared_lock<std::shared_mutex>f(c.frameMutex);held=true;std::this_thread::sleep_for(std::chrono::milliseconds(200));});
+  while(!held)std::this_thread::yield();
+  auto t0=std::chrono::steady_clock::now();c.updateCursorImage(big,3,3,2,2);auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-t0).count();frame.join();
+  check(ms<50,"a cursor size change waited for the frame lock");check(c.allocations==1,"a size change within capacity recreated the texture");
+  check(c.cursorW==3&&c.cursorH==3&&c.cursorPixels.size()==9&&c.cursorPixels[8]==9&&c.isCursorImageDirty,"new size/pixels not staged");}
+ if(n==12){uint32_t img[6]={1,2,3,4,5,6};c.updateCursorImage(img,3,2,0,0);check(c.uploadSnapshot(),"upload expected");check(c.lastUpW==5&&c.lastUpH==4,"upload extent is image plus edge pad");
+  auto*d=(uint32_t*)c.cursorStaging[0].mapped;uint32_t want[20]={1,2,3,3,3, 4,5,6,6,6, 4,5,6,6,6, 4,5,6,6,6};
+  for(int i=0;i<20;i++)check(d[i]==want[i],"edge pad must repeat the last column/row");}
+ if(n==13){uint32_t huge_[300*2]={};c.updateCursorImage(pixels,2,2,1,1);c.updateCursorImage(huge_,300,2,0,0);check(c.allocations==2&&c.cursorTexW==300,"a cursor larger than the capacity still gets a texture");}
+ puts("PASS native state");
+}

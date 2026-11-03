@@ -1,0 +1,408 @@
+// Production present-on-change and display-timing accounting (VulkanRendererContext.cpp) against a fake swapchain.
+#include <vulkan/vulkan.h>
+#include <algorithm>
+#include <atomic>
+#include <climits>
+#include <cmath>
+#include <cmath>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <mutex>
+#include <vector>
+
+static std::vector<VkPastPresentationTimingGOOGLE> pending;
+static VKAPI_ATTR VkResult VKAPI_CALL fakePast(VkDevice, VkSwapchainKHR, uint32_t* count, VkPastPresentationTimingGOOGLE* out) {
+    uint32_t n = std::min<uint32_t>(*count, (uint32_t)pending.size());
+    for (uint32_t i = 0; i < n; ++i) out[i] = pending[i];
+    pending.erase(pending.begin(), pending.begin() + n);
+    *count = n;
+    return pending.empty() ? VK_SUCCESS : VK_INCOMPLETE;
+}
+struct WinTex { int id = 0; };
+struct Table { PFN_vkGetPastPresentationTimingGOOGLE GetPastPresentationTimingGOOGLE = fakePast; };
+struct VulkanRendererContext {
+    Table vk_; VkDevice device = VK_NULL_HANDLE; VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+    std::mutex renderMutex; std::vector<WinTex> deleteQueue;
+    std::atomic<bool> needsRender{false}, isCursorImageDirty{false}, cursorVisible{false};
+    std::atomic<int> pointerX{0}, pointerY{0};
+    std::atomic<uint64_t> sceneGen{1}, contentGen{0};
+    void markSceneDirty() { sceneGen.fetch_add(1); needsRender.store(true); }
+    uint64_t presentedGen = UINT64_MAX; int presentedPtrX = INT32_MIN, presentedPtrY = INT32_MIN;
+    bool displayTimingSupported = true;
+    std::atomic<VkPresentModeKHR> activePresentMode{VK_PRESENT_MODE_FIFO_KHR};
+    std::atomic<int64_t> refreshPeriodNs{8333333}, frameIntervalNs{16666667};
+    uint32_t lastTimingId = 0; uint64_t lastShownGameNs = 0; int64_t shownGapAvgNs = 0;
+    uint8_t presentWasGame[256] = {};
+    std::atomic<int64_t> statShown{0}, statDropped{0}, statLate{0}, statMaxIntervalNs{0};
+    static constexpr int kLatencyCountShift = 48;
+    std::atomic<int64_t> statLatencyPacked{0}, statDrains{0};
+    int64_t presentQueuedNs[256] = {};
+    uint32_t presentMetadataId[256] = {};
+    VulkanRendererContext() { for (uint32_t i = 0; i < 256; ++i) presentMetadataId[i] = i; }
+    static constexpr int kDisplayStats = 13;
+    enum WindowState { kWindowNone = 0, kWindowClean, kWindowDirty, kWindowSlow, kWindowHold, kWindowSettle, kWindowRefilled };
+    static constexpr int kFrameLogFields = 8;
+    static constexpr int kFrameLogRows = 2048;
+    int takeFrameLog(int64_t* out, int maxRows);
+    std::atomic<int64_t> statMissing{0}, statDrainReplays{0};
+    std::atomic<int64_t> exportFloorNs{0}, exportWindowNs{0}, exportWindowState{0};
+    std::atomic<int64_t> lastContentNs{0};
+    std::atomic<bool> frameTraceEnabled{true};
+    int64_t presentContentNs[256] = {};
+    uint64_t presentContentGenSlot[256] = {};
+    int presentContentUpdates[256] = {};
+    std::mutex frameLogMutex;
+    int64_t frameLog[kFrameLogRows][kFrameLogFields] = {};
+    int frameLogHead = 0, frameLogCount = 0;
+    void logFrame(int64_t id, int64_t kind, uint32_t slot, int64_t displayNs, int64_t marginNs);
+    static constexpr int kPhaseWindow = 60;
+    double phaseSumCos = 0, phaseSumSin = 0; int phaseFrames = 0;
+    std::atomic<int64_t> phaseWindow{0}, phaseMeanNs{0}, phaseConcentration{0}, phaseRefreshNs{0};
+    std::atomic<uint64_t> phaseSequence{0};
+    void phaseStats(int64_t out[4]);
+    static constexpr int kLatencyWindow = 60;
+    int64_t latencySamples[kLatencyWindow] = {};
+    int latencyCount = 0; int64_t latencyFloorNs = 0; int highWindows = 0; int drainHoldWindows = 0;
+    int64_t latencyBeforeDrainNs = 0; bool drainOne = false; uint64_t presentedContentGen = 0;
+    bool latencyWindowDirty = false;
+    int64_t latencyWindowStartNs = 0;
+    static constexpr int kSettleWindows = 2; int cleanWindows = kSettleWindows;
+    uint64_t drainedContentGen = 0; int64_t drainHoldUntilNs = 0;
+    bool holdDrainedContent();
+    static constexpr int kDrainOff = 0, kDrainOneStep = 1, kDrainProbe = 2;
+    std::atomic<int> fifoDrainMode{kDrainProbe};
+    static constexpr int kRefillWatchWindows = 20; int refillWatchWindows = 0; bool refilled = false;
+    void latencyWindowDone(int64_t medianNs, int64_t refreshNs, bool dirty, bool slow);
+    bool drainQueuedFrame();
+    bool frameUnchanged();
+    void collectPresentTimings();
+    void takeDisplayStats(int64_t out[kDisplayStats]);
+};
+static int64_t fakeNowNs = 1000000000LL;
+static int64_t monotonicNs() { return fakeNowNs; }
+/* PRODUCTION */
+static void check(bool ok, const char* what) { if (!ok) { fprintf(stderr, "FAIL %s\n", what); exit(1); } }
+static VkPastPresentationTimingGOOGLE shown(uint32_t id, uint64_t at, uint64_t margin = 0) { VkPastPresentationTimingGOOGLE t{}; t.presentID = id; t.actualPresentTime = at; t.earliestPresentTime = at; t.presentMargin = margin; return t; }
+int main(int argc, char** argv) {
+    int n = argc > 1 ? atoi(argv[1]) : 0;
+    VulkanRendererContext c;
+    const int64_t ms = 1000000;
+    if (n == 0) {
+        check(!c.frameUnchanged(), "first frame must present");
+        c.presentedGen = c.sceneGen.load(); c.presentedPtrX = 5; c.presentedPtrY = 6; c.pointerX = 5; c.pointerY = 6;
+        check(c.frameUnchanged(), "wake-up with nothing new presents again");
+        c.markSceneDirty(); check(!c.frameUnchanged(), "scene change skipped");
+        c.presentedGen = c.sceneGen.load(); c.pointerX = 9;
+        check(c.frameUnchanged(), "hidden cursor movement presents");
+        c.cursorVisible = true; check(!c.frameUnchanged(), "visible cursor movement skipped");
+        c.pointerX = 5; check(c.frameUnchanged(), "pointer back where it was presents");
+        c.isCursorImageDirty = true; check(!c.frameUnchanged(), "pending cursor image skipped"); c.isCursorImageDirty = false;
+        c.deleteQueue.push_back(WinTex{}); check(!c.frameUnchanged(), "retired texture never reaches a frame");
+        puts("PASS present on change");
+    }
+    if (n == 2) {
+        for (int id = 1; id <= 8; ++id) c.presentWasGame[id] = 1;
+        c.presentWasGame[7] = 0;
+        const uint64_t t = 5000 * ms;
+        pending = { shown(2, t + 16666667), shown(1, t), shown(4, t + 3 * 16666667), shown(5, t + 3 * 16666667 + 25 * ms),
+                    shown(6, t + 3 * 16666667 + 25 * ms), shown(7, t + 9000 * ms), shown(8, t + 3 * 16666667 + 50 * ms) };
+        c.collectPresentTimings();
+        int64_t v[13]; c.takeDisplayStats(v);
+        printf("shown=%lld dropped=%lld late=%lld max_us=%lld refresh_us=%lld\n", (long long)v[1], (long long)v[2], (long long)v[3], (long long)v[4], (long long)v[5]);
+        check(v[0] == 1 && v[1] == 5, "shown game frames");
+        check(v[2] == 1 && v[8] == 1, "the frame shown no later than its predecessor is a drop, the never reported id 3 is missing");
+        check(v[3] == 3, "ids 4 (33 ms), 5 and 8 (25 ms each) are late; 2 (16.7 ms) is not");
+        check(v[4] == 33333, "longest shown interval");
+        check(v[6] == 0, "latency reported without queue times");
+        int64_t z[13]; c.takeDisplayStats(z); check(z[1] == 0 && z[2] == 0 && z[3] == 0 && z[4] == 0, "counters not reset by take");
+        pending = { shown(3, t + 9999 * ms) }; c.collectPresentTimings(); c.takeDisplayStats(z);
+        check(z[1] == 0 && z[2] == 0, "stale timing counted again");
+        puts("PASS display timing accounting");
+    }
+    if (n == 5) {
+        c.refreshPeriodNs = 8333333;
+        const uint64_t t = 9000 * ms;
+        for (uint32_t id = 1; id <= 4; ++id) { c.presentWasGame[id] = 1; c.presentQueuedNs[id] = (int64_t)(t + id * 16666667ULL) - (int64_t)(10 + id) * ms; }
+        pending = { shown(1, t + 16666667), shown(2, t + 2 * 16666667ULL), shown(3, t + 3 * 16666667ULL), shown(4, t + 4 * 16666667ULL) };
+        c.collectPresentTimings();
+        int64_t v[13]; c.takeDisplayStats(v);
+        printf("latency_us=%lld\n", (long long)v[6]);
+        check(v[6] == 12500, "average present-to-screen time");
+        puts("PASS present-to-screen latency");
+    }
+    if (n == 7) {
+        // FIFO 60 Hz: login 25 ms (queue empty), world 63 ms (two extra frames) -> two single skips back to the floor.
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](int64_t medianMs) {
+            c.latencyWindowDone(medianMs * ms, r, false, false);
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken on a new game frame"); ++drains; }
+        };
+        window(25); window(63);
+        check(drains == 0, "skipped after one high window");
+        window(63);
+        check(drains == 1, "a sustained extra frame is never taken out");
+        window(46); window(46); window(46);
+        check(drains == 1 && c.latencyFloorNs == 25 * ms, "a successful skip moved the floor or skipped again inside the hold");
+        window(46); window(46);
+        check(drains == 2, "the second extra frame is not taken out");
+        window(30); window(30); window(30);
+        for (int i = 0; i < 20; ++i) window(30);
+        check(drains == 2 && c.latencyFloorNs == 25 * ms, "skips at the floor (would cause repeats)");
+        int64_t v[13]; c.takeDisplayStats(v);
+        check(v[7] == 2, "drain count");
+        puts("PASS fifo latency drain");
+    }
+    if (n == 8) {
+        // The floor came from a luckier phase: one wrong skip, then that level is the floor and nothing more is skipped.
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](int64_t medianMs) {
+            c.latencyWindowDone(medianMs * ms, r, false, false);
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
+        };
+        window(23); window(37); window(37);
+        check(drains == 1, "no first skip");
+        window(37); window(37); window(37);
+        check(c.latencyFloorNs == 37 * ms, "a skip that changed nothing did not raise the floor");
+        for (int i = 0; i < 30; ++i) window(37);
+        check(drains == 1, "skips again at the corrected floor");
+        check(!c.drainQueuedFrame(), "skip without a request");
+        c.activePresentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+        for (int i = 0; i < 10; ++i) window(80);
+        check(drains == 1 && !c.drainOne, "mailbox skipped (it has no queue)");
+        puts("PASS fifo latency drain floor correction");
+    }
+    if (n == 9) {
+        // collectPresentTimings feeds a window median per 60 shown game frames.
+        c.refreshPeriodNs = 16666667;
+        const uint64_t t = 20000 * ms;
+        for (uint32_t id = 1; id <= 60; ++id) {
+            c.presentWasGame[id] = 1; c.presentQueuedNs[id] = (int64_t)(t + id * 16666667ULL) - (id == 7 ? 90 : 40) * ms;
+            pending = { shown(id, t + id * 16666667ULL) }; c.collectPresentTimings();
+        }
+        check(c.latencyFloorNs == 40 * ms && c.latencyCount == 0, "window median not taken from the shown frames");
+        puts("PASS latency window from timings");
+    }
+    if (n == 10) {
+        // 1.3.36 on the phone: the skip landed in a hitch, the check saw no drop and took 47 ms as the floor. Windows with a
+        // hitch now count for nothing, so the check waits for clean windows.
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](int64_t medianMs, bool dirty) {
+            c.latencyWindowDone(medianMs * ms, r, dirty, false);
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
+        };
+        window(23, false); window(48, true); window(48, true);
+        check(drains == 0, "skipped on windows with a hitch");
+        window(48, false); window(48, false); window(48, false);   // one window to settle after the hitch, then two high
+        check(drains == 1, "no skip on clean high windows");
+        window(48, true); window(48, true); window(48, true);
+        window(31, false); window(31, false); window(31, false);
+        check(c.latencyFloorNs == 23 * ms, "a hitch during the check raised the floor");
+        for (int i = 0; i < 20; ++i) window(31, false);
+        check(drains == 1, "skipped at the floor");
+        puts("PASS hitch windows ignored");
+    }
+    if (n == 6) {
+        c.refreshPeriodNs = 8333333;
+        const uint64_t t = 11000 * ms;
+        auto feed = [&](uint32_t from, uint32_t count, auto marginOf) {
+            for (uint32_t id = from; id < from + count; ++id) {
+                c.presentWasGame[id & 255] = 1;
+                pending = { shown(id, t + id * 16666667ULL, marginOf(id)) }; c.collectPresentTimings();
+            }
+        };
+        feed(1, 59, [](uint32_t) { return 1000000ULL; });
+        int64_t p[4]; c.phaseStats(p);
+        check(p[0] == 0, "window reported before it is full");
+        feed(60, 1, [](uint32_t) { return 1000000ULL; });
+        c.phaseStats(p);
+        printf("window=%lld mean=%lld conc=%lld refresh=%lld\n", (long long)p[0], (long long)p[1], (long long)p[2], (long long)p[3]);
+        check(p[0] == 1 && std::llabs(p[1] - 1000000) < 2000 && p[2] >= 999 && p[3] == 8333333, "steady phase");
+        // frames on both sides of the refresh edge: the circular mean is the edge itself, still concentrated
+        feed(61, 60, [](uint32_t id) { return id % 2 ? 200000ULL : 8333333ULL - 200000ULL + 8333333ULL; });
+        c.phaseStats(p);
+        printf("edge mean=%lld conc=%lld\n", (long long)p[1], (long long)p[2]);
+        check(p[0] == 2 && (p[1] < 20000 || p[1] > 8333333 - 20000) && p[2] > 950, "edge phase not seen as the edge");
+        puts("PASS display phase measurement");
+    }
+    if (n == 11) {
+        // Choice A: the emptier queue refills within 20 s of a skip that worked -> keep the smooth level, skip no further;
+        // a larger backlog later (a loading screen) is still taken out down to that level.
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](int64_t medianMs, bool dirty) {
+            c.latencyWindowDone(medianMs * ms, r, dirty, false);
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
+        };
+        window(25, false); window(47, false); window(47, false);
+        check(drains == 1, "no skip");
+        window(30, false); window(30, false); window(30, false);
+        check(c.latencyFloorNs == 25 * ms, "a skip that worked moved the floor");
+        for (int i = 0; i < 8; ++i) window(30, false);
+        window(31, true); window(47, false);
+        check(c.latencyFloorNs == 47 * ms, "a refill soon after the skip did not keep the smooth level");
+        for (int i = 0; i < 40; ++i) window(47, false);
+        check(drains == 1, "skipped again below the smooth level");
+        window(63, true); window(63, false); window(63, false); window(63, false);
+        check(drains == 2, "a larger backlog is not taken out");
+        window(47, false); window(47, false); window(47, false);
+        for (int i = 0; i < 40; ++i) window(47, false);
+        check(drains == 2 && c.latencyFloorNs == 47 * ms, "went below the smooth level");
+        puts("PASS refill keeps the smooth level");
+    }
+    if (n == 12) {
+        // A hitch long after a skip (watch over) is just a hitch: the low floor stays.
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](int64_t medianMs, bool dirty) {
+            c.latencyWindowDone(medianMs * ms, r, dirty, false);
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
+        };
+        window(25, false); window(47, false); window(47, false);
+        window(30, false); window(30, false); window(30, false);
+        for (int i = 0; i < 25; ++i) window(30, false);
+        window(31, true); window(47, false);
+        check(c.latencyFloorNs == 25 * ms, "a late hitch raised the floor");
+        window(47, false); window(47, false);
+        check(drains == 2, "the refill from a late hitch is not taken out");
+        puts("PASS late hitch keeps the floor");
+    }
+    if (n == 13) {
+        // The switch off (the default): the queue is left as it fills, nothing is ever skipped.
+        c.fifoDrainMode = c.kDrainOff;
+        const int64_t r = 16666667;
+        c.latencyWindowDone(25 * ms, r, false, false);
+        for (int i = 0; i < 10; ++i) c.latencyWindowDone(63 * ms, r, false, false);
+        check(!c.drainOne && !c.drainQueuedFrame(), "skipped with the switch off");
+        puts("PASS drain off by switch");
+    }
+    if (n == 14) {
+        // Loading (a window that took clearly longer than 60 frames should) teaches neither a floor nor a refill.
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](int64_t medianMs, bool dirty, bool slow) {
+            c.latencyWindowDone(medianMs * ms, r, dirty, slow);
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
+        };
+        window(25, false, false); window(47, false, false); window(47, false, false);
+        window(30, false, false); window(30, false, false); window(30, false, false);
+        check(drains == 1, "no skip");
+        window(30, false, true); window(47, false, true); window(47, false, true);
+        check(c.latencyFloorNs == 25 * ms, "loading taught the floor");
+        window(47, false, false); window(47, false, false); window(47, false, false);
+        check(drains == 2, "the queue left by loading is not taken out");
+        puts("PASS loading teaches nothing");
+    }
+    if (n == 15) {
+        // After a skip, a cursor-only wake must not present the skipped content (it would refill the queue); new game content
+        // or the end of the hold releases it.
+        c.fifoDrainMode = c.kDrainProbe; c.refreshPeriodNs = 16666667;
+        c.drainOne = true; c.contentGen = 5; c.presentedContentGen = 4;
+        check(c.drainQueuedFrame(), "skip not taken");
+        check(c.holdDrainedContent(), "a cursor wake presents the skipped content");
+        fakeNowNs += 40 * ms;
+        check(!c.holdDrainedContent() && c.drainedContentGen == 0, "the hold never ends");
+        c.drainOne = true; c.contentGen = 6;
+        check(c.drainQueuedFrame(), "second skip not taken");
+        c.contentGen = 7;
+        check(!c.holdDrainedContent(), "new game content held back");
+        c.drainOne = true; c.contentGen = 8; c.fifoDrainMode = c.kDrainOff;
+        check(!c.drainQueuedFrame() && !c.drainOne, "skipped with the switch turned off meanwhile");
+        puts("PASS skipped content stays out");
+    }
+    if (n == 16) {
+        // A slot reused by a newer present (256 later) says nothing about the old one: not counted, not learned from.
+        c.refreshPeriodNs = 16666667;
+        c.presentWasGame[17] = 1; c.presentMetadataId[17] = 273; c.presentQueuedNs[17] = 5000 * ms;
+        pending = { shown(17, 5100 * ms) }; c.collectPresentTimings();
+        int64_t v[13]; c.takeDisplayStats(v);
+        check(v[1] == 0 && v[2] == 0 && v[6] == 0 && c.latencyCount == 0 && c.latencyWindowDirty, "stale metadata used");
+        puts("PASS stale timing metadata ignored");
+    }
+    if (n == 17) {
+        // The 60th frame of a window shown late marks that window (the one it closes), not the next one.
+        c.refreshPeriodNs = 16666667; c.frameIntervalNs = 16666667;
+        uint64_t at = 30000 * ms;
+        for (uint32_t id = 1; id <= 120; ++id) {
+            at += (id == 120 ? 33333334ULL : 16666667ULL);
+            c.presentWasGame[id] = 1; c.presentQueuedNs[id] = (int64_t)at - 40 * ms;
+            pending = { shown(id, at) }; c.collectPresentTimings();
+        }
+        check(c.cleanWindows == 0 && !c.latencyWindowDirty, "the late 60th frame was charged to the next window");
+        puts("PASS late frame charged to its own window");
+    }
+    if (n == 18) {
+        // One step ("Lower"): after a skip that worked the app stops there; a later refill is taken out again to that level.
+        c.fifoDrainMode = c.kDrainOneStep;
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](int64_t medianMs, bool dirty) {
+            c.latencyWindowDone(medianMs * ms, r, dirty, false);
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
+        };
+        window(25, false); window(60, false); window(60, false);
+        check(drains == 1, "no first skip");
+        window(43, false); window(43, false); window(43, false);
+        check(c.latencyFloorNs == 43 * ms, "one step did not stop at the level it reached");
+        for (int i = 0; i < 40; ++i) window(43, false);
+        check(drains == 1, "one step probed further (an extra hitch)");
+        window(43, true); window(60, false); window(60, false); window(60, false);
+        check(drains == 2, "a refill above the reached level is not taken out");
+        int64_t v[13]; c.takeDisplayStats(v);
+        check(v[10] == 43000 && v[11] == 60000 && v[12] == c.kWindowClean, "window state export");
+        puts("PASS one step stops at the first level");
+    }
+    if (n == 19) {
+        // Frame log: content arrival, queue and display per game frame; missing frames and skips have their own kind.
+        c.refreshPeriodNs = 16666667;
+        for (uint32_t id = 1; id <= 3; ++id) {
+            c.presentWasGame[id] = 1; c.presentQueuedNs[id] = (int64_t)(id * 100 * ms); c.presentContentNs[id] = (int64_t)(id * 100 * ms) - 3 * ms;
+            c.presentContentGenSlot[id] = 10 + id; c.presentContentUpdates[id] = (int)id;
+        }
+        pending = { shown(1, 120 * ms, 5000000), shown(3, 330 * ms, 6000000) }; c.collectPresentTimings();
+        c.drainOne = true; c.contentGen = 50; c.presentedContentGen = 49; c.fifoDrainMode = c.kDrainOneStep;
+        check(c.drainQueuedFrame(), "skip not taken");
+        fakeNowNs += 40 * ms;
+        check(!c.holdDrainedContent(), "hold did not end");
+        int64_t rows[4 * 8] = {};
+        int count = c.takeFrameLog(rows, 4);
+        printf("rows=%d first=%lld/%lld/%lld\n", count, (long long)rows[0], (long long)rows[1], (long long)rows[6]);
+        check(count == 4, "row count");
+        check(rows[0] == 1 && rows[1] == 1 && rows[2] == 11 && rows[3] == 1 && rows[4] == 97 * ms && rows[5] == 100 * ms && rows[6] == 120 * ms && rows[7] == 5000000, "shown row");
+        check(rows[8] == 2 && rows[9] == 3 && rows[14] == 0, "missing row");
+        check(rows[16] == 3 && rows[17] == 1 && rows[22] == 330 * ms, "second shown row");
+        check(rows[25] == 4 && rows[26] == 50, "skip row");
+        check(c.takeFrameLog(rows, 4) == 0, "rows taken twice");
+        int64_t v[13]; c.takeDisplayStats(v);
+        check(v[9] == 1, "a skip presented after all is not counted");
+        puts("PASS frame log and skip accounting");
+    }
+    if (n == 20) {
+        // OPT12-05: a skip sets needsRender, so the loop returns to wait for the hold to end even with nothing else waking it.
+        c.fifoDrainMode = c.kDrainOneStep; c.refreshPeriodNs = 16666667;
+        c.drainOne = true; c.contentGen = 9; c.presentedContentGen = 8; c.needsRender = false;
+        check(c.drainQueuedFrame(), "skip not taken");
+        check(c.needsRender.load(), "the skip leaves no wake-up for the end of its hold");
+        puts("PASS skip wakes its own hold");
+    }
+    if (n == 21) {
+        // OPT12-11: with the trace off nothing is logged (shown frames or skips); the counters still count.
+        c.frameTraceEnabled = false; c.refreshPeriodNs = 16666667;
+        c.presentWasGame[1] = 1; c.presentQueuedNs[1] = 100 * ms;
+        pending = { shown(1, 130 * ms) }; c.collectPresentTimings();
+        c.fifoDrainMode = c.kDrainOneStep; c.drainOne = true; c.contentGen = 3; c.presentedContentGen = 2;
+        check(c.drainQueuedFrame(), "skip not taken");
+        int64_t rows[8]; check(c.takeFrameLog(rows, 1) == 0, "rows logged with the trace off");
+        int64_t v[13]; c.takeDisplayStats(v);
+        check(v[1] == 1 && v[7] == 1, "counters stopped with the trace off");
+        puts("PASS frame trace off");
+    }
+    if (n == 22) {
+        // OPT12-06: while a window is being written (odd sequence) no snapshot is taken; a stable one is taken whole.
+        c.phaseWindow = 7; c.phaseMeanNs = 4000000; c.phaseConcentration = 900; c.phaseRefreshNs = 16666667;
+        c.phaseSequence = 3;
+        int64_t p[4]; c.phaseStats(p);
+        check(p[2] == 0, "a half-written window was used");
+        c.phaseSequence = 4; c.phaseStats(p);
+        check(p[0] == 7 && p[1] == 4000000 && p[2] == 900 && p[3] == 16666667, "a stable window was not taken whole");
+        puts("PASS phase snapshot coherent");
+    }
+    return 0;
+}

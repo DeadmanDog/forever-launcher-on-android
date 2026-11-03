@@ -1,0 +1,91 @@
+#define VK_USE_64_BIT_PTR_DEFINES 0
+#include <vulkan/vulkan.h>
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#include "RenderWakeSignal.h"
+static int64_t monotonicNs(){return 0;}
+#define RLOG(...)
+#define RLOG_E(...)
+struct AHardwareBuffer {};
+constexpr unsigned MAX_FRAMES_IN_FLIGHT=2;
+struct FakeVk {
+ uint64_t next=100;int fail=0,descriptorWrites=0;VkPipelineStageFlags sourceStage=0;std::vector<VkImageMemoryBarrier> barriers;
+ std::unordered_set<uint64_t> images,buffers,views,sets;
+ std::unordered_map<VkDeviceMemory,std::vector<unsigned char>> memory;
+ std::unordered_map<VkBuffer,VkDeviceMemory> bound;
+ VkResult CreateBuffer(VkDevice,const VkBufferCreateInfo*,const VkAllocationCallbacks*,VkBuffer*b){if(fail==1)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*b=next++;buffers.insert(*b);return VK_SUCCESS;}
+ void GetBufferMemoryRequirements(VkDevice,VkBuffer,VkMemoryRequirements*r){*r={4096,16,fail==2?0u:1u};}
+ VkResult AllocateMemory(VkDevice,const VkMemoryAllocateInfo*i,const VkAllocationCallbacks*,VkDeviceMemory*m){if(fail==3)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*m=next++;memory[*m].resize(i->allocationSize);return VK_SUCCESS;}
+ VkResult BindBufferMemory(VkDevice,VkBuffer b,VkDeviceMemory m,VkDeviceSize){if(fail==4)return VK_ERROR_OUT_OF_DEVICE_MEMORY;bound[b]=m;return VK_SUCCESS;}
+ VkResult CreateImage(VkDevice,const VkImageCreateInfo*,const VkAllocationCallbacks*,VkImage*p){if(fail==5)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*p=next++;images.insert(*p);return VK_SUCCESS;}
+ void GetImageMemoryRequirements(VkDevice,VkImage,VkMemoryRequirements*r){*r={4096,16,fail==6?0u:1u};}
+ VkResult BindImageMemory(VkDevice,VkImage,VkDeviceMemory,VkDeviceSize){return fail==7?VK_ERROR_OUT_OF_DEVICE_MEMORY:VK_SUCCESS;}
+ VkResult CreateImageView(VkDevice,const VkImageViewCreateInfo*,const VkAllocationCallbacks*,VkImageView*v){if(fail==8)return VK_ERROR_OUT_OF_DEVICE_MEMORY;*v=next++;views.insert(*v);return VK_SUCCESS;}
+ VkResult AllocateDescriptorSets(VkDevice,const VkDescriptorSetAllocateInfo*,VkDescriptorSet*s){if(fail==9)return VK_ERROR_OUT_OF_POOL_MEMORY;*s=next++;sets.insert(*s);return VK_SUCCESS;}
+ void UpdateDescriptorSets(VkDevice,uint32_t,const VkWriteDescriptorSet*,uint32_t,const VkCopyDescriptorSet*){++descriptorWrites;}
+ VkResult MapMemory(VkDevice,VkDeviceMemory m,VkDeviceSize,VkDeviceSize,VkMemoryMapFlags,void**p){if(fail==10)return VK_ERROR_MEMORY_MAP_FAILED;*p=memory.at(m).data();return VK_SUCCESS;}
+ void FreeMemory(VkDevice,VkDeviceMemory m,const VkAllocationCallbacks*){memory.erase(m);}
+ void DestroyBuffer(VkDevice,VkBuffer b,const VkAllocationCallbacks*){buffers.erase(b);bound.erase(b);}
+ void DestroyImage(VkDevice,VkImage i,const VkAllocationCallbacks*){images.erase(i);}
+ void DestroyImageView(VkDevice,VkImageView v,const VkAllocationCallbacks*){views.erase(v);}
+ VkResult FreeDescriptorSets(VkDevice,VkDescriptorPool,uint32_t,const VkDescriptorSet*s){sets.erase(*s);return VK_SUCCESS;}
+ void CmdPipelineBarrier(VkCommandBuffer,VkPipelineStageFlags src,VkPipelineStageFlags,VkDependencyFlags,uint32_t,const VkMemoryBarrier*,uint32_t,const VkBufferMemoryBarrier*,uint32_t n,const VkImageMemoryBarrier*b){sourceStage=src;barriers.assign(b,b+n);}
+ bool empty(){return images.empty()&&buffers.empty()&&views.empty()&&sets.empty()&&memory.empty();}
+ unsigned char first(VkBuffer b){return memory.at(bound.at(b))[0];}
+};
+struct VulkanRendererContext {
+ struct CpuUpload {VkBuffer buffer=0;VkDeviceMemory memory=0;void*mapped=nullptr;VkDeviceSize capacity=0;};
+ struct WinTex {
+ VkImage img=0;VkDeviceMemory mem=0;VkImageView view=0;VkDescriptorSet ds=0;VkBuffer stg=0;VkDeviceMemory stgMem=0;void*mapped=nullptr;VkDeviceSize cap=0;
+ int w=0,h=0;bool dirty=false,isAHB=false,needsTransition=false;AHardwareBuffer*ahb=nullptr;
+ std::shared_ptr<std::vector<unsigned char>> pixels;CpuUpload uploads[MAX_FRAMES_IN_FLIGHT]{};uint64_t revision=0;int64_t idleToken=0;int presentX=0,presentY=0,winW=0,winH=0;
+ };
+ struct RenderEntry {int64_t id;int x,y;};
+ struct DrawEntry {VkImage img=0;VkDescriptorSet ds=0;VkBuffer upload=0;int x=0,y=0,w=0,h=0;bool needsTransition=false,isAHB=false;AHardwareBuffer*ahb=nullptr;int64_t id=0;uint64_t revision=0;int tw=0,th=0;float u0=0,v0=0,u1=1,v1=1;};
+ FakeVk vk_;VkDevice device{};VkDescriptorPool winTexPool{};VkDescriptorSetLayout dsLayout{};VkSampler sampler=1;
+ VkPhysicalDeviceMemoryProperties memProperties{};bool swapRB=false;std::mutex renderMutex;std::shared_mutex frameMutex;RenderWakeSignal renderWake;
+ std::atomic<bool>needsRender{false};std::atomic<uint64_t>sceneGen{1},contentGen{0};void markSceneDirty(){sceneGen.fetch_add(1);needsRender.store(true);}std::atomic<int64_t>lastContentNs{0};std::atomic<int>contentUpdatesSincePresent{0};int currentFrame=0;float sceneOffsetX=0,sceneOffsetY=0,sceneScaleX=1,sceneScaleY=1;
+ std::unordered_map<int64_t,WinTex>texMap;std::unordered_map<AHardwareBuffer*,WinTex>ahbImportCache;
+ std::vector<int64_t> idleReleased;std::unordered_map<int64_t,std::vector<int64_t>> windowIdleTokens;void retireIdleTokens(std::vector<int64_t>&t){t.clear();}
+ struct RetirementQueue:std::vector<WinTex>{bool failPush=false;void push_back(const WinTex& t){if(failPush)throw std::bad_alloc();std::vector<WinTex>::push_back(t);}}deleteQueue;std::vector<RenderEntry>renderList;std::atomic<bool> scanoutActive{false};std::vector<DrawEntry>frameDraws;
+ VulkanRendererContext(){memProperties.memoryTypeCount=1;memProperties.memoryTypes[0].propertyFlags=VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT|VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;}
+ uint32_t findMemType(uint32_t,VkMemoryPropertyFlags);void createBuffer(VkDeviceSize,VkBufferUsageFlags,VkMemoryPropertyFlags,VkBuffer&,VkDeviceMemory&);
+ bool createWinTexResources(WinTex&,int,int);void destroyWinTex(WinTex&);void freeRetiredTextures(std::vector<WinTex>&);
+ void updateWindowContent(int64_t,void*,short,short,short,int,int,int=0,int=0);void setRenderList(const int64_t*,const int*,const int*,int);void setTransform(float,float,float,float);
+ void appendWindowDraw(const RenderEntry&);void commitCpuUploads();VkBuffer prepareCpuUpload(WinTex&);
+ void capture(){std::lock_guard<std::mutex>l(renderMutex);/* CAPTURE */}
+ void commit(){/* COMMIT */}
+ void recordBarriers(){VkCommandBuffer cb=0;const auto& draws=frameDraws;std::vector<VkImageMemoryBarrier>ahbTransitions,preUpload,postUpload;/* BARRIERS */}
+ void cleanup(){for(auto&[id,t]:texMap)destroyWinTex(t);texMap.clear();freeRetiredTextures(deleteQueue);}
+};
+/* PRODUCTION */
+static void check(bool b,const char*m){if(!b){fprintf(stderr,"FAIL %s\n",m);exit(2);}}
+int main(int,char**argv){int n=atoi(argv[1]);VulkanRendererContext c;unsigned char p[64];memset(p,7,sizeof(p));
+ if(n<=2){c.vk_.fail=n==0?3:n==1?4:2;VkBuffer b=0;VkDeviceMemory m=0;bool failed=false;try{c.createBuffer(16,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,b,m);}catch(...){failed=true;}check(failed&&b==0&&m==0&&c.vk_.empty(),"buffer allocation/binding failure leaks or publishes partial handles");}
+ if(n>=3&&n<=6){c.vk_.fail=n==3?7:n==4?6:n==5?10:8;bool rejected=false;try{c.updateWindowContent(1,p,2,2,2,0,0);c.renderList={{1,0,0}};c.capture();rejected=c.frameDraws.empty();}catch(...){check(false,"private texture failure escapes update/frame boundary");}if(n!=5)check(c.texMap.empty(),"failed private image published");c.cleanup();check(c.vk_.empty(),"unsubmitted private image leaks");check(rejected,"failed bind/map image becomes drawable");}
+ if(n==7){c.updateWindowContent(1,p,2,2,2,0,0);auto img=c.texMap.at(1).img;c.vk_.fail=5;c.updateWindowContent(1,p,3,3,3,0,0);check(c.texMap.count(1)&&c.texMap.at(1).img==img,"failed resize loses previously valid Wine content");c.cleanup();}
+ if(n==8){VulkanRendererContext::WinTex t;t.img=77;t.isAHB=true;t.w=2;t.h=2;t.ds=78;c.texMap[1]=t;c.updateWindowContent(1,p,2,2,2,0,0);check(c.texMap.count(1)&&!c.texMap.at(1).isAHB&&c.texMap.at(1).dirty,"AHB to CPU switch silently drops update");c.cleanup();}
+ if(n==9){c.updateWindowContent(1,p,2,2,2,0,0);c.renderList={{1,0,0}};c.capture();auto b0=c.frameDraws.at(0).upload;check(c.vk_.first(b0)==7,"initial upload bytes");c.commit();memset(p,9,sizeof(p));c.updateWindowContent(1,p,2,2,2,0,0);check(c.vk_.first(b0)==7,"CPU producer overwrites GPU pending upload");c.currentFrame=1;c.capture();auto b1=c.frameDraws.at(0).upload;check(b0!=b1&&c.vk_.first(b1)==9,"overlapping GPU frames alias upload memory");c.commit();c.cleanup();check(c.vk_.empty(),"per-slot upload cleanup");}
+ if(n==10){c.updateWindowContent(1,p,2,2,2,0,0);c.renderList={{1,0,0}};c.capture();c.capture();check(c.frameDraws.at(0).upload!=0&&c.frameDraws.at(0).needsTransition,"aborted frame loses dirty/initial-layout state");c.commit();c.capture();check(c.frameDraws.at(0).upload==0&&!c.frameDraws.at(0).needsTransition,"successful submit does not acknowledge upload");c.cleanup();}
+ if(n==11){c.updateWindowContent(1,p,2,2,2,0,0);c.renderList={{1,0,0}};c.capture();memset(p,9,sizeof(p));c.updateWindowContent(1,p,2,2,2,0,0);c.commit();c.capture();check(c.frameDraws.at(0).upload!=0,"older frame commit consumes a newer CPU update");c.commit();c.cleanup();}
+ if(n==12){long ids[1]={4};int xs[1]={3},ys[1]={2};c.setRenderList(ids,xs,ys,1);check(c.needsRender,"first scene requests frame");int wakes=1;for(int i=0;i<1000;i++){c.needsRender=false;c.setRenderList(ids,xs,ys,1);wakes+=c.needsRender.load();}check(wakes==1,"identical render list requests redundant frames");xs[0]=4;c.setRenderList(ids,xs,ys,1);check(c.needsRender&&c.renderList[0].x==4,"actual scene change must render");printf("render-list frame requests %d/1001\n",wakes);}
+ if(n==13){c.setTransform(1,2,3,4);check(c.needsRender,"changed transform requests frame");int wakes=1;for(int i=0;i<1000;i++){c.needsRender=false;c.setTransform(1,2,3,4);wakes+=c.needsRender.load();}check(wakes==1,"identical transform requests redundant frames");c.setTransform(1,2,4,4);check(c.needsRender&&c.sceneScaleX==4,"real scale change must render");printf("transform frame requests %d/1001\n",wakes);}
+ if(n==14){c.updateWindowContent(1,p,2,2,2,0,0);auto next=c.vk_.next;c.updateWindowContent(1,p,2,2,2,0,0);check(c.vk_.next==next,"same size creates GPU resources");c.cleanup();check(c.vk_.empty(),"successful CPU resource cleanup");}
+ if(n==15||n==16){VulkanRendererContext::DrawEntry d;d.img=7;d.upload=8;d.needsTransition=n==16;c.frameDraws={d};c.recordBarriers();check(c.vk_.barriers.size()==1,"one CPU pre-upload barrier");auto b=c.vk_.barriers[0];if(n==15)check(b.oldLayout==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL&&b.srcAccessMask==VK_ACCESS_SHADER_READ_BIT&&(c.vk_.sourceStage&VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT),"CPU upload fails to order prior shader reads before overwriting image");else check(b.oldLayout==VK_IMAGE_LAYOUT_UNDEFINED&&b.srcAccessMask==0,"initial CPU upload transition control");}
+ if(n==17){c.updateWindowContent(1,p,2,2,2,0,0);c.renderList={{1,0,0}};c.vk_.fail=10;c.capture();check(c.frameDraws.empty()&&c.texMap.at(1).dirty&&c.texMap.at(1).needsTransition,"failed staging samples an uninitialized image or loses retry");check(c.vk_.buffers.empty()&&c.vk_.memory.size()==1,"failed staging leaks private buffer/memory");c.vk_.fail=0;c.capture();check(c.frameDraws.size()==1&&c.vk_.first(c.frameDraws[0].upload)==7,"next successful staging does not recover");c.commit();c.cleanup();check(c.vk_.empty(),"recovered staging cleanup");}
+ if(n==18){c.renderList={{1,0,0}};for(int i=0;i<1000;i++){c.currentFrame=i%2;memset(p,i%255,sizeof(p));c.updateWindowContent(1,p,2,2,2,0,0);c.capture();check(c.vk_.first(c.frameDraws.at(0).upload)==i%255,"frame bytes mismatch during slot rotation");c.commit();}check(c.vk_.buffers.size()==2&&c.vk_.images.size()==1,"slot reuse grows resources");c.cleanup();check(c.vk_.empty(),"1000frame CPU resource cleanup");}
+ if(n==19){c.renderList={{1,0,0}};for(int i=0;i<100;i++){int size=2+i%2;c.updateWindowContent(1,p,size,size,size,0,0);c.capture();c.commit();c.freeRetiredTextures(c.deleteQueue);}c.cleanup();check(c.vk_.empty(),"resize retirement leaks frame-owned upload slots");}
+ if(n==20){c.updateWindowContent(1,p,2,2,2,0,0);auto image=c.texMap.at(1).img;c.deleteQueue.failPush=true;c.updateWindowContent(1,p,3,3,3,0,0);check(c.texMap.at(1).img==image&&c.vk_.images.size()==1&&c.vk_.sets.size()==1&&c.vk_.memory.size()==1,"retirement-queue OOM leaks private replacement image");c.deleteQueue.failPush=false;c.cleanup();check(c.vk_.empty(),"OOM rollback preserves clean ownership");}
+ printf("PASS upload/scene %d\n",n);
+}

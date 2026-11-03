@@ -1,0 +1,26 @@
+import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
+public class VulkanSceneRegression {
+ static class Drawable {final int id;Drawable(int i){id=i;}}
+ static class Window {int getX(){return 0;}int getY(){return 0;}}
+ interface XLock extends AutoCloseable{default void close(){}}
+ static class XServer {enum Lockable{WINDOW_MANAGER,DRAWABLE_MANAGER}final WindowManager windowManager=new WindowManager();static class WindowManager{Window rootWindow=new Window();}final DrawableManager drawableManager=new DrawableManager();static class DrawableManager{Map<Integer,Drawable>storage=new HashMap<>();Drawable getDrawable(int id){return storage.get(id);}}XLock lock(Lockable...l){return new XLock(){};}}
+ static class RenderableWindow {}
+ boolean disposed=false,flatPresentationEnabled=true;long nativeHandle=1;
+ final Object lock=new Object(),nativeLifetimeLock=new Object();final XServer xServer=new XServer();
+ private static final AtomicLong ID_GEN=new AtomicLong(1);
+ /* MAP */
+ List<RenderableWindow>renderableWindows;List<Long>removed=new ArrayList<>();
+ void collectWindows(ArrayList<RenderableWindow>a,Window w,int x,int y){}
+ void pushRenderList(ArrayList<RenderableWindow>a){}
+ void nativeRemoveWindow(long h,long id){removed.add(id);}
+ /* PRODUCTION */
+ static void check(boolean b,String m){if(!b)throw new AssertionError(m);}
+ public static void main(String[]args){int n=Integer.parseInt(args[0]);var r=new VulkanSceneRegression();var old=new Drawable(4);r.xServer.drawableManager.storage.put(4,old);long id=r.did(old);
+  if(n==0){r.xServer.drawableManager.storage.put(4,new Drawable(4));r.updateScene();check(r.removed.equals(List.of(id)),"resize retains old native texture/imports");check(!r.drawableIds.containsKey(old),"resize retains obsolete identity");}
+  if(n==1){r.xServer.drawableManager.storage.remove(4);r.updateScene();r.updateScene();check(r.removed.equals(List.of(id)),"destroyed drawable native identity must retire exactly once");}
+  if(n==2){r.updateScene();check(r.removed.isEmpty()&&r.did(old)==id,"live drawable/id must remain stable");}
+  if(n==3){for(int i=0;i<1000;i++){var d=new Drawable(4);r.xServer.drawableManager.storage.put(4,d);r.did(d);r.updateScene();}check(r.drawableIds.size()==1&&r.removed.size()==1000,"repeated mode changes accumulate renderer identities/import owners");}
+  System.out.println("PASS Vulkan scene "+n);
+ }
+}

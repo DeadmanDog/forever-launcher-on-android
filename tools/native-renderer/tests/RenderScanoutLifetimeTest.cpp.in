@@ -1,0 +1,207 @@
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <functional>
+#include <map>
+#include <mutex>
+#include <thread>
+#include <vector>
+#include "RenderWakeSignal.h"
+#define RLOG(...)
+#define SCANOUT_LOG(...)
+
+// ---- minimal Android surface: only what VulkanRendererScanout.cpp uses ----
+struct ARect { int32_t left, top, right, bottom; };
+struct ANativeWindow { int unused; };
+struct AHardwareBuffer { std::vector<uint32_t> px; uint32_t w = 0, h = 0; int refs = 1; };
+struct AHardwareBuffer_Desc { uint32_t width, height, layers, format, usage, stride; };
+constexpr uint32_t AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM = 1, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN = 2,
+    AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE = 4, AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY = 8;
+static std::atomic<bool> failAllocate{false};
+static void AHardwareBuffer_acquire(AHardwareBuffer* b) { ++b->refs; }
+static void AHardwareBuffer_release(AHardwareBuffer* b) { if (--b->refs == 0) delete b; }
+static int AHardwareBuffer_allocate(const AHardwareBuffer_Desc* d, AHardwareBuffer** out) {
+    if (failAllocate.load()) return -1;
+    auto* b = new AHardwareBuffer; b->w = d->width; b->h = d->height; b->px.assign((size_t)d->width * d->height, 0); *out = b; return 0;
+}
+static void AHardwareBuffer_describe(AHardwareBuffer* b, AHardwareBuffer_Desc* d) { *d = {b->w, b->h, 1, 1, 0, b->w}; }
+static int AHardwareBuffer_lock(AHardwareBuffer* b, uint64_t, int, const void*, void** out) { *out = b->px.data(); return 0; }
+static int AHardwareBuffer_unlock(AHardwareBuffer*, int*) { return 0; }
+static void ANativeWindow_release(ANativeWindow*) {}
+
+// ---- the SurfaceControl / transaction API as a checker: using a deleted handle is a failure ----
+static std::mutex reg;
+static std::map<void*, bool> alive;     // handle -> still valid
+static std::atomic<int> misuse{0};
+static std::atomic<bool> blockApply{false};
+static std::atomic<int> insideApply{0}, applyCalls{0};
+static std::mutex gate; static std::condition_variable gateCv; static bool gateOpen = true;
+static std::vector<ARect> geoSeen; static std::mutex geoMutex;
+
+static void* newHandle() { void* p = new char[8]; std::lock_guard<std::mutex> l(reg); alive[p] = true; return p; }
+static void useHandle(void* p, const char* what) {
+    std::lock_guard<std::mutex> l(reg);
+    auto it = alive.find(p);
+    if (p == nullptr || it == alive.end() || !it->second) { fprintf(stderr, "FAIL %s on a deleted or unknown handle\n", what); misuse++; }
+}
+static void killHandle(void* p, const char* what) {
+    std::lock_guard<std::mutex> l(reg);
+    auto it = alive.find(p);
+    if (p == nullptr || it == alive.end() || !it->second) { fprintf(stderr, "FAIL %s of an invalid handle\n", what); misuse++; return; }
+    it->second = false;
+}
+static void* api_sc_create(ANativeWindow*, const char*) { return newHandle(); }
+static void api_sc_release(void* p) { killHandle(p, "release"); }
+static void* api_st_create() { return newHandle(); }
+static void api_st_delete(void* t) { killHandle(t, "transaction delete"); }
+static void api_st_apply(void* t) {
+    useHandle(t, "apply"); ++applyCalls;
+    if (blockApply.load()) {
+        ++insideApply;
+        std::unique_lock<std::mutex> l(gate); gateCv.wait(l, [] { return gateOpen; });
+        --insideApply;
+    }
+}
+static void api_st_setbuf(void* t, void* sc, AHardwareBuffer*, int) { useHandle(t, "setBuffer transaction"); useHandle(sc, "setBuffer surface"); }
+static void api_st_setzorder(void* t, void* sc, int32_t) { useHandle(t, "setZOrder transaction"); useHandle(sc, "setZOrder surface"); }
+static void api_st_setvis(void* t, void* sc, int8_t) { useHandle(t, "setVisibility transaction"); useHandle(sc, "setVisibility surface"); }
+static void api_st_setgeo(void* t, void* sc, const ARect* s, const ARect* d, int32_t) {
+    useHandle(t, "setGeometry transaction"); useHandle(sc, "setGeometry surface");
+    std::lock_guard<std::mutex> l(geoMutex); geoSeen.push_back(*d); (void)s;
+}
+
+struct VulkanRendererContext {
+    // the members the scanout code touches
+    ANativeWindow* window = nullptr;
+    int32_t containerWidth = 1280, containerHeight = 720, surfaceWidth = 1280, surfaceHeight = 720;
+    std::atomic<bool> needsRender{false}, cursorMoved{false}; RenderWakeSignal renderWake; std::atomic<uint64_t>sceneGen{1},contentGen{0};void markSceneDirty(){sceneGen.fetch_add(1);needsRender.store(true);}
+    std::atomic<bool> scanoutActive{false}, gameFrameDelivered{false};
+    void* scanoutGameSC = nullptr; void* scanoutCursorSC = nullptr; void* scanoutCursorBuf = nullptr;
+    int32_t scanoutCursorBufW = 0, scanoutCursorBufH = 0;
+    void* scanoutTx = nullptr; void* scanoutGameTx = nullptr;
+    ARect scanoutLastSrc{}, scanoutLastDst{};
+    bool scanoutGeoDirty = true, scanoutVisShown = false, scanoutApiLoaded = false, gameScVisible = false;
+    void *fnSCCreateFromWin = nullptr, *fnSCRelease = nullptr, *fnSTCreate = nullptr, *fnSTDelete = nullptr, *fnSTApply = nullptr,
+         *fnSTSetBuffer = nullptr, *fnSTSetZOrder = nullptr, *fnSTSetVisibility = nullptr, *fnSTSetGeometry = nullptr;
+    int32_t scanoutDstX = 0, scanoutDstY = 0, scanoutDstW = 0, scanoutDstH = 0;
+    std::mutex scanoutMutex; std::recursive_mutex scanoutLifeMutex;
+    short pendingCursorX = 0, pendingCursorY = 0, pendingCursorHotX = 0, pendingCursorHotY = 0;
+    bool cursorPosDirty = false, cursorImageDirty = false;
+
+    bool loadScanoutApi() {
+        fnSCCreateFromWin = (void*)api_sc_create; fnSCRelease = (void*)api_sc_release; fnSTCreate = (void*)api_st_create;
+        fnSTDelete = (void*)api_st_delete; fnSTApply = (void*)api_st_apply; fnSTSetBuffer = (void*)api_st_setbuf;
+        fnSTSetZOrder = (void*)api_st_setzorder; fnSTSetVisibility = (void*)api_st_setvis; fnSTSetGeometry = (void*)api_st_setgeo;
+        return true;
+    }
+    void initScanout(); void initScanoutFromWindows(ANativeWindow*, ANativeWindow*); void destroyScanout();
+    void scanoutSetBuffer(AHardwareBuffer*, int, int, int, int, int = -1);
+    void applyScanoutBuffer(); void scanoutSetDst(int, int, int, int);
+    void scanoutSetCursorImage(void*, short, short, short); void scanoutSetCursorPos(short, short, short, short);
+};
+typedef void* (*pfn_SCCreateFromWindow)(ANativeWindow*, const char*);
+typedef void  (*pfn_SCRelease)(void*);
+typedef void* (*pfn_STCreate)();
+typedef void  (*pfn_STDelete)(void*);
+typedef void  (*pfn_STApply)(void*);
+typedef void  (*pfn_STSetBuffer)(void*, void*, AHardwareBuffer*, int);
+typedef void  (*pfn_STSetZOrder)(void*, void*, int32_t);
+typedef void  (*pfn_STSetVisibility)(void*, void*, int8_t);
+typedef void  (*pfn_STSetGeometry)(void*, void*, const ARect*, const ARect*, int32_t);
+/* PRODUCTION */
+
+static void check(bool ok, const char* m) { if (!ok) { fprintf(stderr, "FAIL %s\n", m); exit(2); } }
+static void openGate() { { std::lock_guard<std::mutex> l(gate); gateOpen = true; } gateCv.notify_all(); }
+static void closeGate() { std::lock_guard<std::mutex> l(gate); gateOpen = false; }
+static void waitFor(const std::function<bool()>& cond, int ms) {
+    auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+    while (!cond() && std::chrono::steady_clock::now() < end) std::this_thread::yield();
+}
+static void feedCursor(VulkanRendererContext& c) { uint32_t px[16] = {1}; c.scanoutSetCursorImage(px, 4, 4, 4); c.scanoutSetCursorPos(10, 10, 1, 1); }
+
+int main(int argc, char** argv) {
+    int which = argc > 1 ? atoi(argv[1]) : 0;
+    VulkanRendererContext c; ANativeWindow win{}; c.window = &win;
+    c.initScanout(); check(c.scanoutActive.load(), "scanout starts");
+    AHardwareBuffer* frame = new AHardwareBuffer; frame->w = 64; frame->h = 64;
+
+    if (which == 0) {
+        // The render thread is stopped inside ST_APPLY of applyScanoutBuffer; the UI destroys the scanout now. The destroy has to wait
+        // for the render thread, and no call may ever see a deleted transaction (the interleaving Codex described for F12).
+        feedCursor(c);
+        closeGate(); blockApply = true;
+        std::thread render([&] { c.applyScanoutBuffer(); });
+        waitFor([] { return insideApply.load() == 1; }, 5000);
+        check(insideApply.load() == 1, "render thread is inside ST_APPLY");
+        std::atomic<bool> destroyed{false};
+        std::thread ui([&] { c.destroyScanout(); destroyed = true; });
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        check(!destroyed.load(), "destroy waits for the render thread that is inside the transaction");
+        blockApply = false; openGate();
+        render.join(); ui.join();
+        check(destroyed.load() && !c.scanoutActive.load() && misuse.load() == 0, "destroy finishes after the render thread, without any handle misuse");
+        check(c.scanoutTx == nullptr && c.scanoutGameTx == nullptr && c.scanoutGameSC == nullptr, "everything is released");
+    }
+    if (which == 1) {
+        // Stress: every entry point against destroy and re-init, from different threads (run under ThreadSanitizer).
+        std::atomic<bool> stop{false};
+        std::vector<std::thread> workers;
+        workers.emplace_back([&] { while (!stop) c.applyScanoutBuffer(); });
+        workers.emplace_back([&] { while (!stop) c.scanoutSetBuffer(frame, 0, 0, 64, 64); });
+        workers.emplace_back([&] { while (!stop) feedCursor(c); });
+        workers.emplace_back([&] { int i = 0; while (!stop) { c.scanoutSetDst(i % 7, i % 5, 100 + i % 9, 80 + i % 3); ++i; } });
+        for (int i = 0; i < 300; i++) { c.destroyScanout(); std::this_thread::yield(); c.initScanout(); }
+        stop = true; for (auto& t : workers) t.join();
+        c.destroyScanout();
+        check(misuse.load() == 0, "no handle was used after it was deleted");
+    }
+    if (which == 2) {
+        // The destination rectangle is one value: whatever a transaction sees was set by a single scanoutSetDst call.
+        std::atomic<bool> stop{false};
+        std::thread setter([&] { int i = 1; while (!stop) { c.scanoutSetDst(i, i, 40 + i % 50, 40 + i % 50); ++i; } });
+        std::thread render([&] { while (!stop) { c.scanoutSetBuffer(frame, 0, 0, 64, 64); } });
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        stop = true; setter.join(); render.join();
+        std::lock_guard<std::mutex> l(geoMutex);
+        check(!geoSeen.empty(), "geometry was applied");
+        for (const ARect& r : geoSeen) {
+            if (r.right - r.left == r.bottom - r.top) continue;   // setDst always uses w == h
+            if (r.left == 0 && r.top == 0) continue;               // the container-sized fallback
+            fprintf(stderr, "FAIL torn destination rect %d,%d,%d,%d\n", r.left, r.top, r.right, r.bottom); exit(2);
+        }
+        check(misuse.load() == 0, "handles stay valid");
+    }
+    if (which == 3) {
+        // A cursor that was queued in one lifetime is not applied in the next one.
+        feedCursor(c);
+        c.destroyScanout();
+        c.initScanout();
+        check(!c.cursorImageDirty && !c.cursorPosDirty, "no stale cursor request leaks into the next scanout lifetime");
+        check(!c.gameFrameDelivered.load() && !c.gameScVisible, "frame and cursor visibility start clean");
+        int before = applyCalls.load();
+        c.applyScanoutBuffer();
+        check(applyCalls.load() == before, "nothing to apply in the new lifetime");
+    }
+    if (which == 4) {
+        // A cursor size change whose new buffer cannot be allocated must not leave the old size without a buffer.
+        uint32_t px[16] = {1}; c.scanoutSetCursorImage(px, 4, 4, 4);
+        check(c.scanoutCursorBuf != nullptr && c.scanoutCursorBufW == 4, "first cursor buffer");
+        failAllocate = true; uint32_t big[64] = {1};
+        c.scanoutSetCursorImage(big, 8, 8, 8);
+        failAllocate = false;
+        check(c.scanoutCursorBuf == nullptr && c.scanoutCursorBufW == 0 && c.scanoutCursorBufH == 0, "size and buffer stay consistent");
+        c.scanoutSetCursorPos(1, 1, 0, 0);
+        int before = applyCalls.load(); c.applyScanoutBuffer();
+        check(applyCalls.load() == before, "nothing is applied for a cursor without a buffer");
+    }
+    c.destroyScanout();
+    check(misuse.load() == 0, "no misuse at the end");
+    for (auto& kv : alive) delete[] (char*)kv.first;   // the checker's handles (never reused while the test runs)
+    AHardwareBuffer_release(frame);
+    puts("PASS scanout lifetime");
+}

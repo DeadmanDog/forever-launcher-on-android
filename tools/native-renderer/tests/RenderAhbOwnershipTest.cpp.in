@@ -1,0 +1,182 @@
+#include <algorithm>
+#include <atomic>
+#include <cassert>
+#include <cinttypes>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
+#include "RenderWakeSignal.h"
+#include <new>
+static int64_t monotonicNs(){return 0;}
+// Allocation fault injection: the n-th allocation after arming throws std::bad_alloc, once.
+static int g_failCountdown = 0;
+void* operator new(std::size_t n) {
+    if (g_failCountdown > 0 && --g_failCountdown == 0) throw std::bad_alloc();
+    if (void* p = std::malloc(n ? n : 1)) return p;
+    throw std::bad_alloc();
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+#define RLOG(...)
+#define RLOG_E(...)
+#define RLOG_W(...)
+constexpr int VK_NULL_HANDLE=0;
+struct AHardwareBuffer{int id,refs=0;};
+static void AHardwareBuffer_acquire(AHardwareBuffer*p){++p->refs;}
+static void AHardwareBuffer_release(AHardwareBuffer*p){assert(p->refs>0);--p->refs;}
+struct VulkanRendererContext{
+ struct WinTex{int img=0,mem=0,view=0,ds=0,w=0,h=0;bool isAHB=false,needsTransition=false,dirty=false;int stg=0;uint64_t revision=0;AHardwareBuffer*ahb=nullptr;int presentX=0,presentY=0,winW=0,winH=0;int64_t idleToken=0;};
+ struct RenderEntry{int64_t id;int x,y;};
+ struct DrawEntry{int img,ds,upload,x,y,w,h;bool needsTransition=false,isAHB=false;AHardwareBuffer*ahb=nullptr;int64_t id=0;uint64_t revision=0;int tw=0,th=0;float u0=0,v0=0,u1=1,v1=1;};
+ std::vector<DrawEntry>frameDraws;
+ void appendWindowDraw(const RenderEntry&);
+ int prepareCpuUpload(WinTex&){return 0;}
+ void snapshot(){/* SNAPSHOT */}
+ void commitAhbTransitions();
+ int barrierCount();
+ std::mutex renderMutex;RenderWakeSignal renderWake;std::atomic<bool>needsRender{false};std::atomic<uint64_t>sceneGen{1},contentGen{0};void markSceneDirty(){sceneGen.fetch_add(1);needsRender.store(true);}std::atomic<int64_t>lastContentNs{0};std::atomic<int>contentUpdatesSincePresent{0};
+ std::unordered_map<int64_t,WinTex>texMap;std::unordered_map<AHardwareBuffer*,WinTex>ahbImportCache;
+ std::unordered_map<int64_t,std::vector<AHardwareBuffer*>>windowAhbs;std::unordered_map<AHardwareBuffer*,uint32_t>ahbOwnerCounts;
+ std::vector<WinTex>deleteQueue;std::vector<RenderEntry>renderList;bool failImport=false;
+ size_t ahbPeakPerWindow=0,ahbPeakTotal=0,ahbEvictions=0;
+ int importsCreated=0,freedByRollback=0;
+ std::unordered_map<int64_t,std::vector<int64_t>> windowIdleTokens;std::vector<int64_t> idleReleased;
+ void freeRetiredTextures(std::vector<WinTex>&v){for(auto&t:v)if(t.idleToken)idleReleased.push_back(t.idleToken);else ++freedByRollback;v.clear();}
+ bool importAHBToWinTex(WinTex&wt,AHardwareBuffer*b){if(failImport)return false;++importsCreated;wt.img=wt.view=wt.ds=b->id;wt.mem=b->id;wt.w=wt.h=32;wt.isAHB=true;wt.needsTransition=true;return true;}
+ void destroyWinTex(WinTex&wt);
+ void updateWindowContentAHB(int64_t,AHardwareBuffer*,short,short,int,int,int=0,int=0,int64_t=0);
+ void retireIdleTokens(std::vector<int64_t>&);
+ void removeWindow(int64_t);
+ void releaseAhbOwnership(AHardwareBuffer*);
+};
+/* PRODUCTION */
+struct VkImageMemoryBarrier{int sType,oldLayout,newLayout,srcQueueFamilyIndex,dstQueueFamilyIndex,image;struct Range{int a,b,c,d,e;}subresourceRange;int srcAccessMask,dstAccessMask;};
+constexpr int VK_IMAGE_ASPECT_COLOR_BIT=1,VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER=0,VK_IMAGE_LAYOUT_UNDEFINED=0,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL=1,VK_QUEUE_FAMILY_IGNORED=-1,VK_ACCESS_SHADER_READ_BIT=1,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL=2,VK_ACCESS_TRANSFER_WRITE_BIT=2;
+int VulkanRendererContext::barrierCount(){auto&draws=frameDraws;std::vector<VkImageMemoryBarrier>ahbTransitions,preUpload,postUpload;/* BARRIERS */return ahbTransitions.size();}
+static void check(bool b,const char*m){if(!b){fprintf(stderr,"FAIL %s\n",m);exit(2);}}
+static bool ownersConsistent(VulkanRendererContext&c){
+ std::unordered_map<AHardwareBuffer*,uint32_t> n;
+ for(auto&kv:c.windowAhbs)for(auto*b:kv.second)++n[b];
+ if(n.size()!=c.ahbOwnerCounts.size())return false;
+ for(auto&kv:n){auto it=c.ahbOwnerCounts.find(kv.first);if(it==c.ahbOwnerCounts.end()||it->second!=kv.second)return false;}
+ return true;}
+static void update(VulkanRendererContext&c,int id,AHardwareBuffer*b){c.updateWindowContentAHB(id,b,32,32,0,0);}
+int main(int argc,char**argv){int which=atoi(argv[1]);VulkanRendererContext c;AHardwareBuffer a{100},b{200};
+ if(which==0){update(c,1,&a);update(c,2,&a);c.removeWindow(1);check(a.refs==1&&c.ahbImportCache.count(&a)&&c.texMap[2].ds==100&&c.deleteQueue.empty(),"shared AHB stays alive for second window");c.removeWindow(2);check(a.refs==0&&c.ahbImportCache.empty()&&c.deleteQueue.size()==1,"last owner releases once");}
+ if(which==1){for(int i=0;i<1000;i++)update(c,1,&a);check(a.refs==1,"single native acquire across repeated frames");c.removeWindow(1);check(a.refs==0&&c.deleteQueue.size()==1,"repeated frame does not add owners");}
+ if(which==2){update(c,1,&a);update(c,1,&b);update(c,2,&a);c.removeWindow(1);check(a.refs==1&&b.refs==0&&c.ahbImportCache.size()==1&&c.deleteQueue.size()==1,"retire only unshared buffer");c.removeWindow(2);check(a.refs==0&&c.deleteQueue.size()==2,"shared buffer retires last");}
+ if(which==3){c.removeWindow(99);check(c.deleteQueue.empty()&&c.ahbImportCache.empty(),"missing window is a no-op");}
+ if(which==4){c.failImport=true;update(c,1,&a);check(a.refs==0&&c.windowAhbs.empty()&&c.texMap.empty(),"failed import creates no owner");}
+ if(which==5){for(int id=1;id<=50;id++)update(c,id,&a);for(int id=1;id<50;id++)c.removeWindow(id);check(a.refs==1&&c.deleteQueue.empty(),"49 removals cannot invalidate final window");c.removeWindow(50);check(a.refs==0&&c.deleteQueue.size()==1,"50 owners retire one cached import");}
+ if(which==6){update(c,1,&a);update(c,1,&b);c.renderList={{1,0,0}};c.snapshot();c.commitAhbTransitions();update(c,1,&a);c.snapshot();check(c.frameDraws[0].needsTransition,"a dropped first frame keeps the image transition pending");}
+ if(which==7){update(c,1,&a);c.renderList={{1,0,0}};c.snapshot();c.snapshot();check(c.frameDraws[0].needsTransition,"aborted frame must not consume the pending image transition");}
+ if(which==8){update(c,1,&a);c.renderList={{1,0,0}};c.snapshot();check(c.frameDraws[0].needsTransition,"first submitted frame needs transition");c.commitAhbTransitions();c.snapshot();check(!c.frameDraws[0].needsTransition,"successful submit commits transition once");}
+ if(which==9){update(c,1,&a);update(c,2,&a);c.renderList={{1,0,0},{2,32,0}};c.snapshot();c.commitAhbTransitions();c.snapshot();check(!c.frameDraws[0].needsTransition&&!c.frameDraws[1].needsTransition,"all owners observe completed layout transition");}
+ if(which==10){c.frameDraws={{100,1,0,0,0,32,32,true,true,&a},{100,1,0,32,0,32,32,true,true,&a}};check(c.barrierCount()==1,"shared image has exactly one first-use barrier");}
+ if(which==11){auto&cpu=c.texMap[1];cpu.img=301;cpu.mem=302;cpu.view=303;cpu.ds=304;cpu.stg=305;cpu.dirty=true;update(c,1,&a);check(c.deleteQueue.size()==1&&c.deleteQueue[0].img==301&&c.deleteQueue[0].stg==305,"CPU resources retire before AHB takeover");check(c.texMap[1].stg==0&&!c.texMap[1].dirty,"AHB cannot inherit stale CPU staging state");c.removeWindow(1);check(c.deleteQueue.size()==2&&a.refs==0,"CPU and AHB retire exactly once");}
+ if(which==12){auto&cpu=c.texMap[1];cpu.img=301;cpu.stg=305;c.failImport=true;update(c,1,&a);check(c.texMap[1].img==301&&c.texMap[1].stg==305&&c.deleteQueue.empty(),"failed AHB import preserves active CPU texture");}
+ if(which==13){update(c,1,&a);for(int i=0;i<1000;i++){update(c,1,&b);update(c,1,&a);}check(c.deleteQueue.empty(),"borrowed AHB views are never freed during buffer switching");c.removeWindow(1);check(c.deleteQueue.size()==2&&a.refs==0&&b.refs==0,"switching retires each cached import once");}
+ if(which==14){std::vector<AHardwareBuffer> many(40);for(int i=0;i<40;i++)many[i].id=300+i;for(int i=0;i<40;i++)update(c,1,&many[i]);
+  check(c.windowAhbs[1].size()==16&&c.ahbImportCache.size()==16,"one window keeps at most 16 imports");
+  check(c.deleteQueue.size()==24,"older imports are retired through the deferred queue");
+  check(c.texMap[1].ahb==&many[39]&&many[39].refs==1,"the buffer in use is never retired");
+  int held=0;for(auto&m:many)held+=m.refs;check(held==16,"retired imports release their native reference");
+  c.removeWindow(1);check(c.deleteQueue.size()==40&&c.ahbImportCache.empty(),"removal retires the remaining imports exactly once");}
+ if(which==15){std::vector<AHardwareBuffer> many(20);for(int i=0;i<20;i++)many[i].id=500+i;update(c,2,&many[0]);for(int i=0;i<20;i++)update(c,1,&many[i]);
+  check(many[0].refs==1&&c.ahbImportCache.count(&many[0])==1,"a buffer another window still owns survives the limit");
+  c.removeWindow(2);check(many[0].refs==0,"its last owner retires it");}
+ if(which==16){std::vector<AHardwareBuffer> bufs(144);for(int i=0;i<144;i++)bufs[i].id=1000+i;
+  for(int round=0;round<12;round++)for(int w=1;w<=12;w++)update(c,w,&bufs[(w-1)*12+round]);
+  check(c.ahbImportCache.size()<=96,"all windows together stay inside the descriptor pool budget");
+  for(int w=1;w<=12;w++){AHardwareBuffer*cur=&bufs[(w-1)*12+11];check(c.texMap[w].ahb==cur&&cur->refs==1&&c.ahbImportCache.count(cur)==1,"every window keeps the buffer it shows");}
+  check(c.ahbEvictions==48&&c.deleteQueue.size()==48,"each import over the budget is retired once, through the deferred queue");
+  int held=0;for(auto&b:bufs)held+=b.refs;check(held==96,"retired imports release their native reference");
+  check(c.ahbPeakPerWindow>=8&&c.ahbPeakPerWindow<=9&&c.ahbPeakTotal>=96,"the peaks are recorded for the log (the shared budget bites at 8-9 per window)");
+  for(int w=1;w<=12;w++)c.removeWindow(w);check(c.ahbImportCache.empty()&&c.deleteQueue.size()==144,"removal retires what is left exactly once");}
+ if(which==17){
+  // Out of memory at every single allocation point of one new import (what the JNI entry sees as a thrown bad_alloc):
+  // every image/memory/view/descriptor the import made is either owned by the cache or freed, and the native AHB reference matches.
+  for(int n=1;n<=16;n++){
+   VulkanRendererContext d;AHardwareBuffer x{900+n};bool threw=false;
+   g_failCountdown=n;
+   try{d.updateWindowContentAHB(1,&x,32,32,0,0);}catch(...){threw=true;}
+   g_failCountdown=0;
+   int inCache=(int)d.ahbImportCache.size();
+   check(d.importsCreated==d.freedByRollback+inCache+(int)d.deleteQueue.size(),"no import is left without an owner or a rollback");
+   check(x.refs==inCache,"the extra native AHB reference exists exactly while the cache owns the import");
+   check(ownersConsistent(d),"the window lists and the owner counter always describe the same owners");
+   if(!threw&&inCache==1)check(d.ahbOwnerCounts.count(&x)==1&&d.texMap.count(1)==1,"a call that kept the import completed fully");
+   if(!threw&&inCache==0)check(d.freedByRollback==d.importsCreated,"a call that gave up (out of memory) took everything back");
+   if(d.ahbOwnerCounts.count(&x))check(inCache==1,"an owner never outlives its cache entry");
+   d.removeWindow(1);
+   check(d.ahbImportCache.empty()||threw,"a completed window can be removed again");
+  }}
+ if(which==18){
+  // The sequence from the 6th review: a failed first update, the same buffer again, then shared with a second window.
+  for(int n=1;n<=16;n++){
+   VulkanRendererContext d;AHardwareBuffer x{1200+n};
+   g_failCountdown=n;try{d.updateWindowContentAHB(1,&x,32,32,0,0);}catch(...){}g_failCountdown=0;
+   check(ownersConsistent(d),"a failed update leaves the lists and the counter in agreement");
+   d.updateWindowContentAHB(1,&x,32,32,0,0);d.updateWindowContentAHB(2,&x,32,32,0,0);
+   check(ownersConsistent(d)&&d.ahbOwnerCounts[&x]==2,"the retry and the second window count two owners");
+   d.removeWindow(1);
+   check(d.ahbImportCache.count(&x)==1&&d.texMap.count(2)==1&&d.texMap[2].img==x.id&&d.deleteQueue.empty(),"removing the first owner leaves the second window's buffer alive");
+   d.removeWindow(2);
+   check(d.ahbImportCache.empty()&&x.refs==0&&ownersConsistent(d),"the last owner releases it");
+  }}
+
+ if(which==19){
+  // Present's xOff/yOff: the picture (32x32 in this fixture) sits at an offset inside its window and only the part inside the window is shown.
+  auto draws=[&](VulkanRendererContext&d,int ox,int oy,int ww,int wh){d.updateWindowContentAHB(1,&a,32,32,ox,oy,ww,wh);d.renderList={{1,10,20}};d.snapshot();};
+  {VulkanRendererContext d;draws(d,0,0,32,32);check(d.frameDraws.size()==1&&d.frameDraws[0].x==10&&d.frameDraws[0].y==20&&d.frameDraws[0].w==32&&d.frameDraws[0].h==32&&d.frameDraws[0].u0==0&&d.frameDraws[0].v0==0&&d.frameDraws[0].u1==1&&d.frameDraws[0].v1==1,"zero offset and a picture of the window's size is drawn exactly as before");}
+  {VulkanRendererContext d;draws(d,0,0,0,0);check(d.frameDraws.size()==1&&d.frameDraws[0].w==32&&d.frameDraws[0].u1==1,"an unknown window size keeps the old behaviour");}
+  {VulkanRendererContext d;draws(d,10,5,64,64);const auto&e=d.frameDraws[0];check(d.frameDraws.size()==1&&e.x==20&&e.y==25&&e.w==32&&e.h==32&&e.u0==0&&e.v0==0&&e.u1==1&&e.v1==1,"a positive offset moves the whole picture inside a bigger window");}
+  {VulkanRendererContext d;draws(d,-8,-4,16,16);const auto&e=d.frameDraws[0];check(d.frameDraws.size()==1&&e.x==10&&e.y==20&&e.w==16&&e.h==16&&e.u0==0.25f&&e.v0==0.125f&&e.u1==0.75f&&e.v1==0.625f,"a negative offset into a small window shows the matching part of the picture");}
+  {VulkanRendererContext d;draws(d,20,0,16,16);check(d.frameDraws.empty(),"a picture wholly outside its window draws nothing");}
+  {VulkanRendererContext d;draws(d,0,0,16,16);const auto&e=d.frameDraws[0];check(e.w==16&&e.h==16&&e.u0==0&&e.u1==0.5f&&e.v1==0.5f,"a picture larger than its window is cut to it");}
+  // The same buffer in two windows with different placement: each window has its own geometry.
+  {VulkanRendererContext d;d.updateWindowContentAHB(1,&a,32,32,0,0,32,32);d.updateWindowContentAHB(2,&a,32,32,4,0,64,64);d.renderList={{1,0,0},{2,100,0}};d.snapshot();
+   check(d.frameDraws.size()==2&&d.frameDraws[0].x==0&&d.frameDraws[0].w==32&&d.frameDraws[1].x==104&&d.frameDraws[1].w==32,"two windows place the same buffer independently");}
+ }
+
+ if(which==20){
+  // Present buffer hand-back: the tokens of a picture ride the retirement queue and come out only when it is drained.
+  VulkanRendererContext d;AHardwareBuffer x{1300},y{1301};
+  auto carriers=[&](){std::vector<int64_t> r;for(auto&t:d.deleteQueue)if(t.idleToken)r.push_back(t.idleToken);return r;};
+  d.updateWindowContentAHB(1,&x,32,32,0,0,32,32,11);
+  check(d.windowIdleTokens[1]==std::vector<int64_t>{11}&&carriers().empty(),"the first Present of a window is just remembered");
+  d.updateWindowContentAHB(1,&x,32,32,0,0,32,32,12);
+  check((d.windowIdleTokens[1]==std::vector<int64_t>{11,12})&&carriers().empty(),"the same buffer presented again keeps both tokens");
+  d.updateWindowContentAHB(1,&y,32,32,0,0,32,32,13);
+  check(d.windowIdleTokens[1]==std::vector<int64_t>{13}&&carriers()==std::vector<int64_t>({11,12}),"a different buffer retires the older tokens behind the frames that may read them");
+  check(d.idleReleased.empty(),"nothing is handed back before the retirement queue is drained");
+  d.freeRetiredTextures(d.deleteQueue);
+  check(d.idleReleased==std::vector<int64_t>({11,12}),"draining the queue hands back exactly the superseded Presents");
+  d.idleReleased.clear();
+  d.removeWindow(1);
+  check(d.windowIdleTokens.count(1)==0&&carriers()==std::vector<int64_t>({13}),"removing the window retires its last token too");
+  // a window switching to a CPU texture is handled by updateWindowContent (not in this fixture); tokens of other windows are untouched
+  VulkanRendererContext e;AHardwareBuffer z{1302};
+  e.updateWindowContentAHB(1,&z,32,32,0,0,32,32,21);e.updateWindowContentAHB(2,&z,32,32,0,0,32,32,22);
+  e.updateWindowContentAHB(1,&y,32,32,0,0,32,32,23);
+  check(e.windowIdleTokens[2]==std::vector<int64_t>{22}&&e.deleteQueue.size()==1&&e.deleteQueue[0].idleToken==21,"each window keeps its own tokens");
+  // no token (feature off): nothing is created at all
+  VulkanRendererContext f;f.updateWindowContentAHB(1,&z,32,32,0,0,32,32,0);f.updateWindowContentAHB(1,&y,32,32,0,0,32,32,0);
+  check(f.windowIdleTokens.empty()&&f.deleteQueue.empty(),"with the feature off no tokens exist");
+ }
+ if(which==21){
+  // The same buffer presented again and again without ever being handed back: the list of tokens stays bounded (oldest first released).
+  VulkanRendererContext d;AHardwareBuffer x{1400},y{1401};
+  for(int i=1;i<=70;i++)d.updateWindowContentAHB(1,&x,32,32,0,0,32,32,i);
+  check(d.windowIdleTokens[1].size()==64,"the token list of one buffer is bounded");
+  check(d.windowIdleTokens[1].front()==7&&d.windowIdleTokens[1].back()==70,"the newest tokens are kept");
+  check(d.idleReleased==std::vector<int64_t>({1,2,3,4,5,6}),"the oldest Presents are released (fail-open), in order");
+  d.idleReleased.clear();
+  d.updateWindowContentAHB(1,&y,32,32,0,0,32,32,71);
+  size_t carriers=0;for(auto&t:d.deleteQueue)if(t.idleToken)++carriers;
+  check(carriers==64&&d.windowIdleTokens[1]==std::vector<int64_t>{71},"a different buffer retires the remaining tokens behind the frames");
+ }
+ puts("PASS AHB ownership");}

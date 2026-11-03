@@ -1,0 +1,57 @@
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <mutex>
+#include <vector>
+constexpr int VK_NULL_HANDLE=0;
+struct VulkanRendererContext {
+ struct WinTex {int ds=0,view=0,img=0,mem=0,stg=0,stgMem=0;bool isAHB=false;struct CpuUpload{int buffer=0,memory=0;}uploads[2]{};int64_t idleToken=0;};
+ struct Dispatch {
+  std::vector<int> freedImages;
+  void FreeDescriptorSets(int,int,int,int*){}
+  void DestroyImageView(int,int,void*){}
+  void DestroyImage(int,int img,void*){freedImages.push_back(img);}
+  void FreeMemory(int,int,void*){}
+  void DestroyBuffer(int,int,void*){}
+ } vk_;
+ int device=0,winTexPool=0,currentFrame=0,waits=0;
+ std::mutex renderMutex;
+ std::vector<int> inFlightFences{1,2};
+ std::vector<WinTex> deleteQueue,pendingRetirements,submittedRetirements[2]; std::vector<int64_t> idleReleased;
+ bool waitForFrameFence(int){++waits;return true;}
+ void freeRetiredTextures(std::vector<WinTex>&);
+ void commitTextureRetirements();
+ void drainFinishedOtherSlots(){}void deliverReleasedIdle(){}
+ void capture(){/* CAPTURE */}
+ void completedSlot(){/* COMPLETED */}
+};
+/* PRODUCTION */
+static void check(bool v,const char*m){if(!v){fprintf(stderr,"FAIL %s\n",m);exit(2);}}
+static VulkanRendererContext::WinTex texture(int id){VulkanRendererContext::WinTex t;t.img=id;t.ds=id;t.mem=id;t.stg=id;return t;}
+int main(){VulkanRendererContext c;
+ c.deleteQueue.push_back(texture(11));c.capture();
+ printf("retirement capture: %d extra fence waits, %zu immediately freed images\n",c.waits,c.vk_.freedImages.size());
+ check(c.waits==0,"retirement must not wait on another busy frame");
+ check(c.vk_.freedImages.empty()&&c.pendingRetirements.size()==1,"retired image stays alive before submit");
+ // An aborted recording never calls commitTextureRetirements.
+ c.completedSlot();c.capture();check(c.vk_.freedImages.empty(),"aborted frame preserves retirement");
+ c.commitTextureRetirements();check(c.submittedRetirements[0].size()==1&&c.pendingRetirements.empty(),"successful submit attaches retirements to its fence slot");
+ c.currentFrame=1;c.completedSlot();check(c.vk_.freedImages.empty(),"different completed slot cannot free busy submitted batch");
+ c.capture();c.deleteQueue.push_back(texture(12));c.commitTextureRetirements();
+ check(c.deleteQueue.size()==1,"retirement after snapshot waits for next submission");
+ c.currentFrame=0;c.completedSlot();check(c.vk_.freedImages==std::vector<int>{11},"completed covering submission frees its batch once");
+ c.capture();c.commitTextureRetirements();c.currentFrame=1;c.completedSlot();check(c.vk_.freedImages.size()==1,"late retirement survives earlier slot");
+ c.currentFrame=0;c.completedSlot();check(c.vk_.freedImages==std::vector<int>({11,12}),"late retirement freed after its own covering fence");
+ for(int i=0;i<200;i++){
+  c.currentFrame=i%2;c.completedSlot();c.deleteQueue.push_back(texture(100+i));c.capture();c.commitTextureRetirements();
+ }
+ c.currentFrame=0;c.completedSlot();c.currentFrame=1;c.completedSlot();
+ check(c.vk_.freedImages.size()==202&&c.waits==0,"200 frame rotations retire exactly once without queue-wide waits");
+ c.deleteQueue.push_back(texture(400));c.capture();c.deleteQueue.push_back(texture(401));
+ c.freeRetiredTextures(c.deleteQueue);c.freeRetiredTextures(c.pendingRetirements);
+ for(auto&batch:c.submittedRetirements)c.freeRetiredTextures(batch);
+ check(c.vk_.freedImages.size()==204,"shutdown after device idle frees pending and unsent batches");
+ puts("PASS 8 production renderer retirement cases; zero additional fence waits");
+}

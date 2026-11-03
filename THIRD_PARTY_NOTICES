@@ -1,0 +1,137 @@
+# Third-Party Notices
+
+This file contains notices for third-party assets and libraries used in this project.
+Forever Launcher is a modified version of jaredgei/wow-forever-android
+(https://github.com/jaredgei/wow-forever-android), which is a fork of GameNative
+(https://github.com/utkarshdalal/GameNative). It does not ship GameNative's closed
+libredirect.so: its own open exec shim, libwowexec.so, takes that place (see below).
+
+---
+
+## Scope and Completeness
+
+This list is **not exhaustive**. GameNative builds on the broader open-source
+Wine / Proton / DXVK / VKD3D / Mesa / PulseAudio ecosystem, and
+additional smaller components may be present in bundled archives under
+`app/src/main/assets/` and prebuilt native libraries under
+`app/src/main/jniLibs/`. Where a component is distributed under a copyleft
+license (LGPL, GPL, MPL), the terms of that license apply regardless of whether
+the component is named in this file. The sections below highlight the items
+that most users will want to know about, together with a blanket offer for the
+corresponding source of any copyleft component we distribute in binary form.
+
+---
+
+## Availability of Source for Copyleft Components
+
+For any component distributed in binary form with this application that is
+covered by a copyleft license (LGPL-2.1, LGPL-3.0, GPL-2.0, GPL-3.0, or
+MPL-2.0), the corresponding source code is available from the upstream project
+at the revision used. Where practical, the upstream name and revision are
+recorded alongside the binary — for example in `VERSION` / `COMMIT` metadata
+inside the bundled archive, in the filename of the archive itself, or in
+`app/src/main/cpp/` for components built from source in this repository.
+
+If you cannot obtain the source from upstream, open an issue at
+https://github.com/DeadmanDog/forever-launcher-on-android/issues and we will supply it, in
+accordance with LGPL-2.1 §6, LGPL-3.0 §4, GPL-2.0 §3, and GPL-3.0 §6. This
+offer is valid for at least three years from the date on which you received
+the binary.
+
+---
+
+## libwowexec.so (own, GPL-3.0)
+
+**Component:** `libwowexec.so`
+**Source:** `app/src/main/cpp/wowexec/wow_exec.c` in this repository; host tests in `tools/wowexec-tests/`.
+**License:** GPL-3.0, like the application.
+
+A small `LD_PRELOAD` shim loaded into the Wine / Proton processes. Android does not let an
+app run programs from its own data folder or make mapped file pages executable (W^X), so
+the shim starts such programs through `/system/bin/linker64`, answers `/proc/self/exe` with
+the real program, and copies file-backed code pages to anonymous memory when Android
+refuses to make them executable. It was written for this project without using
+GameNative's closed `libredirect.so`; its approach follows the open GPL-3.0 shims of
+[Bliss-Bass/GameNative-x64](https://github.com/Bliss-Bass/GameNative-x64)
+(`exec_redirect.c`) and Droidtop (`exec-redirect.c`).
+
+GameNative's `libredirect.so` (proprietary, all rights reserved by the GameNative
+maintainers) is not part of this application.
+
+---
+
+## Runtime components built or modified for WoW Forever
+
+The corresponding source of each component we build or modify is kept as a source
+package and provided on request under the offer above; `SOURCES.md` lists the upstream
+base and our changes.
+
+| Component | License | Source |
+| :--- | :--- | :--- |
+| Proton 11 ARM64EC r31 (Wine) with ntsync-android | LGPL-2.1-or-later; ntsync-android LGPL-3.0 | `proton-11.0-arm64ec-r31-source.tar.xz` |
+| VKD3D-Proton r10 (Windows ARM64) | LGPL-2.1-or-later | `vkd3d-proton-arm64-r10-source.tar.xz` |
+| TurnRIP 1.1.20 (Mesa Turnip, Adreno 8xx) | MIT | `turnrip-a840-1.1.20-source.tar.xz` |
+| DXVK Vegas r63 (DXVK 3.1.1) | zlib/libpng | Based on VEGAS by isygold (Israel Agboola), https://github.com/isygold/Vegas-Private, an Adreno-tuned DXVK fork (via GPLAsync) of doitsujin/dxvk, itself released under zlib/libpng. Our builds are altered versions. zlib does not require the source; it is not published. |
+
+The modified `ntsync-android` library inside the Proton package (`lib/libntsync_android.so`, LGPL-3.0-only, original
+by Joshua Tam, https://github.com/joshuatam/ntsync-android) is published in full in this repository:
+`third_party/ntsync-android/`, with `MODIFIED-BY-WOW-FOREVER.md` describing our changes.
+
+The Proton package contains Windows modules of the community Proton 11 ARM64EC
+build (The412Banner/proton-wine e5fa703ed7f7329e20d7ede481ab185cf8b1a8b2 with the
+RP6 bundle's patches) unmodified; their source is that upstream revision.
+
+---
+
+## Other bundled components
+
+- **Vulkan wrapper** (`graphics_driver/wrapper.txz`, `libvulkan_wrapper.so`):
+  leegao/mesa-wrapper-CI e03c3486fcda, MIT, unmodified apart from removed debug
+  information.
+- **Bionic Windows environment** (`imagefs_bionic.txz`):
+  the GameNative/Winlator bionic image, built with the Termux toolchain, slimmed by us (it carries no
+  command-line programs). It holds only the Android-built libraries Wine, the Vulkan wrapper and PulseAudio
+  load: X11/xcb client libraries, SDL2, freetype, fontconfig, expat, libpng, zlib, zstd, brotli, bzip2, libdrm,
+  the Vulkan loader, adrenotools hooks, ALSA, libsndfile, libltdl, GnuTLS with nettle, gmp, libidn2,
+  libunistring and libiconv. Each keeps its own license (MIT/X11, BSD, zlib, LGPL-2.1+; gmp, nettle,
+  libidn2 and libunistring are used under their GPL-2.0-or-later / LGPL-3.0-or-later dual license). Source:
+  the upstream release of each library and the Termux package recipes (https://github.com/termux/termux-packages);
+  the exact files are available on request under the offer above.
+- **Container pattern** (`container_pattern_common.txz`): only an empty Wine folder skeleton. The
+  GameNative version carried Microsoft's core web fonts (Arial, Times New Roman, Verdana and others) and Winlator's
+  Windows helpers `wfm.exe` and `winhandler.exe`; they are no longer shipped, and the launcher deletes copies an
+  older GameNative-based install left in the game's Wine prefix.
+- **PulseAudio** (`pulseaudio-gamenative-20260919.tzst`, `jniLibs/libpulse*.so`,
+  `libpulsecommon-13.0.so`, `libpulsecore-13.0.so`), **libsndfile** and **libltdl**:
+  LGPL-2.1-or-later, unmodified GameNative builds. Source: https://www.freedesktop.org/wiki/Software/PulseAudio/,
+  https://github.com/libsndfile/libsndfile, https://www.gnu.org/software/libtool/.
+- **libadrenotools** (`app/src/main/cpp/extras/adrenotools`): BSD-2-Clause, see its LICENSE.
+- **AMD FidelityFX Super Resolution 1 (EASU)**: ported into
+  `app/src/main/cpp/winlator/window.frag` from GPUOpen `ffx_fsr1.h`, MIT,
+  Copyright (c) 2021 Advanced Micro Devices, Inc.
+- **WoWForeverywhere** by YoruDev-Ryland (https://github.com/YoruDev-Ryland/WoWForeverywhere):
+  the addon backend in `app/src/main/java/app/gamenative/wow/addons`, GPL-3.0; see the NOTICE.md there.
+- **wow-driver-probe.exe** (the DX12 driver probe): built from `tools/diagnostics/wow-driver-probe.c`
+  in this repository, GPL-3.0.
+
+- **Bricolage Grotesque** (`app/src/main/res/font`), the app's typeface: SIL Open Font License 1.1,
+  Copyright 2022 The Bricolage Grotesque Project Authors; the license text ships in the APK as
+  `assets/licenses/OFL-Bricolage-Grotesque.txt`.
+- **App icon, logo and splash**: our own artwork made for this project, licensed with the app (GPL-3.0); the
+  master is `app/src/main/res/drawable-nodpi/forever_emblem_042.png` and `tools/icon/package_042.py` packages it.
+  No Blizzard artwork is used. The design tool `tools/icon/make_forever_icon.py` uses Cinzel (SIL Open Font
+  License 1.1, Copyright (c) 2012 Natanael Gama; `tools/icon/Cinzel-OFL.txt`); the font stays with that tool
+  and is not part of the APK.
+- **Empty storage layout** (`app/src/main/assets/casc/shmem.template`, 20 KB): the bookkeeping file layout of an empty WoW local
+  storage (a path, index version numbers and an empty free-space table), used to start a new storage for the game data download. It
+  holds no game content; the game files themselves are downloaded from Blizzard's CDN for the user's own installation.
+- **UI translations** (`app/src/main/assets/i18n`, `app/src/main/res/values-*`): made for this project,
+  GPL-3.0 like the app; sources in `tools/i18n`.
+
+## Blizzard Entertainment
+
+World of Warcraft is a trademark of Blizzard Entertainment. Forever Launcher is an
+unofficial launcher and is not affiliated with or endorsed by Blizzard. The app icon, logo and splash are
+our own artwork. No Blizzard game files are part of this repository or its
+releases; the app downloads the Windows ARM64 client from Blizzard's CDN for the
+user's own installation.
