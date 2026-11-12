@@ -89,6 +89,7 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
      */
     static final long HOLD_STALL_LIMIT_MS = 2000;
     private final java.util.concurrent.atomic.AtomicInteger holdStalls = new java.util.concurrent.atomic.AtomicInteger();
+    private final ScanoutIdleHand scanoutIdle = new ScanoutIdleHand();
     private final com.winlator.xserver.extensions.PresentIdleHolds idleHolds =
         new com.winlator.xserver.extensions.PresentIdleHolds(HOLD_STALL_LIMIT_MS, this::onHoldStalled);
 
@@ -685,6 +686,9 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                     java.nio.ByteBuffer buf = cd.getBuffer();
                     short stride = (short)(buf.capacity() / (cd.height * 4));
                     nativeScanoutSetCursorImage(nativeHandle, buf, cd.width, cd.height, stride);
+                    // A new image brings its own hotspot and size: place it now, not at the next pointer move (a window's cursor
+                    // changing under a still pointer kept the old hotspot and geometry until then).
+                    nativeScanoutSetCursorPos(nativeHandle, xServer.pointer.getX(), xServer.pointer.getY(), hotX, hotY);
                 }
             }
         }
@@ -702,7 +706,8 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     public boolean onUpdateWindowContentDirect(Window window, Drawable pixmap, short xOff, short yOff, Runnable idleRelease) {
         if (disposed) return false;
         // Only the tracked application window (or a window inside it: the Vulkan surface is a child) counts for the HUD; see HudWindowFilter.
-        if (hudRef != null && !nativeMode) {
+        // Scanout frames count as well: the HUD stays on screen over scanout and must not read 0 FPS there.
+        if (hudRef != null) {
             final int tracked = hudWindowId;
             boolean inside = false;
             if (tracked != -1) {
@@ -729,16 +734,32 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                         if (nativeMode && targetDrawable == scanoutCandidate && xOff == 0 && yOff == 0
                             && pixmap.width == xServer.screenInfo.width && pixmap.height == xServer.screenInfo.height
                             && nativeIsScanoutActive(nativeHandle)) {
+                            boolean wasDelivered = nativeIsGameFrameDelivered(nativeHandle);
                             boolean cpuMapped = g.getVirtualData() != null;
                             int fenceFd = g.unlock();
+                            // 1.2.1: this buffer stays on screen until the next one replaces it; only then may the game draw into it
+                            // again (it used to be told at once, see ScanoutIdleHand).
+                            long idleToken = (idleRelease != null && presentIdleTracking && initComplete) ? idleHolds.hold(idleRelease) : 0;
                             nativeScanoutSetBuffer(nativeHandle, ahbPtr,
                                 rx, ry, pixmap.width, pixmap.height, fenceFd);
                             if (cpuMapped) g.lock();
+                            long replaced = scanoutIdle.replace(idleToken);
+                            if (replaced != 0) idleHolds.release(replaced);
                             ScanoutStats.scanoutFrame();
-                            queueSceneUpdate();
+                            // The first direct buffer changes what the compositor draws.
+                            if (!wasDelivered && nativeIsGameFrameDelivered(nativeHandle)) queueSceneUpdate();
+                            if (idleToken != 0) return true;
                         } else {
+                            // The game window went back to the compositor (or scanout is off): the last direct buffer is no longer
+                            // shown and is free. Other windows presenting meanwhile do not touch it.
+                            if (!nativeMode || targetDrawable == scanoutCandidate) {
+                                long scanoutHeld = scanoutIdle.take();
+                                if (scanoutHeld != 0) idleHolds.release(scanoutHeld);
+                            }
                             // The hold is registered first: the render thread may hand the buffer back at any moment after the call.
-                            long idleToken = (idleRelease != null && presentIdleTracking) ? idleHolds.hold(idleRelease) : 0;
+                            // Only while a surface is attached: without one (the app in the background) no frame is drawn, so nothing
+                            // would ever hand the buffer back and each one waited out the 2 s stall limit - the game ran at 1-2 FPS.
+                            long idleToken = (idleRelease != null && presentIdleTracking && initComplete) ? idleHolds.hold(idleRelease) : 0;
                             nativeUpdateWindowContentAHB(nativeHandle, targetId, ahbPtr,
                                 pixmap.width, pixmap.height, xOff, yOff, targetDrawable.width, targetDrawable.height, idleToken);
                             if (pixmap.width == xServer.screenInfo.width && pixmap.height == xServer.screenInfo.height)
@@ -973,6 +994,8 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     // window.frag-based effects and scaling take effect again.
     private void tearDownScanout() {
         xRenderingPausedForScanout = false;
+        long scanoutHeld = scanoutIdle.take();
+        if (scanoutHeld != 0) idleHolds.release(scanoutHeld);
         synchronized (lock) {
             synchronized (nativeLifetimeLock) {
                 if (nativeHandle != 0) nativeDestroyScanout(nativeHandle);
@@ -998,6 +1021,14 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
 
     /** Called (on the UI thread) after the output mode changed, so the touch view can recompute its pointer mapping. */
     public void setOutputMappingListener(Runnable listener) { outputMappingListener = listener; }
+
+    /** Gamescope owns the picture; this changes only the Android touch transform. */
+    public void setGamescopeInputScaling(int mode) {
+        if (outputScalingMode == mode) return;
+        outputScalingMode = mode;
+        Runnable listener = outputMappingListener;
+        if (listener != null) listener.run();
+    }
 
     public void setFilterMode(int mode) {
         // The same value again (every colour/gamma slider step calls this) changes nothing: no JNI call, no native wake-up and

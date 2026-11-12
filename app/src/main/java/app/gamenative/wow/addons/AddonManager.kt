@@ -36,6 +36,10 @@ data class AddonListing(
     val pages: Map<String, String> = emptyMap(),
 )
 
+/** The addon's only release is on the CurseForge website: [pageUrl] is its download page for [file]. */
+class NeedsWebsiteDownload(val remote: RemoteAddon, val file: RemoteFile, val pageUrl: String) :
+    IOException("${remote.name} can only be downloaded on the CurseForge website")
+
 /** A search or popular list, with how many enabled sources were asked and how many of them failed (offline, error). */
 data class BrowseOutcome(val listings: List<AddonListing>, val sourcesTried: Int, val sourcesFailed: Int) {
     /** Every enabled source failed: an empty list then means "not reachable", not "nothing found". */
@@ -54,6 +58,8 @@ class AddonManager(
     private val db: AddonDb,
     private val providers: List<AddonProvider>,
     private val http: OkHttpClient,
+    /** The providers Browse and search ask (ids); null = all. The others still update and resolve what is installed from them. */
+    private val browseWith: Set<String>? = null,
 ) {
     private val lock = Mutex()
 
@@ -84,7 +90,7 @@ class AddonManager(
 
     /** Every installed addon (database plus anything found on disk), with update state. */
     suspend fun installed(): List<AddonListing> {
-        val records = lock.withLock { syncDb() }
+        val records = lock.withLock { relinkLocked(syncDb()) }
         val remotes = fetchRemotes(records)
         return records.map { record ->
             val remote = record.source?.let { src -> remotes[src.provider to src.projectId] }
@@ -108,17 +114,27 @@ class AddonManager(
     /** Reinstalls [addon] from its source's newest best file. */
     suspend fun update(addon: InstalledAddon): InstalledAddon = lock.withLock { updateLocked(addon) }
 
-    /** Updates every addon with an update available; failures are skipped. */
-    suspend fun updateAll(): List<InstalledAddon> = checkUpdates().mapNotNull { listing ->
-        val installed = listing.installed ?: return@mapNotNull null
-        try {
-            update(installed)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
+    /** Updates every addon with an update available; failures are skipped and listed in [lastUpdateFailures]. */
+    suspend fun updateAll(): List<InstalledAddon> {
+        val failures = mutableListOf<Pair<InstalledAddon, Exception>>()
+        val done = checkUpdates().mapNotNull { listing ->
+            val installed = listing.installed ?: return@mapNotNull null
+            try {
+                update(installed)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                failures += installed to e
+                null
+            }
         }
+        lastUpdateFailures = failures
+        return done
     }
+
+    /** What the last [updateAll] could not update (1.3.6: it said "done" even when an addon failed). */
+    @Volatile var lastUpdateFailures: List<Pair<InstalledAddon, Exception>> = emptyList()
+        private set
 
     /** Removes [addon] and every folder of it that no other installed addon lists. */
     suspend fun remove(addon: InstalledAddon): Unit = lock.withLock {
@@ -164,7 +180,7 @@ class AddonManager(
         call: suspend (AddonProvider) -> List<RemoteAddon>,
     ): BrowseOutcome {
         val answers = coroutineScope {
-            providers.filter { it.enabled }.map { p -> async { safely { call(p) } } }.awaitAll()
+            providers.filter { it.enabled && (browseWith == null || it.id in browseWith) }.map { p -> async { safely { call(p) } } }.awaitAll()
         }
         val records = db.load()
         val listings = merge(answers.filterNotNull().flatten(), records)
@@ -221,7 +237,8 @@ class AddonManager(
         val own = group.firstOrNull { source.matches(it) }
         val best = own?.let { bestFile(it) }?.second
         val changed = when {
-            best == null || !best.installable -> false
+            // A file kept off third-party apps still counts when the project names a source repo to update from (alternateFor).
+            best == null || (!best.installable && own?.sourceUrl == null) -> false
             source.fileId != null -> best.fileId != source.fileId
             else -> installed.version == null || !best.version.contains(installed.version)
         }
@@ -272,7 +289,18 @@ class AddonManager(
     private suspend fun installLocked(remote: RemoteAddon, visiting: MutableSet<String>): InstalledAddon {
         visiting += "${remote.provider}:${remote.projectId}"
         val (flavor, file) = bestFile(remote) ?: throw IOException("${remote.name} has no compatible file")
-        if (!file.installable) throw IOException("${remote.name} can't be downloaded by third-party apps; open ${remote.websiteUrl}")
+        if (!file.installable) {
+            // 1.3.5: the author keeps this file off third-party apps on CurseForge (DBM, Details, Auctionator ...). Their own
+            // release elsewhere (the GitHub repo the project lists, or WoWInterface) is used instead; never a CurseForge link
+            // the author did not give out.
+            val other = alternateFor(remote)
+            if (other != null) return installLocked(other, visiting)
+            // 1.3.6: the only release is on CurseForge, for its website only: the page downloads it in the app's own browser
+            // (the player taps Download there) and installFromBrowser installs that file.
+            val page = remote.websiteUrl?.takeIf { remote.provider == ProviderIds.CURSEFORGE && it.startsWith("https://") }
+            if (page != null) throw NeedsWebsiteDownload(remote, file, "${page.trimEnd('/')}/download/${file.fileId}")
+            throw IOException("${remote.name} can't be downloaded by third-party apps; open ${remote.websiteUrl}")
+        }
 
         for (dep in file.dependencies) {
             val key = "${dep.provider}:${dep.projectId}"
@@ -312,12 +340,34 @@ class AddonManager(
         return record
     }
 
-    private suspend fun downloadAndExtract(url: String): List<String> = withContext(Dispatchers.IO) {
+    /**
+     * Installs the file the player downloaded on the CurseForge website (in the app's browser) for [remote], recorded with its
+     * CurseForge file id so the next version shows as an update. [headers]: the browser's User-Agent and cookies.
+     */
+    suspend fun installFromBrowser(remote: RemoteAddon, file: RemoteFile, url: String, headers: Map<String, String>): InstalledAddon =
+        lock.withLock {
+            // https only (a loopback http host is the test server).
+            val loopback = Regex("^http://(localhost|127\\.0\\.0\\.1)(:\\d+)?/").containsMatchIn(url)
+            require(url.startsWith("https://") || loopback) { "not a download link: $url" }
+            val folders = downloadAndExtract(url, headers)
+            commit(InstalledAddon(
+                id = "${remote.provider}:${remote.projectId}",
+                name = remote.name.trim(),
+                folders = folders,
+                version = file.version,
+                flavor = classifyFolders(folders),
+                source = SourceRef(remote.provider, remote.projectId, file.fileId),
+                installedAt = System.currentTimeMillis(),
+            ))
+        }
+
+    private suspend fun downloadAndExtract(url: String, headers: Map<String, String> = emptyMap()): List<String> = withContext(Dispatchers.IO) {
         val parent = addonsDir.absoluteFile.parentFile ?: addonsDir
         parent.mkdirs()
         val tmp = File(parent, ".foreverywhere-download-${System.nanoTime()}.zip")
         try {
-            http.newCall(Request.Builder().url(url).build()).consumeCancellable { response ->
+            val request = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }.build()
+            http.newCall(request).consumeCancellable { response ->
                 if (!response.isSuccessful) throw IOException("download failed: HTTP ${response.code}")
                 tmp.outputStream().use { out -> response.body.byteStream().copyTo(out) }
             }
@@ -333,6 +383,60 @@ class AddonManager(
         FlavorRules.classify(folders.flatMap { FlavorRules.readTocs(File(addonsDir, it)) })
 
     /** Brings the database in line with the disk and persists it. Call with [lock] held. */
+    /**
+     * The same addon from a source whose author publishes it for download: the GitHub repository the project lists as its
+     * source (its own releases), else WoWInterface or the GitHub catalog under the very same name. Null when none has an
+     * installable file.
+     */
+    internal suspend fun alternateFor(remote: RemoteAddon): RemoteAddon? {
+        fun usable(r: RemoteAddon?) = r?.takeIf { c -> c.provider != remote.provider && bestFile(c)?.second?.installable == true }
+        remote.sourceUrl?.let(GitHubProvider::fromUrl)?.let { repo ->
+            val github = providers.firstOrNull { it.id == ProviderIds.GITHUB } ?: GitHubProvider(http)
+            usable(safely { github.get(repo) })?.let { return it }
+        }
+        val wanted = normalizedName(remote.name)
+        for (provider in providers.filter { it.enabled && it.id != remote.provider && it.id != ProviderIds.CURSEFORGE }) {
+            safely { provider.search(remote.name, 0) }.orEmpty()
+                .filter { normalizedName(it.name) == wanted }
+                .firstNotNullOfOrNull(::usable)?.let { return it }
+        }
+        return null
+    }
+
+    private val relinkTried = HashSet<String>()
+
+    /**
+     * 1.3.5: gives addons found on disk without a source (copied in by hand, or scanned before CurseForge was a source) one, so
+     * they are recognised and can be updated: first the project id their TOC carries (`X-Curse-Project-ID`, exact), else a
+     * CurseForge search for the addon's name where exactly one project has that very name. Each name is asked once per page.
+     */
+    private suspend fun relinkLocked(records: List<InstalledAddon>): List<InstalledAddon> {
+        val taken = records.mapNotNull { it.source }.map { it.provider to it.projectId }.toMutableSet()
+        val curse = providers.firstOrNull { it.id == ProviderIds.CURSEFORGE && it.enabled }
+        var changed = false
+        val linked = records.map { record ->
+            if (record.source != null) return@map record
+            val fromToc = record.folders.firstNotNullOfOrNull { folder ->
+                FlavorRules.readTocs(File(addonsDir, folder)).firstNotNullOfOrNull(AddonScanner::sourceOfToc)
+            }
+            val source = fromToc ?: run {
+                if (curse == null || !relinkTried.add(record.id)) return@run null
+                val wanted = normalizedName(record.name)
+                val folder = record.folders.firstOrNull()?.let(::normalizedName)
+                val hits = safely { curse.search(record.name, 0) }.orEmpty()
+                    .filter { normalizedName(it.name).let { n -> n == wanted || n == folder } }
+                hits.singleOrNull()?.let { SourceRef(ProviderIds.CURSEFORGE, it.projectId) }
+            } ?: return@map record
+            if (!taken.add(source.provider to source.projectId)) return@map record
+            changed = true
+            record.copy(id = "${source.provider}:${source.projectId}", source = source)
+        }
+        if (changed) db.save(linked)
+        return linked
+    }
+
+    private fun normalizedName(name: String): String = name.lowercase().filter { it.isLetterOrDigit() }
+
     private fun syncDb(): List<InstalledAddon> {
         val known = db.load()
         val scanned = AddonScanner.scan(addonsDir, known)

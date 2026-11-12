@@ -377,6 +377,8 @@ class PerformanceHudView(
 
     private fun readTuneText(): String? = null
 
+    private var batteryIntent: Intent? = null
+    private var batteryIntentAtMs = 0L
     private fun collectBatterySnapshot(): BatterySnapshot {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
             ?: return BatterySnapshot()
@@ -385,7 +387,11 @@ class PerformanceHudView(
             .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
             .takeIf { it in 0..100 }
 
-        val statusIntent: Intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        // The sticky ACTION_BATTERY_CHANGED intent (status, voltage, temperature) is a full system-server round trip with a
+        // parcelled Intent; it changes slowly, so it is read every 10 s instead of every HUD second. Current and charge stay live.
+        val now = android.os.SystemClock.elapsedRealtime()
+        val statusIntent: Intent = batteryIntent?.takeIf { now - batteryIntentAtMs < BATTERY_INTENT_REFRESH_MS }
+            ?: context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.also { batteryIntent = it; batteryIntentAtMs = now }
             ?: return BatterySnapshot(percent = percent)
 
         val status = statusIntent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
@@ -931,6 +937,7 @@ class PerformanceHudView(
         const val MIN_BACKGROUND_OPACITY = 0.0f
         const val MAX_BACKGROUND_OPACITY = 1.0f
         const val MAX_RUNTIME_HOURS = 72.0
+        const val BATTERY_INTENT_REFRESH_MS = 10_000L
         const val RUNTIME_SMOOTHING_OLD_WEIGHT = 0.65
         const val RUNTIME_SMOOTHING_NEW_WEIGHT = 0.35
         const val GRAPH_SAMPLE_COUNT = 30

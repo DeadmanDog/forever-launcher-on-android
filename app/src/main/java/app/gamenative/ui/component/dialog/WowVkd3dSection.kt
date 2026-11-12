@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -99,7 +100,7 @@ internal fun WowVkd3dSection(blocked: Boolean, onBusy: (Boolean) -> Unit,
                 style = MaterialTheme.typography.bodySmall)
             for ((api, label) in listOf(WowVkd3dComponents.DX11 to tx("DirectX 11 — DXVK", "DirectX 11 — DXVK"),
                     WowVkd3dComponents.DX12 to tx("DirectX 12 — VKD3D", "DirectX 12 — VKD3D"))) {
-                Row(Modifier.fillMaxWidth().selectable(selected = chosenApi == api, enabled = enabled && (container != null || initialApi != null), role = Role.RadioButton, onClick = { if (api != currentApi && container != null) { chosenApi = api; confirmApi = api } })) {
+                Row(Modifier.fillMaxWidth().selectable(selected = chosenApi == api, enabled = enabled && (container != null || initialApi != null), role = Role.RadioButton, onClick = { if (api != currentApi && container != null) { chosenApi = api; confirmApi = api } }), verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = chosenApi == api, onClick = null, enabled = enabled && (container != null || initialApi != null)); Spacer(Modifier.width(8.dp)); Text(label, modifier = Modifier.padding(vertical = 4.dp))
                 }
             }

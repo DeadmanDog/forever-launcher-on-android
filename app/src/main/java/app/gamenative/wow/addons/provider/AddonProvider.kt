@@ -18,12 +18,15 @@ data class RemoteAddon(
     val categories: Set<AddonCategory> = emptySet(),
     /** Preview image URLs, largest available. */
     val screenshots: List<String> = emptyList(),
+    /** The project's source repository as its page lists it (CurseForge "Source"), e.g. a GitHub repo with its own releases. */
+    val sourceUrl: String? = null,
 )
 
 /** The addon's own page on its source site, for "Open on ..." links. */
 fun RemoteAddon.pageUrl(): String? = when (provider) {
     "github" -> "https://github.com/$projectId"
     "wowinterface" -> websiteUrl ?: "https://www.wowinterface.com/downloads/info$projectId"
+    "curseforge" -> websiteUrl ?: "https://www.curseforge.com/wow/addons"
     else -> websiteUrl
 }?.takeIf { it.startsWith("https://") }
 

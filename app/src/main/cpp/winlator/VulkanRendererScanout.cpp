@@ -1,3 +1,5 @@
+#include <cmath>
+#include <utility>
 #include "VulkanRendererContext.h"
 
 #include <algorithm>
@@ -169,6 +171,11 @@ void VulkanRendererContext::destroyScanout() {
         scanoutCursorBuf=nullptr;
     }
     scanoutCursorBufW = scanoutCursorBufH = 0;
+    if (scanoutCursorSpare) {
+        AHardwareBuffer_release(reinterpret_cast<AHardwareBuffer*>(scanoutCursorSpare));
+        scanoutCursorSpare=nullptr;
+    }
+    scanoutCursorSpareW = scanoutCursorSpareH = 0;
     // Nothing of this lifetime may leak into the next one (a stale dirty flag would apply an old cursor to a new transaction).
     { std::lock_guard<std::mutex> lk(scanoutMutex);
       scanoutVisShown   = false;
@@ -263,10 +270,22 @@ void VulkanRendererContext::applyScanoutBuffer() {
         float fy = dy + ((float)cy / ch) * dh;
         int32_t curW = (int32_t)(scanoutCursorBufW * scaleW);
         int32_t curH = (int32_t)(scanoutCursorBufH * scaleH);
-        int32_t px = std::max(0, (int32_t)(fx - chx * scaleW));
-        int32_t py = std::max(0, (int32_t)(fy - chy * scaleH));
+        int32_t px = (int32_t)std::floor(fx - chx * scaleW);
+        int32_t py = (int32_t)std::floor(fy - chy * scaleH);
         ARect src{0, 0, scanoutCursorBufW, scanoutCursorBufH};
         ARect dst{px, py, px+curW, py+curH};
+        // Past the left/top edge the part outside is cut off (source and destination together). Clamping the origin to 0 moved
+        // the whole cursor and its hotspot instead: 9 display pixels at 1.5x for a 6-pixel hotspot.
+        if (px < 0 && scaleW > 0.f) {
+            int32_t cut = std::min<int32_t>((int32_t)std::ceil(-px / scaleW), scanoutCursorBufW - 1);
+            src.left = cut; dst.left = px + (int32_t)std::lround(cut * scaleW);
+            if (dst.left < 0) dst.left = 0;
+        }
+        if (py < 0 && scaleH > 0.f) {
+            int32_t cut = std::min<int32_t>((int32_t)std::ceil(-py / scaleH), scanoutCursorBufH - 1);
+            src.top = cut; dst.top = py + (int32_t)std::lround(cut * scaleH);
+            if (dst.top < 0) dst.top = 0;
+        }
         touched = true;
         ST_SETGEO(t, scanoutCursorSC, &src, &dst, 0);
     }
@@ -286,11 +305,12 @@ void VulkanRendererContext::scanoutSetCursorImage(void* pixels, short w, short h
     if (!scanoutActive.load() || !scanoutCursorSC || !pixels || w<=0 || h<=0) return;
     if (stride <= 0) stride = w;
 
-    auto* curBuf = reinterpret_cast<AHardwareBuffer**>(&scanoutCursorBuf);
-    if (*curBuf && (scanoutCursorBufW != w || scanoutCursorBufH != h)) {
+    // Written into the spare buffer, never into the one on screen; the two swap below.
+    auto* curBuf = reinterpret_cast<AHardwareBuffer**>(&scanoutCursorSpare);
+    if (*curBuf && (scanoutCursorSpareW != w || scanoutCursorSpareH != h)) {
         AHardwareBuffer_release(*curBuf);
         *curBuf = nullptr;
-        scanoutCursorBufW = scanoutCursorBufH = 0;   // a failed allocation below must not leave the old size without a buffer
+        scanoutCursorSpareW = scanoutCursorSpareH = 0;   // a failed allocation below must not leave the old size without a buffer
     }
     if (!*curBuf) {
         AHardwareBuffer_Desc d{};
@@ -300,7 +320,7 @@ void VulkanRendererContext::scanoutSetCursorImage(void* pixels, short w, short h
                    AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE |
                    AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY;
         if (AHardwareBuffer_allocate(&d, curBuf) != 0) return;
-        scanoutCursorBufW = w; scanoutCursorBufH = h;
+        scanoutCursorSpareW = w; scanoutCursorSpareH = h;
     }
 
     AHardwareBuffer_Desc dstDesc{};
@@ -317,6 +337,10 @@ void VulkanRendererContext::scanoutSetCursorImage(void* pixels, short w, short h
                src   + (size_t)row * (uint32_t)stride,
                (size_t)w * 4);
     AHardwareBuffer_unlock(*curBuf, nullptr);
+    // The written buffer becomes the one to show (applyScanoutBuffer runs under the same scanoutLifeMutex).
+    std::swap(scanoutCursorBuf, scanoutCursorSpare);
+    std::swap(scanoutCursorBufW, scanoutCursorSpareW);
+    std::swap(scanoutCursorBufH, scanoutCursorSpareH);
 
     { std::lock_guard<std::mutex> lk(scanoutMutex);
       cursorImageDirty = true; }

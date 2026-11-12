@@ -14,11 +14,14 @@ import java.util.concurrent.TimeUnit;
  * releaseAll comes first.
  */
 public final class PresentIdleHolds {
-    private static final ScheduledExecutorService TIMER = Executors.newSingleThreadScheduledExecutor(r -> {
+    static final java.util.concurrent.ScheduledThreadPoolExecutor TIMER = new java.util.concurrent.ScheduledThreadPoolExecutor(1, r -> {
         Thread t = new Thread(r, "PresentIdleHolds");
         t.setDaemon(true);
         return t;
     });
+    // A released hold cancels its stall timer; without this the dead task stayed queued for the full limit and woke the timer
+    // thread for nothing (about 60 times a second at 60 FPS).
+    static { TIMER.setRemoveOnCancelPolicy(true); }
 
     private static final class Hold {
         final Runnable action;

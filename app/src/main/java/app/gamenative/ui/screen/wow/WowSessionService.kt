@@ -38,10 +38,32 @@ class WowSessionService : Service() {
             .build()
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification,
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0)
+        running = true
         return START_NOT_STICKY
     }
 
+    override fun onDestroy() {
+        running = false
+        super.onDestroy()
+    }
+
     companion object {
+        /** True while the service runs in the foreground (set in onStartCommand, cleared in onDestroy). */
+        @Volatile @JvmStatic var running = false
+            private set
+
+        /**
+         * 1.2.3 (multi-agent review): the service was started once, when Wine started; Android refuses that start while the app is in
+         * the background (targetSdk 36), and nothing retried: the whole session then ran without it and WoW disconnected the next
+         * time the player left the app. Called when the app comes to the foreground: starts it if the game runs without it.
+         */
+        fun needsStart(sessionAlive: Boolean, serviceRunning: Boolean) = sessionAlive && !serviceRunning
+
+        @JvmStatic
+        fun ensureRunning(context: Context, sessionAlive: Boolean) {
+            if (needsStart(sessionAlive, running)) sessionChanged(context, true)
+        }
+
         private const val CHANNEL = "wow_session"
         private const val NOTIFICATION_ID = 4101
 

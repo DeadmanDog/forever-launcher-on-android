@@ -96,6 +96,7 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
         MicrophoneComponent microphoneComponent = getComponent(MicrophoneComponent.class);
         if (microphoneComponent != null) microphoneComponent.pause();
         setPresentBackground(true);
+        if (getComponent(app.gamenative.display.WowGamescopeComponent.class) != null) app.gamenative.display.GameNativeDrm.setBackground(true);
     }
 
     private void setPresentBackground(boolean background) {
@@ -107,6 +108,7 @@ public class XEnvironment implements Iterable<EnvironmentComponent> {
 
     public void onResume() {
         setPresentBackground(false);
+        if (getComponent(app.gamenative.display.WowGamescopeComponent.class) != null) app.gamenative.display.GameNativeDrm.setBackground(false);
         // Resume audio so it's ready when game processes wake up
         PulseAudioComponent pulseAudioComponent = getComponent(PulseAudioComponent.class);
         if (pulseAudioComponent != null) pulseAudioComponent.resume();

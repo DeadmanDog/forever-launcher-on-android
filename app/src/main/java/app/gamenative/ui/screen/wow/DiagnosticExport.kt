@@ -15,9 +15,18 @@ internal object DiagnosticExport {
         java.io.RandomAccessFile(file, "r").use { input ->
             val length = input.length()
             val start = if (length > MAX_ENTRY_BYTES) length - MAX_ENTRY_BYTES else 0L
+            // A cut CSV keeps its header and starts on a whole row (it started mid-row without a header, 1.1.1 diag).
+            val csv = start > 0 && (file.name.endsWith(".csv", ignoreCase = true) || file.name.endsWith(".csv.previous", ignoreCase = true))
+            if (csv) {
+                val header = java.io.ByteArrayOutputStream()
+                input.seek(0)
+                while (header.size() < 4096) { val b = input.read(); if (b < 0) break; header.write(b); if (b == '\n'.code) break }
+                out.write(header.toByteArray())
+            }
             input.seek(start)
             val buffer = ByteArray(64 * 1024)
             var skippingZeros = start > 0
+            var skippingPartialRow = csv
             // The end point is fixed now: a log that keeps growing while it is copied cannot push the entry past its budget.
             var remaining = length - start
             while (remaining > 0) {
@@ -28,6 +37,10 @@ internal object DiagnosticExport {
                 if (skippingZeros) {
                     while (from < count && buffer[from] == 0.toByte()) from++
                     if (from < count) skippingZeros = false
+                }
+                if (skippingPartialRow && !skippingZeros) {
+                    while (from < count && buffer[from] != '\n'.code.toByte()) from++
+                    if (from < count) { from++; skippingPartialRow = false }
                 }
                 if (from < count) out.write(buffer, from, count - from)
             }

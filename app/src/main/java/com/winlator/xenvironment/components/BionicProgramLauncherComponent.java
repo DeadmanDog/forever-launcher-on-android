@@ -308,6 +308,8 @@ public class BionicProgramLauncherComponent extends EnvironmentComponent {
             app.gamenative.ui.screen.wow.WowLegacyFiles.removeFrom(new File(rootDir, ImageFs.WINEPREFIX + "/drive_c/windows"));
         }
 
+        if (app.gamenative.display.WowDisplayBackend.isGamescope(container))
+            command = app.gamenative.display.WowGamescopeRuntime.wrap(context, container, rootDir, envVars, command);
         File diagnosticDirectory = app.gamenative.ui.screen.wow.WowDiagnostics.prepare(context, container, envVars);
         File probeDirectory = app.gamenative.ui.screen.wow.WowDriverProbe.prepare(context, container, envVars, diagnosticDirectory);
         if (probeDirectory != null && wineInfo.isArm64EC()) {

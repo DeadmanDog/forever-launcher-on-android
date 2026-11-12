@@ -58,4 +58,22 @@ class WowHardwareScaleTest {
         for (off in listOf("scanout", "adpf")) assertFalse(off, WowLaunchPolicy.enabled(context, off))
         prefs.edit().clear().commit()
     }
+
+    // 1.3.2: one "Game image output" choice instead of the Hardware scaling switch plus the scanout switch.
+    @Test fun oneOutputChoiceCoversHardwareScalingAndScanout() {
+        val prefs = context.getSharedPreferences(WowLaunchPolicy.PREFS, 0)
+        prefs.edit().clear().commit()
+        assertEquals(WowLaunchPolicy.DisplayOutput.HARDWARE_SCALE, WowLaunchPolicy.displayOutput(context)) // the default as before
+        WowLaunchPolicy.saveDisplayOutput(context, WowLaunchPolicy.DisplayOutput.COMPOSITOR)
+        assertFalse(WowHardwareScale.requested(context)); assertFalse(WowLaunchPolicy.enabled(context, "scanout"))
+        assertEquals(WowLaunchPolicy.DisplayOutput.COMPOSITOR, WowLaunchPolicy.displayOutput(context))
+        WowLaunchPolicy.saveDisplayOutput(context, WowLaunchPolicy.DisplayOutput.SCANOUT)
+        assertTrue(WowLaunchPolicy.enabled(context, "scanout")); assertFalse(WowHardwareScale.requested(context))
+        assertEquals(WowLaunchPolicy.DisplayOutput.SCANOUT, WowLaunchPolicy.displayOutput(context))
+        WowLaunchPolicy.saveDisplayOutput(context, WowLaunchPolicy.DisplayOutput.HARDWARE_SCALE)
+        assertFalse(WowLaunchPolicy.enabled(context, "scanout")); assertTrue(WowHardwareScale.requested(context))
+        // A player who had both old switches on (scanout wins) sees Scanout selected.
+        assertEquals(WowLaunchPolicy.DisplayOutput.SCANOUT, WowLaunchPolicy.displayOutput(scanout = true, hardwareScale = true))
+        prefs.edit().clear().commit()
+    }
 }

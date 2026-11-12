@@ -25,6 +25,7 @@ data class ScreenEffectsConfig(
         const val SCALING_MODE_FSR_ASPECT = 6
         const val SCALING_MODE_DLS = 7
         const val SCALING_MODE_NATURAL = 8
+        const val SCALING_MODE_NIS = 9
         const val FSR_MIN_LEVEL = 1
         const val FSR_MAX_LEVEL = 5
         const val FSR_DEFAULT_LEVEL = 3

@@ -355,7 +355,7 @@
 354|À L’OUVERTURE DE L’APP
 355|WOW FOREVER REQUIS
 356|Ne réveille que le thread en attente qui reçoit le signal. Désactivé = comportement d’origine.
-357|Où le GPU dessine. Sysmem : directement en mémoire système (recommandé). GMEM : dans la petite mémoire rapide intégrée au GPU, tuile par tuile. Par défaut du pilote : Turnip décide à chaque image.
+357|Où le GPU dessine. Sysmem : directement en mémoire système (recommandé). GMEM : dans la petite mémoire rapide intégrée au GPU, tuile par tuile. Par défaut du pilote : pour WoW, TurnRIP mesure chaque passe de rendu des deux façons et garde la plus rapide.
 358|Qui maintient la fréquence d’images à la limite. App, calée sur la vsync (recommandé) : l’app libère les images au rythme du rafraîchissement de l’écran, elles restent donc régulièrement espacées. App, minuterie : l’app utilise sa propre minuterie au lieu du rafraîchissement, ce qui peut dériver légèrement. DXVK / VKD3D : la couche graphique limite avec sa propre minuterie, ce qui peut rendre le mouvement saccadé. App, vsync + phase (expérimental) : comme calée sur la vsync, et l’app mesure aussi quand les images atteignent l’écran et décale leur timing de quelques millisecondes pour qu’elles finissent au milieu du rafraîchissement : une petite variation de timing ne fait alors plus passer une image au rafraîchissement voisin (mesuré à 60 Hz avec FIFO). Un limiteur saisi dans les variables d’environnement utilise toujours DXVK / VKD3D.
 359|Wine / Proton
 360|Le conteneur WoW n’a pas encore été créé
@@ -377,8 +377,8 @@
 T|Astuce : en jeu, le geste Retour (ou la touche Retour) ouvre le menu rapide.
 R0|App, vsync + phase (par défaut)
 R1|App, calée sur la vsync
-R2|Plus basse (par défaut)
-R3|Uniquement avec FIFO. Fluide : les images font la queue à leur arrivée, environ 60 ms de l’image à l’écran à 60 Hz, jamais d’image sautée. Plus basse (par défaut) : après une saccade, l’app retire une image en attente (une image sautée) et s’arrête au premier niveau qui fonctionne (environ 43 ms). La plus basse (expérimental) : essaie aussi un cran plus bas à chaque fois ; si cela ne tient pas, cela coûte une petite saccade de plus, puis l’app garde le niveau qui a tenu.
+R2|La plus basse (par défaut)
+R3|Uniquement avec FIFO. Fluide : les images font la queue à leur arrivée, environ 60 ms de l’image à l’écran à 60 Hz, jamais d’image sautée. Plus basse (expérimental) : après une saccade, l’app retire une image en attente (une image sautée) et s’arrête au premier niveau qui fonctionne (environ 43 ms). La plus basse (par défaut) : essaie aussi un cran plus bas à chaque fois ; si cela ne tient pas, cela coûte une petite saccade de plus, puis l’app garde le niveau qui a tenu.
 R4|Fluide
 R5|Qui maintient la fréquence d’images à la limite. App, calée sur la vsync : l’app libère les images au rythme du rafraîchissement de l’écran, elles restent donc régulièrement espacées. App, minuterie : l’app utilise sa propre minuterie au lieu du rafraîchissement, ce qui peut dériver légèrement. DXVK / VKD3D : la couche graphique limite avec sa propre minuterie, ce qui peut rendre le mouvement saccadé. App, vsync + phase (par défaut) : comme calée sur la vsync, et l’app mesure aussi quand les images atteignent l’écran et décale leur timing de quelques millisecondes pour qu’elles finissent au milieu du rafraîchissement : une petite variation de timing ne fait alors plus passer une image au rafraîchissement voisin (mesuré à 60 Hz avec FIFO). Un limiteur saisi dans les variables d’environnement utilise toujours DXVK / VKD3D.
 res:quick_menu_title|Menu rapide
@@ -484,3 +484,89 @@ res:screen_effects_scaling_mode_dls_desc|Passe de netteté / clarté.
 409|Encore {0} Go. Télécharger maintenant est bien plus rapide qu’en jouant, où le jeu ne récupère que ce dont il a besoin. Wi-Fi conseillé.
 410|Archives des données du jeu (pas encore téléchargées)
 411|Archives des données du jeu ({0} %)
+412|Réutiliser les événements Wine (Proton r32)
+413|Pendant une à deux minutes après la connexion, WoW crée et ferme des milliers de petits événements par seconde. Chacun passait jusqu'ici par le serveur unique de Wine, et le thread principal du jeu devait attendre derrière eux : l'image saccadait. Activé, Proton garde ces événements et les réutilise, le serveur n'est plus sollicité. Désactivé = exactement le comportement du Proton précédent (r31). Prend effet au prochain lancement.
+414|Autorisez « Installer des applis inconnues » pour Forever Launcher, puis touchez de nouveau Installer.
+415|Appliquer le moteur d'affichage
+416|Disponible avec XServer. Gamescope utilise son propre compositeur.
+417|Impossible d'enregistrer les effets Gamescope.
+418|Moteur d'affichage
+419|Profils d'image DroidDeck
+420|GPL
+421|Jeu {0} · sortie Gamescope {1}×{2}
+422|Gamescope (expérimental)
+423|Gamescope utilise son propre Xwayland. À appliquer quand WoW est arrêté ; actif au prochain lancement. Les choix de Wine, DXVK et pilote sont conservés.
+424|La limite de FPS côté jeu de Gamescope sera mise à jour au prochain lancement.
+425|Comment les shaders DX11 sont compilés pendant le jeu. Hybride (par défaut) : n'ignore un rendu que pendant la compilation de son shader ; avec « Hybride garde GPL » (Avancé), il lie aussi rapidement les pipelines. GPL : lie rapidement les pipelines et n'ignore jamais de rendu. Async : l'ancien mode en arrière-plan.
+426|Hybride (par défaut)
+427|INSTALLER
+428|Plus tard
+429|NOUVELLE VERSION : {0}
+430|Désactivé
+431|Ne compte que si la compilation des shaders DX11 est sur Hybride. Normalement, Hybride compile entièrement chaque shader manquant, ce qui peut figer le thread de rendu plus de 100 ms. Activé, Hybride lie rapidement les pipelines comme GPL et n'ignore des rendus que tant qu'un shader n'est pas prêt. Activé par défaut : si le jeu plante ou si l'écran devient noir, désactivez-le ou utilisez GPL.
+432|Les profils d'image ne s'appliquent qu'à la session de jeu en cours.
+433|Préparation…
+434|Enregistré. Gamescope n'a pas pu appliquer tous les réglages en direct. NIS nécessite une résolution de jeu inférieure à la sortie.
+435|Netteté
+436|Ignore une liaison de pipeline quand le rendu précédent du même tampon de commandes utilisait déjà le même pipeline, ce qui économise du travail CPU dans le thread de rendu du jeu. Activé par défaut : si vous voyez de la géométrie manquante ou des artefacts, désactivez-le. Ne concerne que DX11 (DXVK) ; le menu rapide n'a pas d'interrupteur pour lui.
+437|Indique au jeu quels cœurs sont les plus rapides (les cœurs prime du téléphone), comme un CPU hybride de PC portable, afin que les journaux de WoW affichent Hybrid:true et qu'il puisse y placer ses threads les plus chargés. Activé par défaut. Désactivé = tous les cœurs semblent égaux. Modifie la répartition des threads de WoW.
+438|Le téléchargement a échoué. Vérifiez la connexion et réessayez.
+439|Le jeu n'apprend qu'un tampon d'image est de nouveau libre qu'après que l'app a fini de le dessiner, et non immédiatement. Cela exclut le cas rare où le jeu écrase un tampon encore en route vers l'écran (flash ou image déchirée). Cela n'accélère rien ; activé par défaut. Prend effet au prochain lancement.
+440|METTRE À JOUR
+441|Affichage direct Gamescope (expérimental)
+442|Gamescope uniquement. Gamescope transmet l'image du jeu directement à l'écran au lieu de la redessiner sur le GPU à chaque image, ce qui économise de l'énergie. Si ce n'est pas possible (effets, image refusée), il revient seul au redessin. Si l'image scintille ou devient noire, désactivez-le. Prend effet au prochain lancement.
+443|Enregistré. FSR et NIS mettent pleinement à l'échelle à partir du prochain lancement du jeu.
+444|Scanout plein écran (commandes tactiles masquées)
+445|L'image du jeu va directement à l'écran, sans la passe de composition GPU de l'app. Fonctionne aussi avec le HUD de performances affiché ; les commandes tactiles et le menu rapide doivent être masqués. Tant qu'il est actif, la mise à l'échelle matérielle (cet onglet) n'est pas utilisée.
+446|DX12 : attendre le GPU avant d'afficher une image
+447|XServer avec DX12 uniquement. L'image du jeu n'arrive à l'écran qu'une fois que le GPU a fini de la dessiner. Sans cela, l'écran pouvait parfois afficher l'image précédente (la barre de chargement qui recule, saccades quand le GPU est chargé). La limite d'IPS et le rythme d'affichage ne changent pas. Prend effet au prochain lancement.
+448|Faible latence d'entrée (DX11 et DX12)
+449|Le jeu n'a qu'une image d'avance sur l'écran (DX11 : latence d'image DXVK 1, DX12 : latence de swapchain VKD3D 1) au lieu de trois au plus, l'entrée atteint donc l'image plus tôt. Désactivé = le jeu peut préparer des images à l'avance : un peu plus fluide mais plus tardif. Un maxFrameLatency saisi dans DXVK_CONFIG ou un VKD3D_SWAPCHAIN_LATENCY_FRAMES enregistré prime.
+450|Comportement de la fréquence du GPU pendant le jeu. Balanced (par défaut) : la fréquence suit la charge ; le pilote ne l'augmente que dans la mesure où le jeu en a besoin (en DX12 avec 1 image de latence : autant que la limite d'IPS l'exige). Performance : le GPU reste en permanence à sa fréquence maximale (environ 1200 MHz) : plus de chaleur et de consommation.
+451|Nombre d'images que le CPU peut préparer en avance sur le GPU. Moins = moins de latence d'entrée. Par défaut : 1 image tant que Faible latence d'entrée (ci-dessous) est activé, sinon les 3 de VKD3D. Avec 1 image, le TurnRIP intégré augmente la fréquence du GPU selon le temps d'image, cela ne coûte donc plus d'IPS. Un nombre choisi ici l'emporte sur l'interrupteur.
+452|Disponible avec Gamescope. XServer utilise le compositeur propre à l'application.
+453|Faible latence d'entrée (DX11)
+454|Le jeu ne garde qu'une image d'avance sur l'écran (latence d'image DXVK 1) au lieu de trois, l'entrée apparaît donc plus tôt à l'image. Désactivé = le jeu peut mettre des images en file : un peu plus fluide mais plus tard. Un maxFrameLatency saisi dans DXVK_CONFIG l'emporte.
+455|Faible latence d'entrée (DX12)
+456|Le jeu ne garde qu'une image d'avance sur l'écran (latence de swapchain VKD3D 1) au lieu de trois, l'entrée apparaît donc plus tôt à l'image. Le TurnRIP intégré augmente alors la fréquence du GPU selon le temps d'image, cela ne coûte donc pas d'IPS. Désactivé = les 3 images de VKD3D. Un VKD3D_SWAPCHAIN_LATENCY_FRAMES saisi dans les variables d'environnement l'emporte.
+457|DX12 : signaler un GPU dédié (expérimental)
+458|VKD3D indique au jeu que le GPU a sa propre mémoire, comme une carte graphique de PC. WoW en DX12 autorise alors une échelle de rendu au-delà de 100 % (avec la réponse « mémoire partagée », il s'arrête à 100 % ; DX11 l'autorise de toute façon). Le jeu peut alors copier plus de données, ce qui peut coûter un peu de performances. Désactivé par défaut. Pris en compte au prochain lancement.
+459|La taille à laquelle WoW effectue le rendu. Plus petite = plus d'IPS mais une image plus douce. Enregistrée pour ce conteneur ; à appliquer jeu arrêté. La résolution propre de WoW est alignée au lancement ; son échelle de rendu reste celle que vous réglez en jeu (gardée séparément pour DX11 et DX12).
+460|Profil du pilote GPU (ce que le jeu demande au pilote)
+461|Profil du pilote GPU enregistré. Appliqué au prochain lancement.
+462|TurnRIP enregistre pendant 2 images toutes les 10 secondes le travail GPU demandé par le jeu (passes de rendu, chargements/écritures de tuiles, resolves, blits, effacements, compute) dans l’export de diagnostic. Chaque échantillon provoque un bref à-coup : désactivez-le pour jouer normalement ; les compteurs du pilote par seconde sont enregistrés avec la seule journalisation de diagnostic. La journalisation de diagnostic doit être activée.
+463|Qui maintient la fréquence d’images à la limite. App, alignée sur la VSync (recommandé) : l’app libère les images au rythme du rafraîchissement de l’écran et les décale de quelques millisecondes pour qu’elles se terminent au milieu du rafraîchissement, elles restent ainsi régulièrement espacées. DXVK / VKD3D : la couche graphique limite avec son propre minuteur, ce qui peut saccader le mouvement ; une solution de secours. Un limiteur saisi dans les variables d’environnement utilise toujours DXVK / VKD3D.
+464|App, alignée sur la VSync (recommandé)
+465|Sortie de l’image du jeu
+466|Comment l’image du jeu atteint l’écran. Mise à l’échelle matérielle (par défaut) : l’app assemble le jeu, le HUD et les commandes tactiles, et le scaler de l’écran agrandit l’image, ce qui allège un peu le GPU ; active seulement si la résolution a le format de l’écran (la résolution Plein écran) et si les Screen Effects utilisent Linear ou aucune mise à l’échelle sans effet (pas FSR, DLS, Natural, Nearest ni CRT). Composition par l’app : la passe GPU de l’app fait aussi la mise à l’échelle. Scanout plein écran : l’image du jeu va directement à l’écran sans la passe GPU de l’app et est mise à l’échelle par le matériel ; fonctionne avec le HUD de performances, mais les commandes tactiles et le menu rapide doivent être masqués (tant qu’ils sont visibles, l’app compose l’image). S’applique au prochain lancement.
+467|Mise à l’échelle matérielle (par défaut)
+468|Composition par l’app
+469|Clé CurseForge
+470|La navigation utilise CurseForge et nécessite votre propre clé API gratuite. Obtenez-en une sur console.curseforge.com, puis touchez « Clé CurseForge ».
+471|Clé API CurseForge
+472|Votre propre clé de console.curseforge.com. Elle est stockée uniquement sur ce téléphone et envoyée uniquement à CurseForge. Laissez vide pour la supprimer.
+473|Barres d’action
+474|Toutes les catégories
+475|Enchères et or
+476|Sacs et inventaire
+477|Buffs et temps de recharge
+478|Discussion et social
+479|Classe
+480|Combat et compteurs
+481|Interface et médias
+482|Bibliothèques
+483|Carte et navigation
+484|Les plus téléchargés
+485|Montures et mascottes
+486|Autres
+487|Populaires
+488|Métiers
+489|JcJ
+490|Quêtes et progression
+491|Raids et boss
+492|Mis à jour récemment
+493|Infobulles
+494|Cadres d’unité
+495|Son auteur n’autorise le téléchargement que sur le site CurseForge. Touchez « Download » sur la page (il peut aussi démarrer tout seul) ; l’app installe le fichier.
+496|Obtenir une clé sur CurseForge
+497|Connectez-vous, ouvrez « API keys » et copiez votre clé dans ce champ.

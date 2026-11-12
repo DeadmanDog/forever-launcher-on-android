@@ -25,8 +25,10 @@ final class VsyncFramePacer<T> implements IdlePacer<T> {
     private Choreographer choreographer;
     private boolean callbackPosted;
     private boolean closed;
+    /** Closed because a new pacer took over (releaseAllAndClose), not cancelled with the session (close). */
+    private boolean replaced;
     // Phase pacing (experimental): releases held back by the measured delay, still owed to their clients on close.
-    private final PresentPhaseAlign align = new PresentPhaseAlign();
+    private final PresentPhaseAlign align = new PresentPhaseAlign(PresentPhase.offsetNs());
     private final ArrayDeque<List<T>> deferred = new ArrayDeque<>();
     private long nextPhaseSampleNs;
 
@@ -66,12 +68,15 @@ final class VsyncFramePacer<T> implements IdlePacer<T> {
                 if (delayNs > 500_000L && !released.isEmpty()) {
                     final List<T> batch = new ArrayList<>(released);
                     deferred.add(batch);
-                    // Choreographer's frame time, System.nanoTime and uptimeMillis share CLOCK_MONOTONIC: the target rounded up
-                    // to the next millisecond, never later than the remaining delay allows.
+                    // Choreographer's frame time, System.nanoTime and uptimeMillis share CLOCK_MONOTONIC. The Looper only wakes on
+                    // whole milliseconds, and rounding the target up made every release up to 1 ms late (measured mean 0.36 ms,
+                    // max 2 ms against a 2 ms tolerance): the message is posted at the millisecond before the target and the
+                    // rest (< 1 ms) is waited out precisely on this thread.
                     long nowMs = SystemClock.uptimeMillis();
-                    long atMs = Math.max(nowMs, Math.min((releaseAtNs + 999_999L) / 1_000_000L, nowMs + (delayNs + 999_999L) / 1_000_000L));
+                    long atMs = Math.max(nowMs, Math.min(releaseAtNs / 1_000_000L, nowMs + delayNs / 1_000_000L));
                     final long target = releaseAtNs;
                     handler.postAtTime(() -> {
+                        waitUntil(target);
                         synchronized (monitor) { if (!deferred.remove(batch)) return; }
                         PresentPhase.noteRelease(System.nanoTime() - target);
                         for (T value : batch) release.accept(value);
@@ -84,6 +89,18 @@ final class VsyncFramePacer<T> implements IdlePacer<T> {
         }
     };
 
+    /** The sub-millisecond rest before a phase release; bounded so a clock jump can never hold the display thread. */
+    static void waitUntil(long targetNs) {
+        long limit = System.nanoTime() + MAX_FINE_WAIT_NS;
+        while (true) {
+            long now = System.nanoTime();
+            long left = Math.min(targetNs, limit) - now;
+            if (left <= 0) return;
+            java.util.concurrent.locks.LockSupport.parkNanos(left);
+        }
+    }
+    static final long MAX_FINE_WAIT_NS = 2_000_000L;
+
     VsyncFramePacer(Consumer<T> release) {
         this.release = release;
     }
@@ -91,8 +108,11 @@ final class VsyncFramePacer<T> implements IdlePacer<T> {
     @Override public void setFrameRateLimit(int fps) {
         List<T> released;
         synchronized (monitor) {
-            if (closed) return;
-            released = core.setLimit(fps);
+            if (closed || core.limit() == Math.max(0, fps)) return;
+            // A phase-delayed batch left the core on an earlier vsync. Drain it first so it
+            // does not arrive after newer buffers or remain delayed when pacing is disabled.
+            released = drainDeferredLocked();
+            released.addAll(core.setLimit(fps));
         }
         for (T value : released) release.accept(value);
     }
@@ -100,7 +120,10 @@ final class VsyncFramePacer<T> implements IdlePacer<T> {
     @Override public void schedule(int windowId, T value, boolean eagerRelease) {
         List<T> released;
         synchronized (monitor) {
-            if (closed) return;
+            // Replaced meanwhile (see PresentFramePacer.schedule): hand the buffer back instead of dropping it.
+            if (closed && !replaced) return;   // cancelled with its session (close)
+            if (closed) { released = java.util.Collections.singletonList(value); }
+            else {
             released = core.schedule(windowId, value, eagerRelease);
             if (core.hasPending() && !callbackPosted) {
                 callbackPosted = true;
@@ -112,6 +135,7 @@ final class VsyncFramePacer<T> implements IdlePacer<T> {
                         choreographer.postFrameCallback(frame);
                     }
                 });
+            }
             }
         }
         for (T released1 : released) release.accept(released1);
@@ -130,13 +154,19 @@ final class VsyncFramePacer<T> implements IdlePacer<T> {
     @Override public void releaseAllAndClose() {
         List<T> released;
         synchronized (monitor) {
-            released = new ArrayList<>();
-            for (List<T> batch : deferred) released.addAll(batch);
-            deferred.clear();
+            released = drainDeferredLocked();
             released.addAll(core.releaseAll());
+            replaced = true;
             closeLocked();
         }
         for (T value : released) release.accept(value);
+    }
+
+    private List<T> drainDeferredLocked() {
+        List<T> released = new ArrayList<>();
+        for (List<T> batch : deferred) released.addAll(batch);
+        deferred.clear();
+        return released;
     }
 
     @Override public void close() {

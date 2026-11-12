@@ -57,6 +57,8 @@ internal fun fifoLatencyUnavailable(inputs: WowQuickPresentInputs, uiChoice: Str
 
 @Composable private fun onlyDx11() = tx("Only with DX11 (DXVK): the game runs DX12 now.", "Csak DX11-gyel (DXVK) érhető el: most DX12 fut.")
 @Composable private fun onlyDx12() = tx("Only with DX12 (VKD3D): the game runs DX11 now.", "Csak DX12-vel (VKD3D) érhető el: most DX11 fut.")
+@Composable internal fun xserverOnly() = tx("Available with XServer. Gamescope uses its own compositor.",
+    "XServer módban érhető el. A Gamescope saját kompozitort használ.")
 
 /** The saved container values the next launch resolves the present mode from, together with the Quick tab choice. */
 internal data class WowQuickPresentInputs(val savedEnvironment: String = "", val driverMode: String = "", val rendererMode: String = "") {
@@ -95,29 +97,28 @@ internal fun WowGameChoicesSection(blocked: Boolean) {
 
 /** Everyday launch choices for the Settings "Quick" tab. Applied on the next Play. */
 @Composable
-internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, dx12: Boolean, presentInputs: WowQuickPresentInputs = WowQuickPresentInputs()) {
+internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, dx12: Boolean, presentInputs: WowQuickPresentInputs, gamescope: Boolean) {
     val context = LocalContext.current.applicationContext
     var error by remember { mutableStateOf<String?>(null) }
     var present by remember { mutableStateOf(WowRuntimeTuning.selected(context, "present")) }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         TuningChoice("gpu", tx("GPU power mode", "GPU-mód"),
-            tx("How the GPU clock behaves while you play. Balanced (default): the phone manages the clock and raises it only when the game really waits for the GPU. Performance: keeps the GPU at its highest clock (more heat and power; useful when the phone itself is in Balance mode, which caps the CPU). Regulated: keeps the clock above the chosen share of the maximum; it needs kernel support, otherwise it behaves like Balanced.",
-                "Hogyan viselkedik a GPU órajele játék közben. Balanced (alapértelmezett): a telefon kezeli az órajelet, és csak akkor emeli, ha a játék valóban a GPU-ra vár. Performance: a GPU-t a legmagasabb órajelen tartja (több hő és fogyasztás; akkor hasznos, ha maga a telefon Balance módban van, mert az a CPU-t korlátozza). Szabályozott: a maximum kiválasztott hányada fölött tartja az órajelet; kernel-támogatás kell hozzá, nélküle Balancedként működik."),
-            listOf("" to tx("Balanced (default)", "Balanced (alapértelmezett)"), "1" to "Performance") +
-                WowRuntimeTuning.gpuFloors.map { "f$it" to tx("Regulated, min. $it%", "Szabályozott, min. $it%") }, blocked, { error = it })
+            tx("How the GPU clock behaves while you play. Balanced (default): the clock follows the load; the driver raises it only as far as the game needs (with DX12 at 1 frame latency: as far as the FPS limit needs). Performance: the GPU stays at its highest clock (about 1200 MHz) all the time: more heat and power.",
+                "Hogyan viselkedik a GPU órajele játék közben. Balanced (alapértelmezett): az órajel a terheléshez igazodik; a driver csak annyira emeli, amennyire a játéknak kell (DX12-nél 1 képkocka késleltetéssel: amennyi az FPS-limithez kell). Performance: a GPU folyamatosan a legmagasabb órajelen (kb. 1200 MHz) marad: több hő és fogyasztás."),
+            listOf("" to tx("Balanced (default)", "Balanced (alapértelmezett)"), "1" to "Performance"), blocked, { error = it })
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         TuningChoice("pacing", tx("FPS limit pacing", "FPS-limit ütemezése"),
-            tx("Who holds the frame rate to the limit. App, vsync-locked (recommended): the app releases frames in step with the display's refresh, so they stay evenly spaced. App, timer: the app uses its own timer instead of the display refresh, which can drift slightly. DXVK / VKD3D: the graphics layer limits with its own timer, which can make motion judder. App, vsync + phase (experimental): like vsync-locked, and the app also measures where frames reach the display and shifts their timing a few milliseconds so they finish mid-refresh: a small timing wobble then no longer moves a frame to the neighbouring refresh (measured at 60 Hz with FIFO). A limiter typed into Environment Variables always uses DXVK / VKD3D.",
-                "Ki tartja a képkockasebességet a limiten. App, vsync-hez kötött (ajánlott): az app a kijelző frissítésével lépésben engedi tovább a képkockákat, így egyenletes marad a ritmus. App, időzítős: az app saját időzítőt használ a kijelző frissítése helyett, ez kicsit elcsúszhat. DXVK / VKD3D: a grafikus réteg saját időzítővel limitál, ez ránghatóvá teheti a mozgást. App, vsync + időzítés-igazítás (kísérleti): mint a vsync-hez kötött, de az app azt is méri, mikor érnek a kockák a kijelzőhöz, és néhány ezredmásodperccel eltolja őket a frissítés közepére, így egy kis időzítés-ingadozás már nem viszi át a kockát a szomszéd frissítésre (60 Hz-en, FIFO-val mérve). A környezeti változókba kézzel beírt limiter mindig a DXVK / VKD3D utat használja."),
-            listOf("" to tx("App, vsync-locked (recommended)", "App, vsync-hez kötött (ajánlott)"),
-                "phase" to tx("App, vsync + phase (experimental)", "App, vsync + időzítés-igazítás (kísérleti)"),
-                "timer" to tx("App, timer", "App, időzítős"), "api" to "DXVK / VKD3D"), blocked, { error = it })
+            tx("Who holds the frame rate to the limit. App, vsync-aligned (recommended): the app releases frames in step with the display's refresh and shifts them a few milliseconds so they finish mid-refresh, so they stay evenly spaced. DXVK / VKD3D: the graphics layer limits with its own timer, which can make motion judder; a fallback. A limiter typed into Environment Variables always uses DXVK / VKD3D.",
+                "Ki tartja a képkockasebességet a limiten. App, vsync-hez igazított (ajánlott): az app a kijelző frissítésével lépésben engedi tovább a képkockákat, és néhány ezredmásodperccel a frissítés közepére igazítja őket, így egyenletes marad a ritmus. DXVK / VKD3D: a grafikus réteg saját időzítővel limitál, ez ránghatóvá teheti a mozgást; tartalék megoldás. A környezeti változókba kézzel beírt limiter mindig a DXVK / VKD3D utat használja."),
+            listOf("" to tx("App, vsync-aligned (recommended)", "App, vsync-hez igazított (ajánlott)"),
+                "api" to "DXVK / VKD3D"), blocked, { error = it },
+            unavailable = if (gamescope) xserverOnly() else null)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         TuningChoice("async", tx("DX11 shader compilation", "DX11 shaderfordítás"),
-            tx("How DX11 shaders are compiled while you play. GPL (default): links pipelines quickly and never skips a draw, so loading is fast and play is smooth. Hybrid: skips draws while shaders compile, but compiles each shader in full, which can cause hitches on this GPU. Async: the older background mode.",
-                "Hogyan fordítódnak a DX11 shaderek játék közben. GPL (alapértelmezett): gyorsan összekapcsol és nem hagy ki rajzolást, ezért gyors a betöltés és sima a játék. Hibrid: kihagy rajzolást, amíg a shader fordul, de minden shadert teljesen fordít, ami ezen a GPU-n akadást okozhat. Async: a régebbi, háttérben fordító mód."),
-            listOf("2" to tx("Hybrid", "Hibrid"),
-                "0" to tx("GPL (default)", "GPL (alapértelmezett)"), "1" to "Async"), blocked, { error = it }, { it != "2" || hybridAvailable },
+            tx("How DX11 shaders are compiled while you play. Hybrid (default): skips a draw only while its shader compiles; with \"Hybrid keeps GPL\" (Advanced) it also links pipelines quickly. GPL: links pipelines quickly and never skips a draw. Async: the older background mode.",
+                "Hogyan fordítódnak a DX11 shaderek játék közben. Hibrid (alapértelmezett): csak addig hagy ki egy rajzolást, amíg a shadere fordul; a „Hibrid megtartja a GPL-t” kapcsolóval (Haladó) gyorsan össze is kapcsolja a pipeline-okat. GPL: gyorsan összekapcsol, és soha nem hagy ki rajzolást. Async: a régebbi, háttérben fordító mód."),
+            listOf("2" to tx("Hybrid (default)", "Hibrid (alapértelmezett)"),
+                "0" to tx("GPL", "GPL"), "1" to "Async"), blocked, { error = it }, { it != "2" || hybridAvailable },
             unavailable = if (dx12) onlyDx11() else null)
         if (!hybridAvailable) Text(tx("Hybrid needs the bundled DXVK: apply it on the Components tab.",
             "A hibridhez a beépített DXVK kell: alkalmazd a Komponensek fülön."),
@@ -134,7 +135,7 @@ internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, d
                 "Csak FIFO-val. Sima (alapértelmezett): a kockák úgy állnak sorba, ahogy jönnek, 60 Hz-en kb. 60 ms a kockától a képig, soha nincs kihagyott kocka. Alacsonyabb (kísérleti): akadás után az app kivesz egy beragadt kockát (egy kihagyás), és az első működő szinten megáll (kb. 43 ms). Legalacsonyabb (kísérleti): minden alkalommal megpróbál még egy lépést lejjebb; ha az nem tart, az még egy apró akadás, utána a tartós szinten marad."),
             listOf("" to tx("Smooth (default)", "Sima (alapértelmezett)"), "low" to tx("Lower (experimental)", "Alacsonyabb (kísérleti)"),
                 "lowest" to tx("Lowest (experimental)", "Legalacsonyabb (kísérleti)")), blocked, { error = it },
-            unavailable = fifoLatencyUnavailable(presentInputs, present))
+            unavailable = if (gamescope) xserverOnly() else fifoLatencyUnavailable(presentInputs, present))
         Text(tx("A value typed in Environment Variables always overrides these choices.",
             "A környezeti változókba kézzel beírt érték mindig felülírja ezeket."), style = MaterialTheme.typography.bodySmall)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -143,7 +144,7 @@ internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, d
 
 /** Experimental and diagnostic launch switches for the Settings "Advanced" tab. */
 @Composable
-internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String, legacyTuDefault: Boolean, dx12: Boolean) {
+internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String, legacyTuDefault: Boolean, dx12: Boolean, gamescope: Boolean) {
     val context = LocalContext.current.applicationContext
     var memory by remember { mutableStateOf(WowLaunchPolicy.memory(context)) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -151,22 +152,10 @@ internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String
         Text(tx("Experimental settings. Applied on the next Play only; container settings are preserved.",
             "Kísérleti beállítások. Csak a következő indításra érvényesek; a konténer beállításai megmaradnak."),
             style = MaterialTheme.typography.bodySmall)
-        TuningChoice("latency", tx("DX12 maximum latency", "DX12 max. késleltetés"),
-            tx("How many frames the CPU may prepare ahead of the GPU. Lower = less input lag, but the GPU then idles between frames: on this phone 1 frame let the GPU clock drop and cost FPS. Leave Default unless you are testing.",
-                "Hány képkockát készíthet elő a CPU a GPU előtt. Kisebb = kevesebb input lag, de a GPU a kockák között üresjáratban áll: ezen a telefonon az 1 képkocka levitte a GPU órajelét, és FPS-be került. Hagyd alapértelmezésen, hacsak nem tesztelsz."),
-            listOf("" to tx("Default", "Alapértelmezett"), "1" to tx("1 frame", "1 képkocka"), "2" to tx("2 frames", "2 képkocka"), "3" to tx("3 frames", "3 képkocka")),
-            blocked, { error = it },
-            unavailable = if (dx12) null else onlyDx12())
-        TuningChoice("images", tx("DX12 swapchain images", "DX12 swapchain képszám"),
-            tx("How many image buffers the game's swapchain asks for; the driver may raise or lower it to its own limits. Fewer can shorten the queue but can also stall the GPU; more is steadier. Not the same as the maximum latency above.",
-                "Hány képpuffert kér a játék swapchainje; a driver a saját minimumához/maximumához igazíthatja. A kevesebb rövidítheti a sort, de meg is akaszthatja a GPU-t; a több egyenletesebb. Nem azonos a fenti max. késleltetéssel."),
-            listOf("" to tx("Default", "Alapértelmezett"), "2" to "2", "3" to "3", "4" to "4"), blocked, { error = it },
-            unavailable = if (dx12) null else onlyDx12())
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         val owned = !legacyTuDefault && WowLaunchPolicy.hasSavedTuDebugDisplay(savedEnvironment)
         Text(tx("GPU memory mode", "GPU memóriamód"), style = MaterialTheme.typography.titleSmall)
-        Text(tx("Where the GPU draws. Sysmem: directly in system memory (recommended). GMEM: in the GPU's small fast on-chip memory, tile by tile. Driver default: Turnip decides per frame.",
-            "Hol rajzol a GPU. Sysmem: közvetlenül a rendszermemóriában (ajánlott). GMEM: a GPU kicsi, gyors belső memóriájában, csempénként. A driver alapértelmezése: a Turnip képkockánként dönt."),
+        Text(tx("Where the GPU draws. Sysmem: directly in system memory (recommended). GMEM: in the GPU's small fast on-chip memory, tile by tile. Driver default: for WoW, TurnRIP measures each render pass both ways and keeps the faster one.",
+            "Hol rajzol a GPU. Sysmem: közvetlenül a rendszermemóriában (ajánlott). GMEM: a GPU kicsi, gyors belső memóriájában, csempénként. A driver alapértelmezése: WoW-nál a TurnRIP minden render passt mindkét módon lemér, és a gyorsabbat tartja meg."),
             style = MaterialTheme.typography.bodySmall)
         if (owned) Text(tx("Saved TU_DEBUG overrides this selector. Remove TU_DEBUG in Environment Variables to use it.",
             "A mentett TU_DEBUG felülírja ezt. A használatához töröld a TU_DEBUG-ot a környezeti változók közül."),
@@ -188,42 +177,38 @@ internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String
                 "Csak azt a várakozó szálat ébreszti, amelyik megkapja a jelet. Ki = eredeti működés."),
             listOf("0" to tx("Off (default)", "Ki (alapértelmezett)"), "1" to tx("On", "Be")), blocked, { error = it })
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        TuningChoice(WowRuntimeTuning.CPU_PROFILE, tx("Processor the game sees", "A játék által látott processzor"),
-            tx("Android gives the game no processor name or vendor, so WoW logs both as unknown. Only the name, vendor and max-frequency text change; the real cores and speed are untouched. A saved WINE_CPU_NAME / WINE_CPU_VENDOR wins.",
-                "Az Android nem ad a játéknak processzornevet és gyártót, ezért a WoW mindkettőt ismeretlennek naplózza. Csak a név, a gyártó és a max. frekvencia szövege változik, a valódi magok és a sebesség nem. A mentett WINE_CPU_NAME / WINE_CPU_VENDOR nyer."),
-            listOf("" to tx("Real: this phone's Snapdragon (default)", "Valós: a telefon Snapdragonja (alapérték)"),
-                "laptop" to tx("Snapdragon X Plus laptop", "Snapdragon X Plus laptop"),
-                "off" to tx("Android default (unknown)", "Android alapérték (ismeretlen)")), blocked, { error = it })
-        TuningChoice(WowRuntimeTuning.GPU_PROFILE, tx("GPU the game sees", "A játék által látott GPU"),
-            tx("Only the vendor, name, id and reported video memory (up to 8 GB, shared with the system) change; the real Adreno and its driver do the work. The game shows 'family: Unknown' for Qualcomm GPUs by design. If the game misbehaves after a change, go back to the default. A saved DXVK_VEGAS_* variable wins.",
-                "Csak a gyártó, a név, az azonosító és a jelzett videomemória (legfeljebb 8 GB, a rendszerrel osztott) változik, a munkát a valódi Adreno és a driver végzi. A játék Qualcomm GPU-nál tervezetten 'family: Unknown'-t ír. Ha a játék rosszul működik változtatás után, térj vissza az alapértékre. A mentett DXVK_VEGAS_* változó nyer."),
-            listOf("" to tx("Real: this phone's Adreno (default)", "Valós: a telefon Adrenója (alapérték)"),
-                "laptop" to tx("Qualcomm Adreno X1 laptop", "Qualcomm Adreno X1 laptop"),
-                "off" to tx("NVIDIA GeForce name", "NVIDIA GeForce név")), blocked, { error = it })
         Text(tx("Display experiments", "Megjelenítési kísérletek"), style = MaterialTheme.typography.titleSmall)
         for ((key, label, hint) in listOf(
-            Triple("scanout", tx("Fullscreen scanout (hide HUD and touch controls)", "Teljes képernyős scanout (HUD és érintéses vezérlők elrejtve)"),
-                tx("The game image goes straight to the display without the app's GPU compositing pass. Only works while the HUD, touch controls and quick menu are hidden. While on, Hardware scaling (on this tab) is not used.",
-                    "A játék képe az app GPU-s összerakása nélkül, közvetlenül a kijelzőre kerül. Csak akkor működik, ha a HUD, az érintéses vezérlők és a gyorsmenü el vannak rejtve. Amíg be van kapcsolva, a hardveres skálázás (ezen a fülön) nem használatos.")),
             Triple(WowRuntimeTuning.LOW_LATENCY, tx("Low input latency (DX11)", "Alacsony bemeneti késés (DX11)"),
                 tx("The game keeps only one frame ahead of the screen (DXVK frame latency 1) instead of up to three, so input reaches the picture sooner. Off = the game may queue frames ahead for slightly smoother but later frames. A maxFrameLatency typed into DXVK_CONFIG wins.",
                     "A játék csak egy képkockával jár a kijelző előtt (DXVK frame latency 1), nem akár hárommal, így a bevitel hamarabb látszik a képen. Ki = a játék előre sorba állíthat képkockákat: picit simább, de későbbi kép. A DXVK_CONFIG-ba írt maxFrameLatency mindig nyer.")),
+            Triple(WowRuntimeTuning.LOW_LATENCY_DX12, tx("Low input latency (DX12)", "Alacsony bemeneti késés (DX12)"),
+                tx("The game keeps only one frame ahead of the screen (VKD3D swapchain latency 1) instead of up to three, so input reaches the picture sooner. The bundled TurnRIP then raises the GPU clock by frame time, so it costs no FPS. Off = VKD3D's own 3 frames. A VKD3D_SWAPCHAIN_LATENCY_FRAMES typed into Environment Variables wins.",
+                    "A játék csak egy képkockával jár a kijelző előtt (VKD3D swapchain latency 1), nem akár hárommal, így a bevitel hamarabb látszik a képen. A beépített TurnRIP ilyenkor a képidő alapján emeli a GPU órajelét, így nem kerül FPS-be. Ki = a VKD3D saját 3 képkockája. A környezeti változókba írt VKD3D_SWAPCHAIN_LATENCY_FRAMES mindig nyer.")),
             Triple(WowRuntimeTuning.CPU_CLASSES, tx("Report big/little CPU cores (experimental)", "Nagy/kis CPU-magok jelzése (kísérleti)"),
-                tx("Tells the game which cores are the fastest ones (the phone's prime cores) the way a hybrid laptop CPU does, so WoW's own logs show Hybrid:true and it may place its busiest threads on them. Off = all cores look equal (default). Changes how WoW schedules threads: compare FPS before keeping it on.",
-                    "Jelzi a játéknak, melyek a leggyorsabb magok (a telefon prime magjai), mint egy hibrid laptop-CPU-nál, így a WoW naplója Hybrid:true-t mutat, és a legterheltebb szálait ezekre teheti. Ki = minden mag egyformának látszik (alapérték). Megváltoztatja, hogyan ütemez a WoW: a megtartás előtt hasonlítsd össze az FPS-t.")),
+                tx("Tells the game which cores are the fastest ones (the phone's prime cores) the way a hybrid laptop CPU does, so WoW's own logs show Hybrid:true and it may place its busiest threads on them. On by default. Off = all cores look equal. Changes how WoW schedules threads.",
+                    "Jelzi a játéknak, melyek a leggyorsabb magok (a telefon prime magjai), mint egy hibrid laptop-CPU-nál, így a WoW naplója Hybrid:true-t mutat, és a legterheltebb szálait ezekre teheti. Alapból bekapcsolva. Ki = minden mag egyformának látszik. Megváltoztatja, hogyan ütemez a WoW.")),
+            Triple(app.gamenative.display.GamescopeWindowPolicy.DIRECT_SCANOUT, tx("Gamescope direct scanout (experimental)", "Gamescope közvetlen kijelzés (kísérleti)"),
+                tx("Gamescope only. Gamescope hands the game's own frame to the display instead of redrawing it on the GPU every frame, which saves power. It falls back to redrawing by itself when that is not possible (effects, a refused frame). If the picture flickers or goes black, turn it off. Takes effect from the next launch.",
+                    "Csak Gamescope-pal. A Gamescope a játék saját képkockáját adja a kijelzőnek, ahelyett hogy minden képkockánál újrarajzolná a GPU-n, így kevesebbet fogyaszt. Ha ez nem lehetséges (effektek, visszautasított képkocka), magától visszavált az újrarajzolásra. Ha villog vagy fekete a kép, kapcsold ki. A következő indítástól él.")),
+            Triple(WowRuntimeTuning.GAME_GPU_WAIT, tx("DX12: wait for the GPU before showing a frame", "DX12: a GPU megvárása a kép megjelenítése előtt"),
+                tx("XServer with DX12 only. The game's frame reaches the screen only once the GPU has finished drawing it. Without this the screen could sometimes show the previous picture (the loading bar jumping back, stutter while the GPU is busy). The FPS limit and frame pacing stay as they are. Takes effect from the next launch.",
+                    "Csak XServer + DX12 esetén. A játék képe csak akkor kerül a kijelzőre, amikor a GPU már befejezte a rajzolását. Enélkül a képernyőn néha az előző kép jelenhetett meg (a betöltőcsík visszaugrik, rángás, amikor a GPU terhelt). Az FPS-limit és a képütemezés nem változik. A következő indítástól él.")),
+            Triple(WowRuntimeTuning.EVENT_POOL, tx("Reuse Wine events (Proton r32)", "Wine-események újrahasznosítása (Proton r32)"),
+                tx("For a minute or two after login WoW creates and closes thousands of small events a second. Each one used to go through Wine's single server, and the game's main thread had to queue behind them: the picture stuttered. With this on, Proton keeps such events and reuses them, so the server is left alone. Off = exactly the previous Proton (r31) behaviour. Takes effect from the next launch.",
+                    "Belépés után egy-két percig a WoW másodpercenként több ezer kis eseményt hoz létre és zár be. Ezek eddig mind a Wine egyetlen szerverén mentek át, és a játék fő szálának sorban kellett állnia mögöttük: akadt a kép. Bekapcsolva a Proton megtartja és újrahasznosítja ezeket az eseményeket, így a szervert nem terhelik. Ki = pontosan az előző Proton (r31) működése. A következő indítástól él.")),
             Triple("xnonblock", tx("Non-blocking X11 output (experimental)", "Nem blokkoló X11 kimenet (kísérleti)"),
                 tx("Normally the display server waits while a program is not reading its answers or events, and that wait can freeze everyone else for a moment. With this on, the unread output is queued and sent when the program reads again (a program that never reads is dropped after 64 MB). Off by default: it changes the protocol output path, so if anything misbehaves, turn it off.",
                     "Alapból a megjelenítő szerver vár, amíg egy program nem olvassa a válaszait vagy eseményeit, és ez a várakozás egy pillanatra mindenki mást megállíthat. Bekapcsolva az el nem olvasott kimenet sorba kerül, és akkor megy ki, amikor a program újra olvas (a soha nem olvasó programot 64 MB után eldobja). Alapból ki van kapcsolva: a protokoll kimeneti útját érinti, ezért ha bármi hibásan működik, kapcsold ki.")),
             Triple(WowRuntimeTuning.HYBRID_GPL, tx("Hybrid keeps GPL (DX11)", "Hibrid megtartja a GPL-t (DX11)"),
-                tx("Only matters when DX11 shader compilation is set to Hybrid. Normally Hybrid compiles every missing shader in full, which can freeze the render thread for 100+ ms. With this on, Hybrid fast-links pipelines like GPL does and still skips draws only while a shader is not ready. Experimental and off by default: if the game crashes or the screen goes black, turn it off or use GPL.",
-                    "Csak akkor számít, ha a DX11 shaderfordítás Hibrid. Hibridben alapból minden hiányzó shader teljes fordítással készül, ami 100+ ms-ra megállíthatja a render szálat. Bekapcsolva a Hibrid a GPL-hez hasonlóan gyorsan összekapcsolja a pipeline-okat, és csak addig hagy ki rajzolást, amíg egy shader nem kész. Kísérleti és alapból ki van kapcsolva: ha a játék összeomlik vagy fekete a kép, kapcsold ki, vagy használj GPL-t.")),
+                tx("Only matters when DX11 shader compilation is set to Hybrid. Normally Hybrid compiles every missing shader in full, which can freeze the render thread for 100+ ms. With this on, Hybrid fast-links pipelines like GPL does and still skips draws only while a shader is not ready. On by default: if the game crashes or the screen goes black, turn it off or use GPL.",
+                    "Csak akkor számít, ha a DX11 shaderfordítás Hibrid. Hibridben alapból minden hiányzó shader teljes fordítással készül, ami 100+ ms-ra megállíthatja a render szálat. Bekapcsolva a Hibrid a GPL-hez hasonlóan gyorsan összekapcsolja a pipeline-okat, és csak addig hagy ki rajzolást, amíg egy shader nem kész. Alapból bekapcsolva: ha a játék összeomlik vagy fekete a kép, kapcsold ki, vagy használj GPL-t.")),
             Triple(WowRuntimeTuning.VEGAS_BINDSKIP, tx("DXVK bind-skip (DX11)", "DXVK bind-skip (DX11)"),
-                tx("Skips a pipeline bind when the previous draw in the same command buffer already used the same pipeline, which saves CPU work on the game's render thread. Experimental and off by default: if you see missing geometry or glitches, turn it off. It only affects DX11 (DXVK); the Quick Menu has no switch for it.",
-                    "Kihagy egy pipeline-kötést, ha az ugyanabban a parancspufferben előző rajzolás már ugyanazt a pipeline-t használta; ez CPU-munkát spórol a játék render szálán. Kísérleti és alapból ki van kapcsolva: ha hiányzó geometriát vagy hibákat látsz, kapcsold ki. Csak a DX11-et (DXVK) érinti; a Quick Menüben nincs hozzá kapcsoló.")),
+                tx("Skips a pipeline bind when the previous draw in the same command buffer already used the same pipeline, which saves CPU work on the game's render thread. On by default: if you see missing geometry or glitches, turn it off. It only affects DX11 (DXVK); the Quick Menu has no switch for it.",
+                    "Kihagy egy pipeline-kötést, ha az ugyanabban a parancspufferben előző rajzolás már ugyanazt a pipeline-t használta; ez CPU-munkát spórol a játék render szálán. Alapból bekapcsolva: ha hiányzó geometriát vagy hibákat látsz, kapcsold ki. Csak a DX11-et (DXVK) érinti; a Quick Menüben nincs hozzá kapcsoló.")),
             Triple("presentidle", tx("Safe buffer hand-back (Present, experimental)", "Biztonságos pufferátadás (Present, kísérleti)"),
-                tx("The game is told a frame buffer is free again only after the app has finished drawing it, instead of at once. This rules out the rare case where the game overwrites a buffer that is still on its way to the screen (a flash or torn frame). It does not make anything faster: if the display is late it can cost a little smoothness, so leave it off unless you see such glitches. Takes effect from the next launch.",
-                    "A játék csak azután kapja meg, hogy egy képkocka-puffer újra szabad, hogy az app végzett a kirajzolásával, nem azonnal. Ez kizárja azt a ritka esetet, amikor a játék felülír egy puffert, ami még úton van a kijelző felé (villanás vagy tört kép). Semmit nem gyorsít: ha a megjelenítés késik, picit ronthatja a simaságot, ezért csak akkor kapcsold be, ha ilyen hibákat látsz. A következő indítástól él.")),
+                tx("The game is told a frame buffer is free again only after the app has finished drawing it, instead of at once. This rules out the rare case where the game overwrites a buffer that is still on its way to the screen (a flash or torn frame). It does not make anything faster; on by default. Takes effect from the next launch.",
+                    "A játék csak azután kapja meg, hogy egy képkocka-puffer újra szabad, hogy az app végzett a kirajzolásával, nem azonnal. Ez kizárja azt a ritka esetet, amikor a játék felülír egy puffert, ami még úton van a kijelző felé (villanás vagy tört kép). Semmit nem gyorsít; alapból bekapcsolva. A következő indítástól él.")),
             Triple("priority", tx("Display thread priority", "Megjelenítő szálak prioritása"),
                 tx("Gives the app's frame-presenting threads higher priority so frames are delivered on time.",
                     "Magasabb prioritást ad az app képkocka-megjelenítő szálainak, hogy a képkockák időben kikerüljenek.")),
@@ -231,7 +216,14 @@ internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String
                 tx("Tells Android how long each frame of the compositor takes, so it can raise CPU clocks before frames run late.",
                     "Jelzi az Androidnak, mennyi ideig tart a compositor egy képkockája, hogy időben emelhesse a CPU órajelét.")))) {
             var enabled by remember(key) { mutableStateOf(WowLaunchPolicy.enabled(context, key)) }
-            val unavailable = if (dx12 && key in dx11Only) onlyDx11() else null
+            val unavailable = when (switchNeeds(key, dx12, gamescope)) {
+                SwitchNeeds.XSERVER -> xserverOnly()
+                SwitchNeeds.GAMESCOPE -> tx("Available with Gamescope. XServer uses the app's own compositor.",
+                    "Gamescope módban érhető el. Az XServer az app saját kompozitorát használja.")
+                SwitchNeeds.DX11 -> onlyDx11()
+                SwitchNeeds.DX12 -> onlyDx12()
+                null -> null
+            }
             Column(Modifier.alpha(if (unavailable != null) 0.45f else 1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                     Text(label, modifier = Modifier.weight(1f))
@@ -248,5 +240,21 @@ internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String
     }
 }
 
-/** Switches that only act on the DX11 path (DXVK / Vegas). */
+/** What an Advanced-tab switch needs to act; the switch is greyed out with the reason while the next launch lacks it. */
+internal enum class SwitchNeeds { DX11, DX12, XSERVER, GAMESCOPE }
+
+/** Null when the switch acts on the next launch with this API and display backend. */
+internal fun switchNeeds(key: String, dx12: Boolean, gamescope: Boolean): SwitchNeeds? = when {
+    gamescope && key in xserverOnlySettings -> SwitchNeeds.XSERVER
+    !gamescope && key in gamescopeOnlySettings -> SwitchNeeds.GAMESCOPE
+    dx12 && key in dx11Only -> SwitchNeeds.DX11
+    !dx12 && key in dx12Only -> SwitchNeeds.DX12
+    else -> null
+}
+
+/** Switches that only act on the DX11 path (DXVK / Vegas); 1.1.7: Low input latency is the DX11 one, DX12 has LOW_LATENCY_DX12. */
 private val dx11Only = setOf(WowRuntimeTuning.LOW_LATENCY, WowRuntimeTuning.HYBRID_GPL, WowRuntimeTuning.VEGAS_BINDSKIP)
+/** WowLaunchEnvironment applies the GPU wait only for XServer + DX12; since 1.1.7 DX12 has its own low-latency switch. */
+private val dx12Only = setOf(WowRuntimeTuning.LOW_LATENCY_DX12, WowRuntimeTuning.GAME_GPU_WAIT, WowRuntimeTuning.REPORT_DISCRETE)
+private val xserverOnlySettings = setOf("scanout", "xnonblock", "presentidle", "priority", "adpf", WowRuntimeTuning.GAME_GPU_WAIT)
+private val gamescopeOnlySettings = setOf(app.gamenative.display.GamescopeWindowPolicy.DIRECT_SCANOUT)

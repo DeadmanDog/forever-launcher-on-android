@@ -57,6 +57,19 @@ internal object WowContainerProfile {
         return true
     }
 
+    /**
+     * Once (1.0.1): a managed container still on 1.0.0's 720-high Full screen value ([previous], 1590x720 on the RedMagic 11 Pro)
+     * moves to the current Full screen value (1344x608 there, exactly half the display: sharper and 40% less GPU work). A
+     * resolution the player picked by hand is not touched. Returns true when the container changed.
+     */
+    fun moveToHalfFullscreen(container: Container, fullscreen: String?, previous: String?): Boolean {
+        if (fullscreen == null || container.getExtra("fullscreenHalfMigration") == "1") return false
+        container.putExtra("fullscreenHalfMigration", "1")
+        if (previous != null && previous != fullscreen && container.getExtra(WowDisplaySettings.MANAGED) == "1" &&
+            container.screenSize == previous) container.screenSize = fullscreen
+        return true
+    }
+
     fun prepareExistingContainer(container: Container, gamePath: String): Boolean {
 
         val drives = buildString {

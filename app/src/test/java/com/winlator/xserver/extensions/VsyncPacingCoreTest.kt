@@ -188,4 +188,20 @@ class VsyncPacingCoreTest {
         core.schedule(1, 2, false); core.onVsync(1_000_000_000L + 5_000_000_000L)      // five seconds later
         assertEquals("the default period stays", 16_666_667L, core.periodNs())
     }
+
+    @Test fun aWindowIdleForAboutFourSecondsIsForgotten() {
+        val core = VsyncPacingCore<Int>()
+        core.setLimit(60)
+        core.schedule(1, 1, false); core.schedule(2, 2, false)
+        var t = 1_000_000_000L
+        core.onVsync(t)
+        assertEquals(2, core.windowCount())
+        // window 2 goes away (destroyed), window 1 keeps presenting
+        for (i in 0 until VsyncPacingCore.FORGET_AFTER_VSYNCS + 1) {
+            core.schedule(1, 100 + i, false)
+            t += 16_666_667L
+            core.onVsync(t)
+        }
+        assertEquals(1, core.windowCount())
+    }
 }

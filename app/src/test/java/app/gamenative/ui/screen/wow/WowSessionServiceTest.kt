@@ -57,4 +57,21 @@ class WowSessionServiceTest {
         environment.onResume()
         assertFalse(paused.get())
     }
+
+    // 1.2.3 (multi-agent review): a start refused while the app was in the background was never retried; the app now starts the
+    // service when it comes back to the foreground with a game running and the service not running.
+    @Test fun aSessionWithoutItsServiceGetsItWhenTheAppReturns() {
+        val controller = Robolectric.buildService(WowSessionService::class.java).create().startCommand(0, 1)
+        assertTrue(WowSessionService.running)
+        controller.destroy()
+        assertFalse(WowSessionService.running)
+        Shadows.shadowOf(context).clearStartedServices()
+        WowSessionService.ensureRunning(context, sessionAlive = false)
+        assertEquals(null, Shadows.shadowOf(context).nextStartedService)
+        WowSessionService.ensureRunning(context, sessionAlive = true)
+        assertEquals(WowSessionService::class.java.name, Shadows.shadowOf(context).nextStartedService.component!!.className)
+        assertTrue(WowSessionService.needsStart(sessionAlive = true, serviceRunning = false))
+        assertFalse(WowSessionService.needsStart(sessionAlive = true, serviceRunning = true))
+        assertFalse(WowSessionService.needsStart(sessionAlive = false, serviceRunning = false))
+    }
 }

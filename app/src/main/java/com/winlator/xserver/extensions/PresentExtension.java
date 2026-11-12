@@ -94,25 +94,42 @@ public class PresentExtension implements Extension {
         boolean vsyncBefore = vsyncPacing && !background;
         background = value;
         if (vsyncBefore != (vsyncPacing && !background)) replacePacer();
+        else idlePacer.setFrameRateLimit(effectiveLimit());
+    }
+
+    /**
+     * Frames per second while the app is in the background: nobody sees them, but the game kept rendering at the full limit
+     * (about 6 W on the RedMagic). 15 still turns the game's main loop over often enough to keep its connection.
+     */
+    static final int BACKGROUND_FPS = 15;
+
+    int effectiveLimit() {
+        if (!background) return frameRateLimit;
+        return frameRateLimit > 0 ? Math.min(frameRateLimit, BACKGROUND_FPS) : BACKGROUND_FPS;
     }
 
     private void replacePacer() {
         IdlePacer<PendingIdle> old = idlePacer;
-        idlePacer = newIdlePacer();
-        idlePacer.setFrameRateLimit(frameRateLimit);
+        idlePacer = newConfiguredIdlePacer();
         old.releaseAllAndClose();
+    }
+
+    private IdlePacer<PendingIdle> newConfiguredIdlePacer() {
+        // Present submissions read idlePacer without this monitor. Publish it only after the cap is set.
+        IdlePacer<PendingIdle> replacement = newIdlePacer();
+        replacement.setFrameRateLimit(effectiveLimit());
+        return replacement;
     }
 
     public synchronized void setFrameRateLimit(int limit) {
         frameRateLimit = Math.max(0, limit);
-        idlePacer.setFrameRateLimit(frameRateLimit);
+        idlePacer.setFrameRateLimit(effectiveLimit());
     }
 
     /** A component may be started again with the same XServer after stopping. */
     public synchronized void resetPacing() {
         idlePacer.close();
-        idlePacer = newIdlePacer();
-        idlePacer.setFrameRateLimit(frameRateLimit);
+        idlePacer = newConfiguredIdlePacer();
     }
 
     public void close() {
@@ -177,7 +194,7 @@ public class PresentExtension implements Extension {
                 // XIDs can be destroyed and reused while the renderer held the buffer.
                 if (client.xServer.windowManager.getWindow(window.id) != window
                         || client.xServer.pixmapManager.getPixmap(pixmap.id) != pixmap) return;
-                if (frameRateLimit > 0) scheduleIdleNotify(window, pixmap, serial, idleFence, token);
+                if (effectiveLimit() > 0) scheduleIdleNotify(window, pixmap, serial, idleFence, token);
                 else sendCapturedIdleNotify(window, pixmap, serial, idleFence, token);
             }
         });
@@ -259,11 +276,35 @@ public class PresentExtension implements Extension {
                         || client.xServer.pixmapManager.getPixmap(pixmap.id) != pixmap) return;
                 if (cancelled) {
                     long ust = System.nanoTime() / 1000;
-                    sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.SKIP, ust, ust / 16666);
+                    sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.SKIP, ust, mscFor(ust));
                     sendCapturedIdleNotify(window, pixmap, serial, idleFence, idleToken);
                 } else submitPixmap(client, window, pixmap, serial, xOff, yOff, idleFence, idleToken);
             } catch (IOException ignored) { }
         });
+    }
+
+    private final Object mscLock = new Object();
+    private long mscBaseUst = -1, mscBase, mscPeriodUs, mscLastReported;
+
+    /**
+     * The MSC a CompleteNotify reports for [ustUs]: refreshes of the limit's period, counted on from where the count stood when
+     * the limit changed. Dividing the whole UST by the current period made the count fall by half when the limit went from
+     * 60 to 30 (and a cancelled Present used a 60 Hz scale whatever the limit); an MSC never goes backwards.
+     */
+    long mscFor(long ustUs) {
+        final int targetFps = this.frameRateLimit;
+        final long period = targetFps > 0 ? 1_000_000L / targetFps : 1_000_000L / 60;
+        synchronized (mscLock) {
+            if (mscBaseUst < 0) {
+                mscBaseUst = ustUs; mscBase = ustUs / period; mscPeriodUs = period;
+            } else if (period != mscPeriodUs) {
+                mscBase += Math.max(0, ustUs - mscBaseUst) / mscPeriodUs;
+                mscBaseUst = ustUs; mscPeriodUs = period;
+            }
+            long msc = Math.max(mscLastReported, mscBase + Math.max(0, ustUs - mscBaseUst) / mscPeriodUs);
+            mscLastReported = msc;
+            return msc;
+        }
     }
 
     private void submitPixmap(XClient client, Window window, Pixmap pixmap, int serial,
@@ -272,9 +313,11 @@ public class PresentExtension implements Extension {
         final XServerRenderer xr = client.xServer.getRenderer();
         final VulkanRenderer vr = (xr instanceof VulkanRenderer) ? (VulkanRenderer) xr : null;
         final int targetFps = this.frameRateLimit;
+        // The pacer's limit: in the background 15 FPS even when the player set no limit (then the foreground sends Idle at once).
+        final int pacedFps = effectiveLimit();
 
         long ust = System.nanoTime() / 1000;
-        long msc = ust / (targetFps > 0 ? (1_000_000L / targetFps) : (1_000_000L / 60));
+        long msc = mscFor(ust);
 
         // Non-GL paths bypass GL's frame callback and WindowManager draw listeners.
         // Observe request intervals only; do not change rendering, fences or pacing.
@@ -290,7 +333,7 @@ public class PresentExtension implements Extension {
                 boolean held = vr.onUpdateWindowContentDirect(window, pixmap.drawable, xOff, yOff,
                         () -> sendIdleFromRenderer(client, window, pixmap, serial, idleFence, idleToken));
                 if (!held) {
-                    if (targetFps > 0) scheduleIdleNotify(window, pixmap, serial, idleFence, idleToken);
+                    if (pacedFps > 0) scheduleIdleNotify(window, pixmap, serial, idleFence, idleToken);
                     else sendCapturedIdleNotify(window, pixmap, serial, idleFence, idleToken);
                 }
             } else {
@@ -298,7 +341,7 @@ public class PresentExtension implements Extension {
                 content.copyArea((short)0, (short)0, xOff, yOff,
                         pixmap.drawable.width, pixmap.drawable.height, pixmap.drawable);
                 sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
-                if (targetFps > 0) scheduleIdleNotify(window, pixmap, serial, idleFence, idleToken);
+                if (pacedFps > 0) scheduleIdleNotify(window, pixmap, serial, idleFence, idleToken);
                 else sendCapturedIdleNotify(window, pixmap, serial, idleFence, idleToken);
             }
         }

@@ -135,3 +135,13 @@ unofficial launcher and is not affiliated with or endorsed by Blizzard. The app 
 our own artwork. No Blizzard game files are part of this repository or its
 releases; the app downloads the Windows ARM64 client from Blizzard's CDN for the
 user's own installation.
+
+Optional Gamescope display backend (experimental, code1027):
+- GameNative Android integration: https://github.com/utkarshdalal/GameNative commit 44e92bc98aa66d3ce29abf4b6f22c69029c1cccb (GPL-3.0 repository). GamescopeInputSink adapted from this tree.
+- Android JNI bridge libgamenative_drm.so: exact prebuilt distributed in that source tree; SHA256 08d6276c268ed9ff169a0cc76f059bf7e30dec2288f13617bfa64c6f4ff407f6.
+- Gamescope Android port: https://github.com/GameNative/gamescope commit 0cb97886e9ab4b0aea8255f9a07ba92fafdaa44b (upstream BSD-2-Clause; see upstream notices for dependencies).
+- Runtime payload gamescope-gamenative-20261105.4.tzst: https://downloads.gamenative.app/gamescope-gamenative-20261105.4.tzst, SHA256 9dd8593ba78753ef2d0ced049ed77eef8c7e1904af14c60b89eb3aae1415a34f. Includes Xwayland, Mesa/Zink and supporting libraries distributed by GameNative; their upstream licenses remain applicable. This is a pinned binary payload, not a claim that all native components were rebuilt here.
+- The wow-dd1 payload replaces only bin/gamescope with an Android NDK build of that Gamescope base and the two patches in third_party/gamescope-patches. DroidDeck source reference: https://github.com/Droid-Deck/DroidDeck/tree/aba55031c331cd0991c3d36788fb903a3ca30e78.
+- DroidDeck CAS and color shader adaptation: app/src/main/assets/gamescope-effects/DroidDeckPicture.fx (GPL-3.0). Preset values and shader provenance are recorded in that asset and in docs/GAMESCOPE_DROIDDECK_CODE1042.md.
+
+Gamescope XRandR client: libXrandr1.5.5 (Termux aarch64), X.Org/Compaq/HP/Intel/RedHat contributors. Permission notices reproduced in app/src/main/assets/licenses/gamescope-libXrandr.txt. Source/provenance: SOURCES.md.

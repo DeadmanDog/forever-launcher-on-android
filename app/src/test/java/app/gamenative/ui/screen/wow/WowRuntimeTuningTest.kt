@@ -1,5 +1,6 @@
 package app.gamenative.ui.screen.wow
 
+import app.gamenative.display.WowDisplayBackend
 import com.winlator.container.Container
 import com.winlator.core.envvars.EnvVars
 import org.junit.Assert.*
@@ -8,6 +9,88 @@ import org.junit.Test
 @org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
 @org.robolectric.annotation.Config(application = android.app.Application::class, sdk = [29])
 class WowRuntimeTuningTest {
+    @org.robolectric.annotation.Config(sdk = [34])
+    @Test fun gamescopeFifoIsCappedByGamescopesVblankLimiterWithoutAGameSideTimer() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val container = Container("wow_forever").apply {
+            putExtra(WowDisplayBackend.KEY, WowDisplayBackend.GAMESCOPE)
+            putExtra(WowVkd3dComponents.API_KEY, WowVkd3dComponents.DX12)
+            graphicsDriverConfig = "presentMode=immediate"
+        }
+        val env = EnvVars().apply { put("MESA_VK_WSI_PRESENT_MODE", "immediate") }
+        assertFalse(WowRuntimeTuning.appPacing(context, container))
+        WowRuntimeTuning.apply(context, container, env)
+        assertEquals("fifo", env.get("MESA_VK_WSI_PRESENT_MODE"))
+        // The shim does not gate FIFO ("gate=off"): Gamescope's limiter is the cap, so no VKD3D timer on top (1.0.3 stacked both).
+        assertFalse(env.has("VKD3D_FRAME_RATE"))
+        assertEquals(0, WowRuntimeTuning.apiLimitAtLaunch)
+        assertEquals("60", WowRuntimeTuning.preview(context, container).fps)
+
+        container.putExtra(WowDisplayBackend.KEY, WowDisplayBackend.XSERVER)
+        val xserver = EnvVars()
+        WowRuntimeTuning.apply(context, container, xserver)
+        assertFalse(xserver.has("VKD3D_FRAME_RATE"))
+    }
+
+    @org.robolectric.annotation.Config(sdk = [34])
+    @Test fun gamescopeDxvkCapsHigherOverridesAndKeepsUnrelatedConfig() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val saved = "dxvk.maxFrameRate=90;dxgi.maxFrameLatency=2"
+        val container = Container("wow_forever").apply {
+            dxWrapper = WowBundledComponents.DXVK_ID
+            putExtra(WowDisplayBackend.KEY, WowDisplayBackend.GAMESCOPE)
+            envVars = EnvVars().apply {
+                put("MESA_VK_WSI_PRESENT_MODE", "immediate")
+                put("DXVK_CONFIG", saved)
+                put("DXVK_FRAME_RATE", 120)
+            }.toString()
+        }
+        val env = EnvVars(container.envVars)
+        repeat(2) { WowRuntimeTuning.apply(context, container, env) }
+        assertEquals("$saved;dxvk.maxFrameRate=60", env.get("DXVK_CONFIG"))
+        assertFalse(env.has("DXVK_FRAME_RATE"))
+        assertEquals(saved, EnvVars(container.envVars).get("DXVK_CONFIG"))
+        assertEquals("60", WowRuntimeTuning.preview(context, container).fps)
+        assertEquals("immediate", env.get("MESA_VK_WSI_PRESENT_MODE"))
+    }
+
+    @org.robolectric.annotation.Config(sdk = [34])
+    @Test fun gamescopeRetainsALowerExplicitCapAndOffAddsNoCap() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val container = Container("wow_forever").apply {
+            putExtra(WowDisplayBackend.KEY, WowDisplayBackend.GAMESCOPE)
+            putExtra(WowVkd3dComponents.API_KEY, WowVkd3dComponents.DX12)
+            envVars = "VKD3D_FRAME_RATE=48"
+        }
+        val env = EnvVars(container.envVars)
+        WowRuntimeTuning.apply(context, container, env)
+        assertEquals("48", env.get("VKD3D_FRAME_RATE"))
+        container.envVars = ""
+        container.putExtra("fpsLimiterEnabled", false)
+        val disabled = EnvVars()
+        WowRuntimeTuning.apply(context, container, disabled)
+        assertFalse(disabled.has("VKD3D_FRAME_RATE"))
+        assertEquals(0, WowRuntimeTuning.apiLimitAtLaunch)
+    }
+
+    @org.robolectric.annotation.Config(sdk = [34])
+    @Test fun gamescopeDx11FifoLeavesOtherDxvkSettingsAndFallsBackWithoutProxy() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        val container = Container("wow_forever").apply {
+            dxWrapper = WowBundledComponents.DXVK_ID
+            putExtra(WowDisplayBackend.KEY, WowDisplayBackend.GAMESCOPE)
+            envVars = "DXVK_CONFIG=dxgi.maxFrameLatency=2"
+        }
+        val env = EnvVars(container.envVars)
+        WowRuntimeTuning.apply(context, container, env)
+        assertEquals("dxgi.maxFrameLatency=2", env.get("DXVK_CONFIG"))
+        assertFalse(env.has("DXVK_FRAME_RATE"))
+        container.envVars += " GN_VKSHIM_NO_PROXY=1"
+        val withoutProxy = EnvVars(container.envVars)
+        WowRuntimeTuning.apply(context, container, withoutProxy)
+        assertEquals("60", WowRuntimeTuning.configFrameRate(withoutProxy.get("DXVK_CONFIG"), true))
+    }
+
     @Test fun dx11LimiterMergesWithoutLosingConfig() {
         val env = EnvVars().apply { put("DXVK_CONFIG", "dxgi.maxDeviceMemory=2048;dxvk.enableAsync=True") }
         WowRuntimeTuning.applyLimiter(env, false, 60)
@@ -67,7 +150,8 @@ class WowRuntimeTuningTest {
         val saved = EnvVars("VKD3D_SWAPCHAIN_IMAGES=4 OTHER=keep")
         val launch = EnvVars(saved.toString())
         WowRuntimeTuning.applyChoices(launch, saved, true, mapOf("images" to "2", "latency" to "1", "present" to "mailbox", "async" to "2"))
-        assertEquals("4", launch.get("VKD3D_SWAPCHAIN_IMAGES")); assertEquals("1", launch.get("VKD3D_SWAPCHAIN_LATENCY_FRAMES"))
+        // 1.1.7: "latency" is no choice any more (the DX12 low-latency switch sets it, see Review6LatencyTest).
+        assertEquals("4", launch.get("VKD3D_SWAPCHAIN_IMAGES")); assertFalse(launch.has("VKD3D_SWAPCHAIN_LATENCY_FRAMES"))
         assertEquals("mailbox", launch.get("MESA_VK_WSI_PRESENT_MODE")); assertFalse(launch.has("DXVK_ASYNC"))
         assertFalse(saved.has("VKD3D_SWAPCHAIN_LATENCY_FRAMES"))
     }
@@ -161,7 +245,7 @@ class WowRuntimeTuningTest {
         val context = org.robolectric.RuntimeEnvironment.getApplication()
         val prefs = context.getSharedPreferences(WowLaunchPolicy.PREFS, 0)
         prefs.edit().clear().commit()
-        assertTrue(WowRuntimeTuning.asyncIsDefault(context)); assertEquals("0", WowRuntimeTuning.selected(context, "async"))
+        assertTrue(WowRuntimeTuning.asyncIsDefault(context)); assertEquals("2", WowRuntimeTuning.selected(context, "async")) // 1.0.1 code1046: Hybrid
         prefs.edit().putString("async", "").commit() // the old "container setting" choice kept DXVK_ASYNC=1: it reads as Async
         assertFalse(WowRuntimeTuning.asyncIsDefault(context)); assertEquals("1", WowRuntimeTuning.selected(context, "async"))
         prefs.edit().putString("async", "0").commit()

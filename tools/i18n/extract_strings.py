@@ -152,13 +152,10 @@ def main():
             entries.setdefault(en, {"hu": hu, "files": set()})["files"].add(path.name)
     data = {en: {"hu": v["hu"], "files": sorted(v["files"])} for en, v in sorted(entries.items())}
     # The release tree (tools/prepare_forever_release.py) relabels the pacing defaults; its texts need translations too.
-    release = [("App, vsync-locked (recommended): the app releases", "App, vsync-locked: the app releases"),
-               ("App, vsync + phase (experimental): like vsync-locked", "App, vsync + phase (default): like vsync-locked"),
-               ("Only with FIFO. Smooth (default): frames", "Only with FIFO. Smooth: frames"),
-               ("Lower (experimental): after a hitch", "Lower (default): after a hitch"),
-               ("App, vsync-locked (recommended)", "App, vsync-locked"),
-               ("App, vsync + phase (experimental)", "App, vsync + phase (default)"),
-               ("Smooth (default)", "Smooth"), ("Lower (experimental)", "Lower (default)")]
+    # 1.3.2: the pacing choice has one app mode, so only the FIFO latency relabels remain.
+    release = [("Only with FIFO. Smooth (default): frames", "Only with FIFO. Smooth: frames"),
+               ("Lowest (experimental): also tries", "Lowest (default): also tries"),
+               ("Smooth (default)", "Smooth"), ("Lowest (experimental)", "Lowest (default)")]
     for en in list(data):
         variant = en
         for old, new in release:

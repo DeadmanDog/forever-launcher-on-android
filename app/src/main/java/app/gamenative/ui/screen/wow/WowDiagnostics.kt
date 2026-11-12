@@ -23,6 +23,8 @@ internal object WowDiagnostics {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("enabled", false)
 
     @Volatile private var sampler: DiagnosticSampler? = null
+    /** The game folder of the running session, for [copyGameLogs] at its end. */
+    @Volatile private var gameRoot: File? = null
     @JvmStatic fun detailed(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("detailed", false)
 
@@ -36,6 +38,46 @@ internal object WowDiagnostics {
     fun saveAudioDebug(context: Context, value: Boolean, active: () -> Boolean) {
         check(!active()) { "Stop the game before changing diagnostic logging." }
         check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("audio_debug", value).commit())
+    }
+
+    /**
+     * GPU profile (TurnRIP 1.1.30+): the driver records what the game asks of it (render passes in GMEM or sysmem, binning,
+     * loads/stores, resolves, blits, clears, compute) for 2 frames every [GPU_PROFILE_SAMPLE_MS] into [GPU_TRACE_FILE] of the
+     * session. Only active with diagnostic logging on.
+     */
+    @JvmStatic fun gpuProfile(context: Context): Boolean =
+        enabled(context) && context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("gpu_profile", false)
+
+    fun gpuProfileSaved(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("gpu_profile", false)
+
+    fun saveGpuProfile(context: Context, value: Boolean, active: () -> Boolean) {
+        check(!active()) { "Stop the game before changing diagnostic logging." }
+        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("gpu_profile", value).commit())
+    }
+
+    const val GPU_TRACE_FILE = "turnrip-gpu-trace.csv"
+    /** One 2-frame sample every 10 s keeps a 15-minute session well under the export's per-file cap. */
+    const val GPU_PROFILE_SAMPLE_MS = 10_000
+
+    const val SHADER_STATS_DIR = "turnrip-shaders"
+
+    /**
+     * TurnRIP 1.1.35: with diagnostic logging the driver writes each compute shader once (statistics + disassembly) into the
+     * session, for the DX11/DX12 compute comparison. A value typed into Environment Variables wins.
+     */
+    fun applyShaderStats(env: EnvVars, session: File) {
+        if (env.has("TU_SHADER_STATS_DIR")) return
+        val dir = File(session, SHADER_STATS_DIR)
+        if (dir.isDirectory || dir.mkdirs()) env.put("TU_SHADER_STATS_DIR", dir.absolutePath)
+    }
+
+    /** Values typed into Environment Variables win; with the profile off nothing is added (the driver then traces nothing). */
+    fun applyGpuProfile(env: EnvVars, session: File, on: Boolean) {
+        if (!on) return
+        if (!env.has("MESA_GPU_TRACES")) env.put("MESA_GPU_TRACES", "print_csv")
+        if (!env.has("MESA_GPU_TRACEFILE")) env.put("MESA_GPU_TRACEFILE", File(session, GPU_TRACE_FILE).absolutePath)
+        if (!env.has("TU_PROFILE_SAMPLE_MS")) env.put("TU_PROFILE_SAMPLE_MS", GPU_PROFILE_SAMPLE_MS.toString())
     }
 
     fun saveDetailed(context: Context, value: Boolean, active: () -> Boolean) {
@@ -58,6 +100,11 @@ internal object WowDiagnostics {
     @JvmStatic fun rendererFrame() {
         val active=sampler ?: return
         active.frames.frame(SystemClock.elapsedRealtimeNanos())
+    }
+    /** A frame the Gamescope session produced (the game's own acquire, from the bridge's producer reports). */
+    @JvmStatic fun gamescopeFrame() {
+        val active=sampler ?: return
+        active.frames.frame(SystemClock.elapsedRealtimeNanos(), DiagnosticFrames.Source.GAMESCOPE_PRODUCED)
     }
     @JvmStatic fun presentFrame() {
         val active=sampler ?: return
@@ -87,6 +134,35 @@ internal object WowDiagnostics {
         if (session != active.directory) return
         sampler=null
         active.close()
+        runCatching { copyGameLogs(gameRoot, active.directory) }
+    }
+
+    /** Config.wtf keys that describe graphics (no account, character or realm names). */
+    private val graphicsKey = Regex("^(gx.*|.*render.*|resample.*|graphics.*|raidgraphics.*|msaa.*|.*shadow.*|.*sharpen.*|ffx.*|vsync.*|maxfps.*|lowlatency.*)$", RegexOption.IGNORE_CASE)
+
+    /**
+     * 1.1.6: WoW's own graphics log (Logs/gx.log: the adapter, video memory and feature checks it made) and the graphics lines of
+     * Config.wtf go into the session folder at its end, so a game-side limit (DX12 render scale capped at 100%) can be read from
+     * the diagnostics. At most the last 1 MiB of gx.log.
+     */
+    internal fun copyGameLogs(root: File?, session: File) {
+        if (root == null || !session.isDirectory) return
+        val flavor = File(root, WowClientDownloader.FLAVOR_DIR)
+        listOf(File(flavor, "Logs/gx.log"), File(root, "Logs/gx.log")).firstOrNull { it.isFile }?.let { log ->
+            java.io.RandomAccessFile(log, "r").use { raf ->
+                val keep = minOf(raf.length(), 1L shl 20)
+                raf.seek(raf.length() - keep)
+                val bytes = ByteArray(keep.toInt()); raf.readFully(bytes)
+                File(session, "wow-gx.log").writeBytes(bytes)
+            }
+        }
+        val config = File(flavor, "WTF/Config.wtf")
+        if (config.isFile) {
+            val setting = Regex("^\\s*SET\\s+(\\S+)\\s.*$", RegexOption.IGNORE_CASE)
+            val lines = config.readLines().filter { line -> setting.matchEntire(line)?.groupValues?.get(1)?.let(graphicsKey::matches) == true }
+            File(session, "wow-config-graphics.txt").writeText(lines.joinToString("\n", postfix = "\n"))
+        }
+        File(flavor, "WTF/${WowGameConfig.RENDER_SCALE_MEMORY}").takeIf { it.isFile }?.copyTo(File(session, "wow-renderscale.txt"), true)
     }
 
     fun save(context: Context, value: Boolean, active: () -> Boolean) {
@@ -130,34 +206,43 @@ internal object WowDiagnostics {
         if (container.id != WowContainerProfile.CONTAINER_ID || !enabled(context)) return null
         return try {
             val session = newSession(directory(context), retention(context))
+            gameRoot = runCatching { File(GamePath.load(context)) }.getOrNull()
             redirectDefaultStats(env, session)
+            applyGpuProfile(env, session, gpuProfile(context))
+            applyShaderStats(env, session)
             File(session, "stdout.log").createNewFile()
             File(session, "stderr.log").createNewFile()
             File(session, "session.txt").writeText(
                 "Wine/DXVK diagnostic log; 2 MiB per file with one previous file per output stream.\n" +
                 "Started wall_ms: ${System.currentTimeMillis()} elapsed_ms: ${SystemClock.elapsedRealtime()}\nDetailed: ${detailed(context)}\nAudio debug: ${audioDebug(context)}\nAndroid version: ${android.os.Build.VERSION.RELEASE}\nAPK: ${app.gamenative.BuildConfig.VERSION_NAME} (${app.gamenative.BuildConfig.VERSION_CODE})\nWine: ${container.wineVersion}\nDXVK: ${container.dxWrapper}\n" +
+                "Display backend: ${container.getExtra(app.gamenative.display.WowDisplayBackend.KEY, app.gamenative.display.WowDisplayBackend.XSERVER)}\nGamescope payload: ${if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) app.gamenative.display.WowGamescopePayload.ARCHIVE else "off"}\n" +
                 "Driver: ${container.graphicsDriverVersion}\nRenderer: ${container.displayRenderer}\nVirtual display: ${container.screenSize}\n" +
                 "Graphics API: ${WowVkd3dComponents.api(container)}\nVKD3D: ${container.getExtra(WowVkd3dComponents.PROFILE_KEY).ifBlank { "none" }}\n" +
                 "Stats files: TU_STATS_FILE=${env.get("TU_STATS_FILE").ifBlank { "off" }} WINE_REQ_STATS=${env.get("WINE_REQ_STATS").ifBlank { "off" }}\n" +
                 "Frame source: GL renderer callback or non-GL X Present request; see performance.csv frame_source. Not GPU timestamps.\n" +
-                "Present mode: ${env.get("MESA_VK_WSI_PRESENT_MODE")}\n" +
+                "Present mode: ${env.get("MESA_VK_WSI_PRESENT_MODE")} (game swapchain; the compositor: ${WowRuntimeTuning.presentMode(context, container)}), MESA_VK_WSI_DEBUG: ${env.get("MESA_VK_WSI_DEBUG").ifBlank { "none" }}\n" +
                 "WINENTSYNC: ${env.get("WINENTSYNC")}\n" +
                 "NTSYNC_WAKE_HANDOFF: ${env.get("NTSYNC_WAKE_HANDOFF").ifBlank { "0 (default)" }}\n" +
-                "Low input latency (DX11 frame latency 1): ${WowLaunchPolicy.enabled(context, WowRuntimeTuning.LOW_LATENCY)}\nScanout: ${WowLaunchPolicy.enabled(context, "scanout")}\nExec shim: libwowexec (own)\nDisplay priority: ${WowLaunchPolicy.enabled(context, "priority")}\nADPF compositor: ${WowLaunchPolicy.enabled(context, "adpf")}\n" +
+                "Low input latency: DX11 (frame latency 1) ${WowLaunchPolicy.enabled(context, WowRuntimeTuning.LOW_LATENCY)}, DX12 (swapchain latency 1) ${WowLaunchPolicy.enabled(context, WowRuntimeTuning.LOW_LATENCY_DX12)}\nScanout: ${WowLaunchPolicy.enabled(context, "scanout")}\nExec shim: libwowexec (own)\nDisplay priority: ${WowLaunchPolicy.enabled(context, "priority")}\nADPF compositor: ${WowLaunchPolicy.enabled(context, "adpf")}\n" +
                 "TU_DEBUG: ${env.get("TU_DEBUG")}\n" +
-                "Frame pacing: ${if (!WowRuntimeTuning.appPacing(context, container)) "DXVK/VKD3D API limiter" else if (WowRuntimeTuning.phaseAlign(context)) "app Present limiter (vsync-locked, phase-aligned)" else if (WowRuntimeTuning.vsyncPacing(context)) "app Present limiter (vsync-locked)" else "app Present limiter (timer)"}\n" +
-                "Active limiter: ${WowRuntimeTuning.effectiveLimiter(container, env)}\n" +
+                "Frame pacing: ${if (WowRuntimeTuning.gamescopeOwnsFifoPacing(context, container)) "Gamescope FIFO vblank limiter" else if (!WowRuntimeTuning.appPacing(context, container)) "DXVK/VKD3D API limiter" else if (WowRuntimeTuning.phaseAlign(context)) "app Present limiter (vsync-locked, phase-aligned)" else if (WowRuntimeTuning.vsyncPacing(context)) "app Present limiter (vsync-locked)" else "app Present limiter (timer)"}\n" +
+                "Active limiter: ${WowRuntimeTuning.effectiveLimiter(context, container, env)}\n" +
                 "FIFO latency: ${when (WowRuntimeTuning.fifoDrainMode(context)) { 1 -> "lower, one step (drain on)"; 2 -> "lowest, probing (drain on)"; else -> "smooth (drain off)" }}\n" +
                 "Swapchain latency: ${env.get("VKD3D_SWAPCHAIN_LATENCY_FRAMES").ifBlank { "driver default" }}\nSwapchain images: ${env.get("VKD3D_SWAPCHAIN_IMAGES").ifBlank { "driver default" }}\nDXVK_ASYNC: ${env.get("DXVK_ASYNC")}\n" +
                 "GPU power (TU_KGSL_PWR_MAX): ${env.get("TU_KGSL_PWR_MAX").ifBlank { "driver default" }}\n" +
                 "GPU sysfs sources: ${app.gamenative.ui.widget.HardwareClockSampler.probe()}\n" +
                 "GPU floor (TU_KGSL_GPU_FLOOR): ${env.get("TU_KGSL_GPU_FLOOR").ifBlank { "off" }}\n" +
                 "CPU ADPF (TU_ADPF / TU_ADPF_TARGET_FPS): ${env.get("TU_ADPF").ifBlank { "driver default (on, in the game process)" }} / ${env.get("TU_ADPF_TARGET_FPS").ifBlank { "60" }}\n" +
-                "GPU wait boost (TU_KGSL_WAITBOOST): ${env.get("TU_KGSL_WAITBOOST").ifBlank { "driver default (on without PWR_MAX, TurnRIP 1.0.9+)" }}, frame tagging (TU_KGSL_EOF): ${env.get("TU_KGSL_EOF").ifBlank { "driver default" }}\n" +
+                "GPU wait boost (TU_KGSL_WAITBOOST): ${env.get("TU_KGSL_WAITBOOST").ifBlank { "driver default (on without PWR_MAX, TurnRIP 1.0.9+)" }}, frame tagging (TU_KGSL_EOF): ${env.get("TU_KGSL_EOF").ifBlank { "driver default" }}, present thread steers (TU_KGSL_WAITBOOST_PRESENT_STEERS): ${env.get("TU_KGSL_WAITBOOST_PRESENT_STEERS").ifBlank { "off" }}, VKD3D waits steer (TU_KGSL_WAITBOOST_VKD3D_STEERS): ${env.get("TU_KGSL_WAITBOOST_VKD3D_STEERS").ifBlank { "off" }}, frame-time steering (TU_KGSL_WAITBOOST_FRAME_STEER): ${env.get("TU_KGSL_WAITBOOST_FRAME_STEER").ifBlank { "off" }}\n" +
+                "GPU profile (TurnRIP u_trace sampling): ${if (env.has("MESA_GPU_TRACES")) "${env.get("MESA_GPU_TRACES")}, ${env.get("TU_PROFILE_SAMPLE_MS").let { if (it.isBlank()) "every frame" else "2 frames every $it ms" }} -> ${env.get("MESA_GPU_TRACEFILE").ifBlank { "stdout" }.substringAfterLast('/')}" else "off"}\n" +
+                "Shader statistics (TU_SHADER_STATS_DIR): ${env.get("TU_SHADER_STATS_DIR").ifBlank { "off" }.substringAfterLast('/')}\n" +
+                "DX12 dedicated GPU report (VKD3D_REPORT_DISCRETE): ${env.get("VKD3D_REPORT_DISCRETE").ifBlank { "off" }}\n" +
                 "CPU identity: WINE_CPU_NAME='${env.get("WINE_CPU_NAME")}' WINE_CPU_VENDOR='${env.get("WINE_CPU_VENDOR")}' WINE_CPU_EFFICIENCY='${env.get("WINE_CPU_EFFICIENCY")}'\n" +
                 "CPU cores (sysfs capacity / max kHz): ${coreSysfs()}\n" +
                 "GPU identity: DXVK_VEGAS_PERSONA='${env.get("DXVK_VEGAS_PERSONA")}' DXVK_CONFIG='${env.get("DXVK_CONFIG")}'\n" +
                 "Non-blocking X11 output (xnonblock): ${if (WowLaunchPolicy.enabled(context, "xnonblock")) "on" else "off"}\n" +
+                "Gamescope direct scanout: ${if (WowLaunchPolicy.enabled(context, app.gamenative.display.GamescopeWindowPolicy.DIRECT_SCANOUT)) "on (no --force-composition)" else "off"}\n" +
+                "Event reuse (WINE_EVENT_POOL): ${if (WowLaunchPolicy.enabled(context, WowRuntimeTuning.EVENT_POOL)) "on" else "off (0)"}\n" +
                 "Base prefix fallback: ${com.winlator.container.BasePrefix.fallbackNotice() ?: "none"}\n" +
                 "Safe Present buffer hand-back (presentidle): ${if (WowLaunchPolicy.enabled(context, "presentidle")) "on" else "off"}\n" +
                 "Hybrid GPL (DXVK_HYBRID_GPL): ${env.get("DXVK_HYBRID_GPL").ifBlank { "off" }}, DX11 mode (DXVK_ASYNC): ${env.get("DXVK_ASYNC").ifBlank { "unset" }}\n" +

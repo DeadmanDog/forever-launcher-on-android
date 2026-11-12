@@ -25,7 +25,11 @@ final class VsyncPacingCore<T> {
     private static final class WindowState<T> {
         final ArrayDeque<T> pending = new ArrayDeque<>();
         double budget = 1.0;
+        int idleVsyncs;
     }
+    /** A window with nothing pending for this many refreshes (about 4 s at 60 Hz) is forgotten: destroyed windows and reused XIDs
+     *  no longer pile up in the map that every vsync walks. A window that comes back starts over, as after any idle stretch. */
+    static final int FORGET_AFTER_VSYNCS = 240;
 
     private final Map<Integer, WindowState<T>> windows = new HashMap<>();
     private final long[] deltas = new long[PERIOD_SAMPLES];
@@ -33,11 +37,12 @@ final class VsyncPacingCore<T> {
     private int deltaIndex;
     private long periodNs = DEFAULT_PERIOD_NS;
     private long lastFrameNs;
-    /** The vsync source stopped (see [idle]): the next callback is the first of a new run, not "elapsed" refreshes. */
+    /** The vsync source stopped, so the gap to the next callback can contain unobserved refreshes. */
     private boolean afterIdle;
     private int limit;
 
     int limit() { return limit; }
+    int windowCount() { return windows.size(); }
     long periodNs() { return periodNs; }
 
     /** Changing the limit releases everything held under the old one (returned to the caller). */
@@ -77,8 +82,11 @@ final class VsyncPacingCore<T> {
             // The period is learned across an empty queue too: a game that has just one buffer ready per refresh makes the queue empty after
             // every release, and forgetting the previous callback each time meant a faster panel (120 Hz) was never measured and kept
             // the 60 Hz default, which released a buffer on EVERY refresh - the limit did nothing.
-            if (delta <= MAX_LEARN_GAP_NS) learnPeriod(delta);
-            if (!afterIdle) elapsed = (int) Math.max(1, Math.min(8, Math.round((double) delta / periodNs)));
+            if (delta <= MAX_LEARN_GAP_NS && !isIdleGap(delta)) learnPeriod(delta);
+            // Also after an idle stretch: the refreshes that passed while the callback was off count (capped by the budget cap
+            // below, so a stretch never turns into a burst). Counting it as one refresh made a limit below the refresh rate
+            // (30 on 60 Hz, 60 on 120 Hz) hold every buffer that came to an empty queue for two refreshes instead of one.
+            elapsed = (int) Math.max(1, Math.min(8, Math.round((double) delta / periodNs)));
         }
         afterIdle = false;
         lastFrameNs = frameTimeNs;
@@ -88,11 +96,20 @@ final class VsyncPacingCore<T> {
             return released;
         }
         double perVsync = perVsync();
-        // At or above the refresh rate: perVsync buffers per refresh, never more. Below it the
-        // fraction carries over (45 FPS on 60 Hz = three of four refreshes), but schedule() drops
-        // what a window saved while it had nothing pending, so an idle window never bursts.
-        double cap = perVsync >= 1.0 ? perVsync : 1.0 + perVsync;
-        for (WindowState<T> state : windows.values()) {
+        // At or above the refresh rate, cap the number of releases per refresh. An exact
+        // refresh divisor (such as 60 FPS on 120 Hz) must also drop surplus credit after a late
+        // callback, or it can release again on the very next refresh. Other fractional rates
+        // carry their credit forward to preserve patterns such as 45 FPS on 60 Hz.
+        double refreshesPerRelease = Math.rint(1.0 / perVsync);
+        boolean exactDivisor = refreshesPerRelease > 1.0 && perVsync == 1.0 / refreshesPerRelease;
+        double cap = perVsync >= 1.0 || exactDivisor ? Math.max(1.0, perVsync) : 1.0 + perVsync;
+        for (java.util.Iterator<WindowState<T>> it = windows.values().iterator(); it.hasNext(); ) {
+            WindowState<T> state = it.next();
+            if (state.pending.isEmpty()) {
+                if ((state.idleVsyncs += elapsed) >= FORGET_AFTER_VSYNCS) { it.remove(); continue; }
+            } else {
+                state.idleVsyncs = 0;
+            }
             state.budget = Math.min(cap, state.budget + perVsync * elapsed);
             while (state.budget >= 1.0 - 1e-6 && !state.pending.isEmpty()) {
                 released.add(state.pending.poll());
@@ -118,7 +135,7 @@ final class VsyncPacingCore<T> {
         return perVsync;
     }
 
-    /** The vsync source stopped (nothing pending); the next first vsync is not a skip. The last timestamp is kept for learning the period. */
+    /** The vsync source stopped (nothing pending). Keep the timestamp to count elapsed refreshes. */
     void idle() { afterIdle = true; }
 
     List<T> releaseAll() {
@@ -132,6 +149,14 @@ final class VsyncPacingCore<T> {
     }
 
     void clear() { windows.clear(); }
+
+    private boolean isIdleGap(long delta) {
+        if (!afterIdle || delta < periodNs + periodNs / 2) return false;
+        // Whole multiples of the known period can come from callbacks we did not request.
+        // They count towards the release budget but must not teach us a slower panel rate.
+        long nearestMultiple = (delta + periodNs / 2) / periodNs * periodNs;
+        return Math.abs(delta - nearestMultiple) <= nearestMultiple / 50;
+    }
 
     /** Vsync timestamps arrive in whole refreshes; the smallest recent delta is the panel period. */
     private void learnPeriod(long delta) {

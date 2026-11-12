@@ -1,0 +1,28 @@
+{"data":[
+ {"id":1001,"name":"Questie","summary":"Quest helper","downloadCount":5000000.0,
+  "links":{"websiteUrl":"https://www.curseforge.com/wow/addons/questie"},
+  "logo":{"thumbnailUrl":"https://media.forgecdn.net/avatars/thumbnails/1/questie.png","url":"https://media.forgecdn.net/avatars/1/questie.png"},
+  "authors":[{"name":"Aero"}],"categories":[{"name":"Quests & Leveling"}],
+  "screenshots":[{"url":"https://media.forgecdn.net/attachments/1/shot.png"}],
+  "latestFiles":[
+   {"id":7001,"displayName":"v11.0-forever","fileName":"Questie-v11.0-forever.zip","releaseType":1,
+    "downloadUrl":"{{BASE}}/files/7001/Questie-v11.0-forever.zip","gameVersions":["1.60.1"],
+    "dependencies":[{"modId":2002,"relationType":3},{"modId":2003,"relationType":2}]},
+   {"id":7005,"displayName":"v11.1-alpha-forever","fileName":"Questie-v11.1-alpha.zip","releaseType":3,
+    "downloadUrl":"{{BASE}}/files/7005/Questie-v11.1-alpha.zip","gameVersions":["1.60.1"]},
+   {"id":6990,"displayName":"v11.0-classic","fileName":"Questie-v11.0-classic.zip","releaseType":1,
+    "downloadUrl":"{{BASE}}/files/6990/Questie-v11.0-classic.zip","gameVersions":["1.15.7"]},
+   {"id":7002,"displayName":"v11.0-retail","fileName":"Questie-v11.0.zip","releaseType":1,
+    "downloadUrl":"{{BASE}}/files/7002/Questie-v11.0.zip","gameVersions":["11.2.5"]}],
+  "latestFilesIndexes":[{"gameVersion":"1.60.1","fileId":7001,"filename":"Questie-v11.0-forever.zip","releaseType":1}]},
+ {"id":1002,"name":"NoShare","summary":"Author disabled third-party downloads","downloadCount":1000.0,
+  "links":{"websiteUrl":"https://www.curseforge.com/wow/addons/noshare"},
+  "latestFiles":[{"id":8001,"displayName":"1.0","fileName":"NoShare-1.0.zip","releaseType":1,"downloadUrl":null,"gameVersions":["1.60.0"]}]},
+ {"id":1003,"name":"IndexOnly","summary":"Forever file only in the index","downloadCount":2000.0,
+  "latestFiles":[{"id":9001,"displayName":"2.0","fileName":"IndexOnly-2.0.zip","releaseType":1,
+    "downloadUrl":"{{BASE}}/files/9001/IndexOnly-2.0.zip","gameVersions":["11.2.5"]}],
+  "latestFilesIndexes":[{"gameVersion":"1.60.1","fileId":9002,"filename":"IndexOnly-2.0-forever.zip","releaseType":1}]},
+ {"id":1004,"name":"RetailOnly","summary":"No Forever or Classic file","downloadCount":9000.0,
+  "latestFiles":[{"id":9100,"displayName":"3.0","fileName":"RetailOnly.zip","releaseType":1,
+    "downloadUrl":"{{BASE}}/files/9100/RetailOnly.zip","gameVersions":["11.2.5"]}]}
+]}

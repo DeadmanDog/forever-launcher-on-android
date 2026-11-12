@@ -73,3 +73,11 @@ base, our changes and the build steps. `tools/package_runtime_sources.py` makes 
 - `libwowexec.so`, the exec/W^X shim of the Wine processes, is built from `app/src/main/cpp/wowexec/wow_exec.c` in this
   repository (GPL-3.0). GameNative's closed `libredirect.so` is not shipped.
 - The DX12 driver probe `wow-driver-probe.exe` is built from `tools/diagnostics/wow-driver-probe.c` in this repository.
+
+### Optional Gamescope Android display backend
+
+GameNative app snapshot: `44e92bc98aa66d3ce29abf4b6f22c69029c1cccb` at https://github.com/utkarshdalal/GameNative . Android Gamescope port: `0cb97886e9ab4b0aea8255f9a07ba92fafdaa44b` at https://github.com/GameNative/gamescope . Native bridge and runtime archive origins/pins are recorded in THIRD_PARTY_NOTICES and tools/verify_gamescope_payload.py. Native payloads are upstream prebuilt binaries; Java/Kotlin bindings, startup/input/session integration and regression tests are in this source tree.
+
+## Gamescope XRandR client library (2026-11-06)
+
+`app/src/main/assets/gamescope-libs/libXrandr.so`: unmodified Termux aarch64 libxrandr1.5.5, SHA25686384babd4bbd1276949025b86b77d3ee44e4553d635995540db49563b0301c8. Local provenance: WoW-Proton-build/bionic-unix-api28/termux-reference-20260218 (dpkg status and copyright retained in diagnostics evidence). Upstream sources: https://gitlab.freedesktop.org/xorg/lib/libxrandr and Termux packaging https://github.com/termux/termux-packages/tree/master/x11-packages/libxrandr . Its unsuffixed X11 dependencies match the Gamescope payload. Copied by the existing staged Gamescope installer; no Wine/DXVK/driver component replacement. License included at assets/licenses/gamescope-libXrandr.txt.

@@ -456,6 +456,9 @@ fun XServerScreen(
         }
     }
     var areControlsVisible by remember { mutableStateOf(false) }
+    // The on-screen controls came up by themselves (no controller seen at a device rescan), not by the player's choice: the next
+    // controller input takes them down again (a controller that reconnects quietly sends no device event; 1.0.6 diag: up 6 min).
+    var controlsAutoShown by remember { mutableStateOf(false) }
     var isDisableMouseInput by remember(container.id) { mutableStateOf(container.isDisableMouseInput) }
     var isEditMode by remember { mutableStateOf(false) }
     var gameRoot by remember { mutableStateOf<View?>(null) }
@@ -475,7 +478,7 @@ fun XServerScreen(
             (!container.isTouchscreenMode || currentGestureConfig.showCursorInTouchscreenMode)
     }
     fun applyMouseCursorVisibility() {
-        xServerView?.renderer?.setCursorVisible(shouldShowMouseCursor())
+        xServerView?.setGuestCursorVisible(shouldShowMouseCursor())
     }
     val clickHighlightPoints = remember { mutableStateListOf<app.gamenative.ui.component.HighlightPoint>() }
     var debugGestureName by remember { mutableStateOf("") }
@@ -583,11 +586,12 @@ fun XServerScreen(
         performanceHudView?.setConfig(config)
     }
 
-    LaunchedEffect(xServerView?.renderer, showQuickMenu, quickMenuToolsVisible, isPerformanceHudEnabled, areControlsVisible) {
+    LaunchedEffect(xServerView?.renderer, showQuickMenu, quickMenuToolsVisible, areControlsVisible) {
         // Named reasons let diagnostics show why the compositor stayed in use.
         val scanoutBlockers = buildList {
             if (showQuickMenu || quickMenuToolsVisible) add("quickmenu")
-            if (isPerformanceHudEnabled) add("hud")
+            // Not the performance HUD: it is drawn in the app window above the game layer and stays visible over scanout; it
+            // kept scanout off for the whole session whenever the HUD was on (1.0.6 diag: "ui:hud" 52% of the time).
             if (areControlsVisible) add("controls")
         }.joinToString("+")
         (xServerView?.renderer as? VulkanRenderer)?.setExperimentalScanout(
@@ -600,7 +604,8 @@ fun XServerScreen(
         val screenEffectsConfig = loadScreenEffectsConfig(container)
         when (val renderer = xServerView?.renderer) {
             is VulkanRenderer -> {
-                applyScreenEffectsConfig(renderer, screenEffectsConfig)
+                if (!app.gamenative.display.WowDisplayBackend.isGamescope(container))
+                    applyScreenEffectsConfig(renderer, screenEffectsConfig)
             }
         }
     }
@@ -617,7 +622,14 @@ fun XServerScreen(
         // limiter on top of it, a higher one waits for the next launch (see WowRuntimeTuning.live).
         val live = app.gamenative.ui.screen.wow.WowRuntimeTuning.live(wowApiPacing, limit)
         FrameRating.setLimitHint(live.inForce)
-        xServerView?.setFrameRateLimit(if (container.id == "wow_forever") app.gamenative.ui.screen.wow.WowRuntimeTuning.surfaceTarget(container, limit) else limit)
+        // TurnRIP 1.1.28 takes the new frame period (ADPF target, frame steering) from this file, read once a second.
+        if (container.id == "wow_forever") {
+            val fpsFile = app.gamenative.ui.screen.wow.WowRuntimeTuning.fpsFile(context)
+            val hz = app.gamenative.ui.screen.wow.WowRuntimeTuning.panelHz(context)
+            val fps = app.gamenative.ui.screen.wow.WowRuntimeTuning.driverFps(live.inForce, hz)
+            com.winlator.core.OneShotTasks.execute { app.gamenative.ui.screen.wow.WowRuntimeTuning.writeFpsFile(fpsFile, fps, hz) }
+        }
+        xServerView?.setFrameRateLimit(if (container.id == "wow_forever" && !app.gamenative.display.WowDisplayBackend.isGamescope(container)) live.inForce else limit)
         xServerView?.getxServer()
             ?.getExtension<PresentExtension>(PresentExtension.MAJOR_OPCODE.toInt())
             ?.apply {
@@ -630,6 +642,15 @@ fun XServerScreen(
 
     fun tellIfLimitWaitsForRestart(limit: Int) {
         val live = app.gamenative.ui.screen.wow.WowRuntimeTuning.live(wowApiPacing, limit)
+        if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) {
+            val apiLimit = app.gamenative.ui.screen.wow.WowRuntimeTuning.apiLimitAtLaunch
+            if (app.gamenative.ui.screen.wow.WowRuntimeTuning.gamescopeLimitWaitsForRestart(limit, apiLimit)) {
+                app.gamenative.ui.util.SnackbarManager.show(app.gamenative.ui.screen.wow.WowI18n.pick(context,
+                    "Gamescope's game-side FPS limit updates on the next launch.",
+                    "A Gamescope játékoldali FPS-limitje a következő indításkor frissül."))
+            }
+            return
+        }
         if (wowApiPacing && live.deferred) app.gamenative.ui.util.SnackbarManager.show(app.gamenative.ui.screen.wow.WowRuntimeTuning.liveNotice(context, live))
     }
 
@@ -944,6 +965,7 @@ fun XServerScreen(
                     if (!areControlsVisible) {
                         showInputControls(targetProfile, xServerView!!.getxServer().winHandler, container)
                         areControlsVisible = true
+                        controlsAutoShown = true
                     }
 
                     PluviaApp.touchpadView?.postDelayed({
@@ -1084,6 +1106,7 @@ fun XServerScreen(
                     }
                 }
                 areControlsVisible = !areControlsVisible
+                controlsAutoShown = false
                 true
             }
 
@@ -1094,7 +1117,7 @@ fun XServerScreen(
                 container.saveData()
                 PluviaApp.touchpadView?.setTouchscreenMouseDisabled(newValue)
                 if (newValue) {
-                    xServerView?.renderer?.setCursorVisible(false)
+                    xServerView?.setGuestCursorVisible(false)
                 } else {
                     applyMouseCursorVisibility()
                 }
@@ -1174,6 +1197,7 @@ fun XServerScreen(
                         showInputControls(activeProfile, xServerView!!.getxServer().winHandler, container)
                         areControlsVisible = true
                     }
+                    controlsAutoShown = false
                 }
                 true
             }
@@ -1358,6 +1382,15 @@ fun XServerScreen(
 
         exit(session, xServerView?.getxServer()?.winHandler, frameRating, container, appId, onExit, navigateBack, "activity_destroyed")
     }
+    fun hideAutoShownControlsForController() {
+        if (!areControlsVisible || !controlsAutoShown || isEditMode || showElementEditor || container.isTouchscreenMode) return
+        hideInputControls()
+        areControlsVisible = false
+        controlsAutoShown = false
+        hasPhysicalController = true
+        hasUpdatedScreenGamepad = true
+    }
+
     val onKeyEvent: (AndroidEvent.KeyEvent) -> Boolean = keyEvent@{
         if (session.isExiting) return@keyEvent false
         val isKeyboard = Keyboard.isKeyboardDevice(it.event.device)
@@ -1399,6 +1432,7 @@ fun XServerScreen(
             var handled = false
             if (isGamepad) {
                 val winHandler = xServerView?.getxServer()?.winHandler ?: return@keyEvent false
+                if (it.event.action == KeyEvent.ACTION_DOWN) hideAutoShownControlsForController()
                 if (it.event.action == KeyEvent.ACTION_DOWN && it.event.repeatCount == 0 &&
                     ControllerManager.getInstance().noteGamepadButton(it.event.device.id)
                 ) {
@@ -1457,6 +1491,7 @@ fun XServerScreen(
             if (isGamepad && it.event != null) {
                 val winHandler = xServerView?.getxServer()?.winHandler ?: return@motionEvent false
                 ControllerManager.getInstance().noteGamepadActivity(it.event)
+                hideAutoShownControlsForController()
                 val assignedSlot = ControllerManager.getInstance().getSlotForDevice(it.event.device.id)
                 if (assignedSlot > 0) {
                     handled = winHandler.onGenericMotionEvent(it.event)
@@ -1752,11 +1787,35 @@ fun XServerScreen(
                 false,
             )
             // The Vulkan renderer is the only compositor (the OpenGL/VirGL path was removed in v0.1.117).
-            val xServerViewInstance: XServerRendererView = XServerView(context, xServerToUse, container.displayRenderer)
+            val xServerViewInstance: XServerRendererView = XServerView(context, xServerToUse, container.displayRenderer).apply {
+                val gamescope = app.gamenative.display.WowDisplayBackend.isGamescope(container)
+                setGamescopeMode(gamescope)
+                if (gamescope) {
+                    val guest = xServerToUse.screenInfo.width.toInt() to xServerToUse.screenInfo.height.toInt()
+                    val effects = app.gamenative.display.GamescopeEffects.load(container)
+                    val panelMode = ContextCompat.getSystemService(context, DisplayManager::class.java)
+                        ?.getDisplay(Display.DEFAULT_DISPLAY)?.mode
+                    // A display-sized output only when an upscaling effect needs it: otherwise Gamescope composites and
+                    // publishes 4x the pixels of a 1344x608 game every frame (measured ~3 W more than XServer), while the
+                    // panel's own scaler enlarges a game-sized layer for free.
+                    val output = panelMode?.takeIf { effects.needsPanelOutput }?.let {
+                        app.gamenative.display.GamescopeEffects.outputSize(guest, it.physicalWidth, it.physicalHeight)
+                    } ?: guest
+                    app.gamenative.display.GameNativeDrm.beginSession(
+                        app.gamenative.display.GamescopeWindowPolicy.gameLaunch(true, container.executablePath), output, effects,
+                        app.gamenative.ui.screen.wow.WowRuntimeTuning.gamescopeOwnsFifoPacing(context, container))
+                    xServerToUse.setInputEventSink(app.gamenative.display.GamescopeInputSink(guest.first, guest.second))
+                    (renderer as? VulkanRenderer)?.setGamescopeInputScaling(effects.inputScalingMode)
+                    app.gamenative.display.GameNativeDrm.frameListener = {
+                        frameRating?.updateNanos(SystemClock.elapsedRealtimeNanos())
+                        app.gamenative.ui.screen.wow.WowDiagnostics.gamescopeFrame()
+                    }
+                }
+            }
             val xServerView = xServerViewInstance.apply {
                 xServerView = this
                 FrameRating.setLimitHint(app.gamenative.ui.screen.wow.WowRuntimeTuning.live(wowApiPacing, if (fpsLimiterEnabled) fpsLimiterTarget else 0).inForce)
-                setFrameRateLimit(if (container.id == "wow_forever") app.gamenative.ui.screen.wow.WowRuntimeTuning.surfaceTarget(container, if (fpsLimiterEnabled) fpsLimiterTarget else 0) else if (fpsLimiterEnabled) fpsLimiterTarget else 0)
+                setFrameRateLimit(if (container.id == "wow_forever" && !app.gamenative.display.WowDisplayBackend.isGamescope(container)) app.gamenative.ui.screen.wow.WowRuntimeTuning.surfaceTarget(container, if (fpsLimiterEnabled) fpsLimiterTarget else 0) else if (fpsLimiterEnabled) fpsLimiterTarget else 0)
                 val renderer = this.renderer
                 if (renderer is VulkanRenderer) {
                     renderer.setSchedulingHints(
@@ -1905,7 +1964,7 @@ fun XServerScreen(
 
                         override fun onUpdateWindowContent(window: Window) {
                             if (!xServerState.value.winStarted && window.isApplicationWindow()) {
-                                if (shouldShowMouseCursor()) renderer?.setCursorVisible(true)
+                                if (shouldShowMouseCursor()) xServerView?.setGuestCursorVisible(true)
                                 xServerState.value.winStarted = true
                             }
                             if (frameRatingWindowId == -1 && window.isApplicationWindow()) {
@@ -2363,6 +2422,7 @@ fun XServerScreen(
 
                             showInputControls(profile, xServerView.getxServer().winHandler, container)
                             areControlsVisible = true
+                            controlsAutoShown = true
                         } else {
 
                             hideInputControls()
@@ -2547,7 +2607,7 @@ fun XServerScreen(
             },
             gameView = { xServerView as? android.view.SurfaceView },
             onCursorHidden = { hidden ->
-                xServerView?.renderer?.setCursorVisible(if (hidden) false else shouldShowMouseCursor())
+                xServerView?.setGuestCursorVisible(!hidden && shouldShowMouseCursor())
             },
         )
 
@@ -2953,7 +3013,7 @@ private fun hideInputControls() {
     PluviaApp.touchpadView?.isEnabled()?.let {
         if (!it) {
             PluviaApp.touchpadView?.setEnabled(true)
-            PluviaApp.xServerView?.getRenderer()?.setCursorVisible(true)
+            PluviaApp.xServerView?.setGuestCursorVisible(true)
         }
     }
     PluviaApp.inputControlsView?.invalidate()
@@ -3013,9 +3073,10 @@ private fun setupXEnvironment(
         val wow64Mode = container.isWoW64Mode
         guestProgramLauncherComponent.setContainer(container)
         guestProgramLauncherComponent.setWineInfo(xServerState.value.wineInfo)
-        val gameExecutable = "wine explorer /desktop=shell," + xServer.screenInfo + " " +
-            getWineStartCommand(context, appId, container, envVars, guestProgramLauncherComponent) +
-            (if (container.execArgs.isNotEmpty()) " " + container.execArgs else "")
+        val gameExecutable = app.gamenative.display.GamescopeWindowPolicy.command(
+            xServer.screenInfo.toString(), getWineStartCommand(context, appId, container, envVars, guestProgramLauncherComponent), container.execArgs,
+            app.gamenative.display.GamescopeWindowPolicy.gameLaunch(
+                app.gamenative.display.WowDisplayBackend.isGamescope(container), container.executablePath))
         guestProgramLauncherComponent.guestExecutable = gameExecutable
         guestProgramLauncherComponent.isWoW64Mode = wow64Mode
 
@@ -3052,7 +3113,12 @@ private fun setupXEnvironment(
             UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.SYSVSHM_SERVER_PATH),
         ),
     )
-    environment.addComponent(XServerComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.XSERVER_PATH)))
+    if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) {
+        environment.addComponent(app.gamenative.display.WowGamescopeComponent(imageFs.rootDir,
+            app.gamenative.display.GamescopeWindowPolicy.gameLaunch(true, container.executablePath)))
+    } else {
+        environment.addComponent(XServerComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.XSERVER_PATH)))
+    }
     environment.addComponent(NetworkInfoUpdateComponent())
 
     // Microphone support is published through PulseAudio (module-pipe-source), which Wine/Proton's

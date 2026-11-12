@@ -26,24 +26,6 @@
    "WowSettingsDialog.kt"
   ]
  },
- "1 frame": {
-  "hu": "1 képkocka",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "2 frames": {
-  "hu": "2 képkocka",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "3 frames": {
-  "hu": "3 képkocka",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
  "A GitHub repository (github.com/owner/repo) or a direct .zip link.": {
   "hu": "GitHub-repó (github.com/szerző/repó) vagy közvetlen .zip link.",
   "files": [
@@ -86,6 +68,12 @@
    "WowGameDataCard.kt"
   ]
  },
+ "Action bars": {
+  "hu": "Akciósávok",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
  "Active game session.": {
   "hu": "A játék fut.",
   "files": [
@@ -122,6 +110,12 @@
    "WoWForeverScreen.kt"
   ]
  },
+ "All categories": {
+  "hu": "Minden kategória",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
  "All files access is on, but Android still blocks this folder for the running app. On some phones the permission only applies after the app starts again. The folder is saved and checked again after the restart.": {
   "hu": "A Teljes fájlhozzáférés be van kapcsolva, de az Android a futó appnak még tiltja ezt a mappát. Egyes telefonokon az engedély csak az app újraindítása után lép életbe. A mappát megjegyzem, és újraindítás után újra megnézem.",
   "files": [
@@ -132,6 +126,12 @@
   "hu": "Minden kész",
   "files": [
    "WoWForeverScreen.kt"
+  ]
+ },
+ "Allow \"Install unknown apps\" for Forever Launcher, then tap Install again.": {
+  "hu": "Engedélyezd az „Ismeretlen alkalmazások telepítése” lehetőséget a Forever Launchernek, aztán koppints újra a Telepítésre.",
+  "files": [
+   "WowAppUpdater.kt"
   ]
  },
  "Americas": {
@@ -147,22 +147,10 @@
    "WoWForeverScreen.kt"
   ]
  },
- "Android default (unknown)": {
-  "hu": "Android alapérték (ismeretlen)",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
  "Android does not let the app read {0} although All files access is on ({1}).": {
   "hu": "Az Android nem engedi olvasni ezt a mappát: {0}, pedig a Teljes fájlhozzáférés be van kapcsolva ({1}).",
   "files": [
    "WoWForeverScreen.kt"
-  ]
- },
- "Android gives the game no processor name or vendor, so WoW logs both as unknown. Only the name, vendor and max-frequency text change; the real cores and speed are untouched. A saved WINE_CPU_NAME / WINE_CPU_VENDOR wins.": {
-  "hu": "Az Android nem ad a játéknak processzornevet és gyártót, ezért a WoW mindkettőt ismeretlennek naplózza. Csak a név, a gyártó és a max. frekvencia szövege változik, a valódi magok és a sebesség nem. A mentett WINE_CPU_NAME / WINE_CPU_VENDOR nyer.",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
   ]
  },
  "Android requires 'All files access' for Forever Launcher to read and update game files in this directory.\n\nPlease enable 'Allow access to manage all files' on the next screen.": {
@@ -171,34 +159,40 @@
    "WoWForeverScreen.kt"
   ]
  },
+ "App compositing": {
+  "hu": "App általi összerakás",
+  "files": [
+   "WowDisplaySettingsSection.kt"
+  ]
+ },
  "App storage (default)": {
   "hu": "App tárhelye (alapértelmezett)",
   "files": [
    "WowCacheSettingsDialog.kt"
   ]
  },
- "App, timer": {
-  "hu": "App, időzítős",
+ "App, vsync-aligned (recommended)": {
+  "hu": "App, vsync-hez igazított (ajánlott)",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "App, vsync + phase (experimental)": {
-  "hu": "App, vsync + időzítés-igazítás (kísérleti)",
+ "Apply display backend": {
+  "hu": "Megjelenítés alkalmazása",
   "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "App, vsync-locked (recommended)": {
-  "hu": "App, vsync-hez kötött (ajánlott)",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
+   "WowDisplayBackendSection.kt"
   ]
  },
  "Apply resolution": {
   "hu": "Felbontás alkalmazása",
   "files": [
    "WowDisplaySettingsSection.kt"
+  ]
+ },
+ "Auction & gold": {
+  "hu": "Aukció és arany",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Audio diagnostics (voice chat / microphone)": {
@@ -211,6 +205,24 @@
   "hu": "A hang-diagnosztika mentve. A következő indítástól érvényes.",
   "files": [
    "WowCacheSettingsDialog.kt"
+  ]
+ },
+ "Available with Gamescope. XServer uses the app's own compositor.": {
+  "hu": "Gamescope módban érhető el. Az XServer az app saját kompozitorát használja.",
+  "files": [
+   "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "Available with XServer. Gamescope uses its own compositor.": {
+  "hu": "XServer módban érhető el. A Gamescope saját kompozitort használ.",
+  "files": [
+   "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "Bags & inventory": {
+  "hu": "Táskák és tárgyak",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Balanced (default)": {
@@ -227,6 +239,18 @@
  },
  "Browse": {
   "hu": "Böngészés",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
+ "Browsing uses CurseForge and needs your own free API key. Get one at console.curseforge.com, then tap \"CurseForge key\".": {
+  "hu": "A böngészés a CurseForge-ot használja, ehhez a saját, ingyenes API-kulcsod kell. Igényelj egyet a console.curseforge.com oldalon, majd koppints a „CurseForge-kulcs” gombra.",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
+ "Buffs & cooldowns": {
+  "hu": "Buffok és cooldownok",
   "files": [
    "WowAddonsPage.kt"
   ]
@@ -324,6 +348,12 @@
    "WowCacheSettingsDialog.kt"
   ]
  },
+ "Chat & social": {
+  "hu": "Chat és közösség",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
  "Checking for game updates...": {
   "hu": "Játékfrissítés ellenőrzése...",
   "files": [
@@ -340,6 +370,12 @@
   "hu": "Ezt a DirectX-verziót használja a WoW. A DX11 a DXVK-t, a DX12 a VKD3D-t használja; mindkettő Vulkanra fordít. A váltás a következő indításkor cseréli a DLL-eket.",
   "files": [
    "WowVkd3dSection.kt"
+  ]
+ },
+ "Class": {
+  "hu": "Kaszt",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Clear": {
@@ -368,6 +404,12 @@
    "WowEnvironmentEditorDialog.kt",
    "WowLauncherStyle.kt",
    "WowSettingsDialog.kt"
+  ]
+ },
+ "Combat & meters": {
+  "hu": "Harc és mérők",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Command": {
@@ -418,6 +460,12 @@
    "WowSettingsDialog.kt"
   ]
  },
+ "Could not save the Gamescope effects.": {
+  "hu": "A Gamescope-effektek mentése sikertelen.",
+  "files": [
+   "ScreenEffectsPanel.kt"
+  ]
+ },
  "Couldn't reach the addon sites. Check your connection.": {
   "hu": "Nem érhetők el az addon-oldalak. Ellenőrizd a kapcsolatot.",
   "files": [
@@ -448,6 +496,18 @@
    "WowDisplaySettingsSection.kt"
   ]
  },
+ "CurseForge API key": {
+  "hu": "CurseForge API-kulcs",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
+ "CurseForge key": {
+  "hu": "CurseForge-kulcs",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
  "DOWNLOAD": {
   "hu": "LETÖLTÉS",
   "files": [
@@ -467,20 +527,14 @@
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "DX12 maximum latency": {
-  "hu": "DX12 max. késleltetés",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
  "DX12 operation failed.": {
   "hu": "A DX12-művelet nem sikerült.",
   "files": [
    "WowVkd3dSection.kt"
   ]
  },
- "DX12 swapchain images": {
-  "hu": "DX12 swapchain képszám",
+ "DX12: wait for the GPU before showing a frame": {
+  "hu": "DX12: a GPU megvárása a kép megjelenítése előtt",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -525,12 +579,6 @@
   "hu": "DXVK átállítva.",
   "files": [
    "WowDxvkSection.kt"
-  ]
- },
- "Default": {
-  "hu": "Alapértelmezett",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
   ]
  },
  "Delete": {
@@ -671,6 +719,12 @@
    "WowVkd3dSection.kt"
   ]
  },
+ "Display backend": {
+  "hu": "Megjelenítési háttérrendszer",
+  "files": [
+   "WowDisplayBackendSection.kt"
+  ]
+ },
  "Display experiments": {
   "hu": "Megjelenítési kísérletek",
   "files": [
@@ -729,6 +783,12 @@
   "hu": "Meghajtók",
   "files": [
    "WowSettingsDialog.kt"
+  ]
+ },
+ "DroidDeck picture presets": {
+  "hu": "DroidDeck képprofilok",
+  "files": [
+   "ScreenEffectsPanel.kt"
   ]
  },
  "ENVIRONMENT": {
@@ -864,6 +924,12 @@
    "WoWForeverScreen.kt"
   ]
  },
+ "For a minute or two after login WoW creates and closes thousands of small events a second. Each one used to go through Wine's single server, and the game's main thread had to queue behind them: the picture stuttered. With this on, Proton keeps such events and reuses them, so the server is left alone. Off = exactly the previous Proton (r31) behaviour. Takes effect from the next launch.": {
+  "hu": "Belépés után egy-két percig a WoW másodpercenként több ezer kis eseményt hoz létre és zár be. Ezek eddig mind a Wine egyetlen szerverén mentek át, és a játék fő szálának sorban kellett állnia mögöttük: akadt a kép. Bekapcsolva a Proton megtartja és újrahasznosítja ezeket az eseményeket, így a szervert nem terhelik. Ki = pontosan az előző Proton (r31) működése. A következő indítástól él.",
+  "files": [
+   "WowLaunchExperimentsSection.kt"
+  ]
+ },
  "For advanced users: edit the container's environment variables by hand, or open a command shell inside it. A manually typed value overrides the switches above.": {
   "hu": "Haladóknak: a konténer környezeti változóinak kézi szerkesztése, vagy parancssor a konténeren belül. A kézzel beírt érték felülírja a fenti kapcsolókat.",
   "files": [
@@ -906,14 +972,8 @@
    "WowDisplaySettingsSection.kt"
   ]
  },
- "Fullscreen scanout (hide HUD and touch controls)": {
-  "hu": "Teljes képernyős scanout (HUD és érintéses vezérlők elrejtve)",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "Fullscreen scanout is on (Advanced tab). It already scales in hardware, so this switch has no effect while it is on.": {
-  "hu": "A teljes képernyős scanout be van kapcsolva (Haladó fül). Az már hardveresen skáláz, ezért addig ez a kapcsoló nem hat.",
+ "Fullscreen scanout (touch controls hidden)": {
+  "hu": "Teljes képernyős scanout (érintéses vezérlők elrejtve)",
   "files": [
    "WowDisplaySettingsSection.kt"
   ]
@@ -930,8 +990,8 @@
    "WoWForeverScreen.kt"
   ]
  },
- "GPL (default)": {
-  "hu": "GPL (alapértelmezett)",
+ "GPL": {
+  "hu": "GPL",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -948,6 +1008,18 @@
    "WowManagedComponents.kt"
   ]
  },
+ "GPU driver profile (what the game asks of the driver)": {
+  "hu": "GPU-driver profil (mit kér a játék a drivertől)",
+  "files": [
+   "WowCacheSettingsDialog.kt"
+  ]
+ },
+ "GPU driver profile saved. Applies on the next launch.": {
+  "hu": "A GPU-driver profil mentve. A következő indítástól érvényes.",
+  "files": [
+   "WowCacheSettingsDialog.kt"
+  ]
+ },
  "GPU memory mode": {
   "hu": "GPU memóriamód",
   "files": [
@@ -956,12 +1028,6 @@
  },
  "GPU power mode": {
   "hu": "GPU-mód",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "GPU the game sees": {
-  "hu": "A játék által látott GPU",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -1044,6 +1110,12 @@
    "WowCacheSettingsDialog.kt"
   ]
  },
+ "Game image output": {
+  "hu": "A játék képének megjelenítése",
+  "files": [
+   "WowDisplaySettingsSection.kt"
+  ]
+ },
  "Game language": {
   "hu": "Játék nyelve",
   "files": [
@@ -1054,6 +1126,48 @@
   "hu": "Játék tárolása",
   "files": [
    "WowSettingsDialog.kt"
+  ]
+ },
+ "Game {0} · Gamescope output {1}×{2}": {
+  "hu": "Játék {0} · Gamescope-kimenet {1}×{2}",
+  "files": [
+   "ScreenEffectsPanel.kt"
+  ]
+ },
+ "Gamescope (experimental)": {
+  "hu": "Gamescope (kísérleti)",
+  "files": [
+   "WowDisplayBackendSection.kt"
+  ]
+ },
+ "Gamescope direct scanout (experimental)": {
+  "hu": "Gamescope közvetlen kijelzés (kísérleti)",
+  "files": [
+   "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "Gamescope only. Gamescope hands the game's own frame to the display instead of redrawing it on the GPU every frame, which saves power. It falls back to redrawing by itself when that is not possible (effects, a refused frame). If the picture flickers or goes black, turn it off. Takes effect from the next launch.": {
+  "hu": "Csak Gamescope-pal. A Gamescope a játék saját képkockáját adja a kijelzőnek, ahelyett hogy minden képkockánál újrarajzolná a GPU-n, így kevesebbet fogyaszt. Ha ez nem lehetséges (effektek, visszautasított képkocka), magától visszavált az újrarajzolásra. Ha villog vagy fekete a kép, kapcsold ki. A következő indítástól él.",
+  "files": [
+   "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "Gamescope uses its own Xwayland. Apply while WoW is stopped; used on the next Play. Existing Wine, DXVK and driver selections are retained.": {
+  "hu": "A Gamescope saját Xwaylandet használ. Leállított játék mellett alkalmazd; a következő indításkor lép életbe. A Wine, DXVK és driver választása megmarad.",
+  "files": [
+   "WowDisplayBackendSection.kt"
+  ]
+ },
+ "Gamescope's game-side FPS limit updates on the next launch.": {
+  "hu": "A Gamescope játékoldali FPS-limitje a következő indításkor frissül.",
+  "files": [
+   "XServerScreen.kt"
+  ]
+ },
+ "Get a key on CurseForge": {
+  "hu": "Kulcs igénylése a CurseForge-on",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Gives the app's frame-presenting threads higher priority so frames are delivered on time.": {
@@ -1074,8 +1188,8 @@
    "WowVkd3dSection.kt"
   ]
  },
- "Hardware scaling (experimental)": {
-  "hu": "Hardveres skálázás (kísérleti)",
+ "Hardware scaling (default)": {
+  "hu": "Hardveres skálázás (alapértelmezett)",
   "files": [
    "WowDisplaySettingsSection.kt"
   ]
@@ -1086,32 +1200,26 @@
    "WowEnvironmentEditorDialog.kt"
   ]
  },
- "How DX11 shaders are compiled while you play. GPL (default): links pipelines quickly and never skips a draw, so loading is fast and play is smooth. Hybrid: skips draws while shaders compile, but compiles each shader in full, which can cause hitches on this GPU. Async: the older background mode.": {
-  "hu": "Hogyan fordítódnak a DX11 shaderek játék közben. GPL (alapértelmezett): gyorsan összekapcsol és nem hagy ki rajzolást, ezért gyors a betöltés és sima a játék. Hibrid: kihagy rajzolást, amíg a shader fordul, de minden shadert teljesen fordít, ami ezen a GPU-n akadást okozhat. Async: a régebbi, háttérben fordító mód.",
+ "How DX11 shaders are compiled while you play. Hybrid (default): skips a draw only while its shader compiles; with \"Hybrid keeps GPL\" (Advanced) it also links pipelines quickly. GPL: links pipelines quickly and never skips a draw. Async: the older background mode.": {
+  "hu": "Hogyan fordítódnak a DX11 shaderek játék közben. Hibrid (alapértelmezett): csak addig hagy ki egy rajzolást, amíg a shadere fordul; a „Hibrid megtartja a GPL-t” kapcsolóval (Haladó) gyorsan össze is kapcsolja a pipeline-okat. GPL: gyorsan összekapcsol, és soha nem hagy ki rajzolást. Async: a régebbi, háttérben fordító mód.",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "How many frames the CPU may prepare ahead of the GPU. Lower = less input lag, but the GPU then idles between frames: on this phone 1 frame let the GPU clock drop and cost FPS. Leave Default unless you are testing.": {
-  "hu": "Hány képkockát készíthet elő a CPU a GPU előtt. Kisebb = kevesebb input lag, de a GPU a kockák között üresjáratban áll: ezen a telefonon az 1 képkocka levitte a GPU órajelét, és FPS-be került. Hagyd alapértelmezésen, hacsak nem tesztelsz.",
+ "How the GPU clock behaves while you play. Balanced (default): the clock follows the load; the driver raises it only as far as the game needs (with DX12 at 1 frame latency: as far as the FPS limit needs). Performance: the GPU stays at its highest clock (about 1200 MHz) all the time: more heat and power.": {
+  "hu": "Hogyan viselkedik a GPU órajele játék közben. Balanced (alapértelmezett): az órajel a terheléshez igazodik; a driver csak annyira emeli, amennyire a játéknak kell (DX12-nél 1 képkocka késleltetéssel: amennyi az FPS-limithez kell). Performance: a GPU folyamatosan a legmagasabb órajelen (kb. 1200 MHz) marad: több hő és fogyasztás.",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "How many image buffers the game's swapchain asks for; the driver may raise or lower it to its own limits. Fewer can shorten the queue but can also stall the GPU; more is steadier. Not the same as the maximum latency above.": {
-  "hu": "Hány képpuffert kér a játék swapchainje; a driver a saját minimumához/maximumához igazíthatja. A kevesebb rövidítheti a sort, de meg is akaszthatja a GPU-t; a több egyenletesebb. Nem azonos a fenti max. késleltetéssel.",
+ "How the game image reaches the display. Hardware scaling (default): the app puts the game, the HUD and the touch controls together and the display's own scaler enlarges the image, so the GPU has a little less work; only active when the resolution has the display's aspect ratio (the Full screen resolution) and Screen Effects use Linear or no scaling with no effect (not FSR, DLS, Natural, Nearest or CRT). App compositing: the app's GPU pass also does the scaling. Fullscreen scanout: the game image goes straight to the display without the app's GPU pass and is scaled in hardware; works with the performance HUD, but the touch controls and the quick menu must be hidden (while they show, the app composites). Applies from the next Play.": {
+  "hu": "Hogyan jut a játék képe a kijelzőre. Hardveres skálázás (alapértelmezett): az app rakja össze a játékot, a HUD-ot és az érintéses vezérlőket, a képet pedig a kijelző saját skálázója nagyítja fel, így a GPU-nak kicsit kevesebb a munkája; csak akkor hat, ha a felbontás képaránya megegyezik a kijelzőével (a Teljes képernyő felbontás), és a játék közbeni Screen Effects menüben Linear vagy nincs skálázás, effekt nélkül (nem FSR, DLS, Natural, Nearest vagy CRT). App általi összerakás: a nagyítást is az app GPU-s lépése végzi. Teljes képernyős scanout: a játék képe az app GPU-s lépése nélkül, közvetlenül a kijelzőre kerül, hardveres nagyítással; teljesítmény-HUD-dal működik, de az érintéses vezérlőknek és a gyorsmenünek rejtve kell lenniük (amíg látszanak, az app rakja össze a képet). A következő indítástól él.",
   "files": [
-   "WowLaunchExperimentsSection.kt"
+   "WowDisplaySettingsSection.kt"
   ]
  },
- "How the GPU clock behaves while you play. Balanced (default): the phone manages the clock and raises it only when the game really waits for the GPU. Performance: keeps the GPU at its highest clock (more heat and power; useful when the phone itself is in Balance mode, which caps the CPU). Regulated: keeps the clock above the chosen share of the maximum; it needs kernel support, otherwise it behaves like Balanced.": {
-  "hu": "Hogyan viselkedik a GPU órajele játék közben. Balanced (alapértelmezett): a telefon kezeli az órajelet, és csak akkor emeli, ha a játék valóban a GPU-ra vár. Performance: a GPU-t a legmagasabb órajelen tartja (több hő és fogyasztás; akkor hasznos, ha maga a telefon Balance módban van, mert az a CPU-t korlátozza). Szabályozott: a maximum kiválasztott hányada fölött tartja az órajelet; kernel-támogatás kell hozzá, nélküle Balancedként működik.",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "Hybrid": {
-  "hu": "Hibrid",
+ "Hybrid (default)": {
+  "hu": "Hibrid (alapértelmezett)",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -1126,6 +1234,12 @@
   "hu": "A hibridhez a beépített DXVK kell: alkalmazd a Komponensek fülön.",
   "files": [
    "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "INSTALL": {
+  "hu": "TELEPÍTÉS",
+  "files": [
+   "WowAppUpdater.kt"
   ]
  },
  "Import DXVK WCP": {
@@ -1224,10 +1338,22 @@
    "WowAddonsPage.kt"
   ]
  },
+ "Interface & media": {
+  "hu": "Felület és média",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
  "Invalid saved graphics API. Select DX11 to repair it.": {
   "hu": "Érvénytelen mentett grafikus API. A javításhoz válaszd a DX11-et.",
   "files": [
    "WowVkd3dSection.kt"
+  ]
+ },
+ "Its author allows downloading only on the CurseForge website. Tap Download on the page (it may also start by itself); the app installs the file.": {
+  "hu": "A szerzője csak a CurseForge weboldaláról engedi letölteni. Koppints az oldalon a Download gombra (magától is elindulhat); az app telepíti a fájlt.",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Its folders are deleted from Interface/AddOns: ": {
@@ -1261,10 +1387,22 @@
    "WoWForeverScreen.kt"
   ]
  },
+ "Later": {
+  "hu": "Később",
+  "files": [
+   "WowAppUpdater.kt"
+  ]
+ },
  "Launch failed": {
   "hu": "Az indítás nem sikerült",
   "files": [
    "WoWForeverScreen.kt"
+  ]
+ },
+ "Libraries": {
+  "hu": "Könyvtárak",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Live servers require build {0}, but local files are build {1}. Logging in may fail or disconnect at realm selection.": {
@@ -1298,6 +1436,12 @@
    "WowLaunchExperimentsSection.kt"
   ]
  },
+ "Low input latency (DX12)": {
+  "hu": "Alacsony bemeneti késés (DX12)",
+  "files": [
+   "WowLaunchExperimentsSection.kt"
+  ]
+ },
  "Lower (experimental)": {
   "hu": "Alacsonyabb (kísérleti)",
   "files": [
@@ -1308,6 +1452,12 @@
   "hu": "Legalacsonyabb (kísérleti)",
   "files": [
    "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "Map & navigation": {
+  "hu": "Térkép és navigáció",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Mesa Turnip Vulkan driver for Adreno 8xx, tuned for WoW.": {
@@ -1340,10 +1490,28 @@
    "WoWForeverScreen.kt"
   ]
  },
+ "Most downloaded": {
+  "hu": "Legtöbb letöltés",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
+ "Mounts & pets": {
+  "hu": "Hátasok és kedvencek",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
  "Moving game files: ": {
   "hu": "Játékfájlok áthelyezése: ",
   "files": [
    "WoWForeverScreen.kt"
+  ]
+ },
+ "NEW VERSION: {0}": {
+  "hu": "ÚJ VERZIÓ: {0}",
+  "files": [
+   "WowAppUpdater.kt"
   ]
  },
  "NEXT LAUNCH": {
@@ -1352,15 +1520,10 @@
    "WoWForeverScreen.kt"
   ]
  },
- "NVIDIA GeForce name": {
-  "hu": "NVIDIA GeForce név",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
  "Name": {
   "hu": "Név",
   "files": [
+   "WowAddonsPage.kt",
    "WowEnvironmentEditorDialog.kt"
   ]
  },
@@ -1430,6 +1593,12 @@
    "WoWForeverScreen.kt"
   ]
  },
+ "Off": {
+  "hu": "Ki",
+  "files": [
+   "ScreenEffectsPanel.kt"
+  ]
+ },
  "Off (default)": {
   "hu": "Ki (alapértelmezett)",
   "files": [
@@ -1460,8 +1629,8 @@
    "WowAddonsPage.kt"
   ]
  },
- "Only matters when DX11 shader compilation is set to Hybrid. Normally Hybrid compiles every missing shader in full, which can freeze the render thread for 100+ ms. With this on, Hybrid fast-links pipelines like GPL does and still skips draws only while a shader is not ready. Experimental and off by default: if the game crashes or the screen goes black, turn it off or use GPL.": {
-  "hu": "Csak akkor számít, ha a DX11 shaderfordítás Hibrid. Hibridben alapból minden hiányzó shader teljes fordítással készül, ami 100+ ms-ra megállíthatja a render szálat. Bekapcsolva a Hibrid a GPL-hez hasonlóan gyorsan összekapcsolja a pipeline-okat, és csak addig hagy ki rajzolást, amíg egy shader nem kész. Kísérleti és alapból ki van kapcsolva: ha a játék összeomlik vagy fekete a kép, kapcsold ki, vagy használj GPL-t.",
+ "Only matters when DX11 shader compilation is set to Hybrid. Normally Hybrid compiles every missing shader in full, which can freeze the render thread for 100+ ms. With this on, Hybrid fast-links pipelines like GPL does and still skips draws only while a shader is not ready. On by default: if the game crashes or the screen goes black, turn it off or use GPL.": {
+  "hu": "Csak akkor számít, ha a DX11 shaderfordítás Hibrid. Hibridben alapból minden hiányzó shader teljes fordítással készül, ami 100+ ms-ra megállíthatja a render szálat. Bekapcsolva a Hibrid a GPL-hez hasonlóan gyorsan összekapcsolja a pipeline-okat, és csak addig hagy ki rajzolást, amíg egy shader nem kész. Alapból bekapcsolva: ha a játék összeomlik vagy fekete a kép, kapcsold ki, vagy használj GPL-t.",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -1470,12 +1639,6 @@
   "hu": "Csak a kijelölt cache-fájlok törlődnek. A játékfájlok, a WTF-beállítások, a prefix és a runtime-profilok megmaradnak. A cache a következő indításkor újraépül; az első futás akadhat.",
   "files": [
    "WowCacheSettingsDialog.kt"
-  ]
- },
- "Only the vendor, name, id and reported video memory (up to 8 GB, shared with the system) change; the real Adreno and its driver do the work. The game shows 'family: Unknown' for Qualcomm GPUs by design. If the game misbehaves after a change, go back to the default. A saved DXVK_VEGAS_* variable wins.": {
-  "hu": "Csak a gyártó, a név, az azonosító és a jelzett videomemória (legfeljebb 8 GB, a rendszerrel osztott) változik, a munkát a valódi Adreno és a driver végzi. A játék Qualcomm GPU-nál tervezetten 'family: Unknown'-t ír. Ha a játék rosszul működik változtatás után, térj vissza az alapértékre. A mentett DXVK_VEGAS_* változó nyer.",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
   ]
  },
  "Only when your Battle.net account has more than one WoW game account (WoW1, WoW2). The next launch logs into the account chosen here.": {
@@ -1538,6 +1701,12 @@
    "WowVoiceChatSection.kt"
   ]
  },
+ "Other": {
+  "hu": "Egyéb",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
  "Path: ": {
   "hu": "Útvonal: ",
   "files": [
@@ -1548,6 +1717,18 @@
   "hu": "Engedély megtagadva. A mikrofonbeállítás nem változott. Újrapróbáláshoz engedélyezd a mikrofont az Android alkalmazásbeállításaiban.",
   "files": [
    "WowVoiceChatSection.kt"
+  ]
+ },
+ "Picture presets apply to the current game session only.": {
+  "hu": "A képprofil csak az aktuális játékmenetre érvényes.",
+  "files": [
+   "ScreenEffectsPanel.kt"
+  ]
+ },
+ "Popular": {
+  "hu": "Népszerű",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Preparing bundled components...": {
@@ -1569,16 +1750,22 @@
    "WowDataDownloadService.kt"
   ]
  },
+ "Preparing…": {
+  "hu": "Előkészítés…",
+  "files": [
+   "WowDisplayBackendSection.kt"
+  ]
+ },
  "Present mode": {
   "hu": "Megjelenítési mód (present)",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "Processor the game sees": {
-  "hu": "A játék által látott processzor",
+ "Professions": {
+  "hu": "Szakmák",
   "files": [
-   "WowLaunchExperimentsSection.kt"
+   "WowAddonsPage.kt"
   ]
  },
  "Proton 11.0 ARM64EC (Wine) with ntsync for Android.": {
@@ -1593,10 +1780,16 @@
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "Qualcomm Adreno X1 laptop": {
-  "hu": "Qualcomm Adreno X1 laptop",
+ "PvP": {
+  "hu": "PvP",
   "files": [
-   "WowLaunchExperimentsSection.kt"
+   "WowAddonsPage.kt"
+  ]
+ },
+ "Quests & leveling": {
+  "hu": "Küldetések és szintlépés",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Quick": {
@@ -1617,6 +1810,12 @@
    "WoWForeverScreen.kt"
   ]
  },
+ "Raids & bosses": {
+  "hu": "Raidek és bossok",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
  "Raw microphone (no echo cancellation)": {
   "hu": "Nyers mikrofon (echo-szűrés nélkül)",
   "files": [
@@ -1635,16 +1834,10 @@
    "WoWForeverScreen.kt"
   ]
  },
- "Real: this phone's Adreno (default)": {
-  "hu": "Valós: a telefon Adrenója (alapérték)",
+ "Recently updated": {
+  "hu": "Nemrég frissült",
   "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "Real: this phone's Snapdragon (default)": {
-  "hu": "Valós: a telefon Snapdragonja (alapérték)",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
+   "WowAddonsPage.kt"
   ]
  },
  "Records the Wine audio trace (winepulse, mmdevapi), the PulseAudio server log and a microphone bridge log (how much sound the phone microphone delivers and how much reaches the game) into the diagnostic export. Short tests only: it slows the game and the logs get large. Needs diagnostic logging on.": {
@@ -1681,12 +1874,6 @@
   "hu": "Szabályozott ",
   "files": [
    "WoWForeverScreen.kt"
-  ]
- },
- "Regulated, min. {0}%": {
-  "hu": "Szabályozott, min. {0}%",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
   ]
  },
  "Remove": {
@@ -1761,6 +1948,12 @@
    "WowCacheSettingsDialog.kt"
   ]
  },
+ "Reuse Wine events (Proton r32)": {
+  "hu": "Wine-események újrahasznosítása (Proton r32)",
+  "files": [
+   "WowLaunchExperimentsSection.kt"
+  ]
+ },
  "Run": {
   "hu": "Futtatás",
   "files": [
@@ -1806,6 +1999,7 @@
  "Save": {
   "hu": "Mentés",
   "files": [
+   "WowAddonsPage.kt",
    "WowEnvironmentEditorDialog.kt"
   ]
  },
@@ -1825,6 +2019,18 @@
   "hu": "Mentve. A következő indítástól érvényes (játék közben a Quick Menüben is állítható).",
   "files": [
    "WowSettingsDialog.kt"
+  ]
+ },
+ "Saved. FSR and NIS upscale fully from the next game start.": {
+  "hu": "Mentve. Az FSR és a NIS a következő játékindítástól skáláz fel teljesen.",
+  "files": [
+   "ScreenEffectsPanel.kt"
+  ]
+ },
+ "Saved. Gamescope could not apply every setting live. NIS needs a game resolution smaller than the output.": {
+  "hu": "Mentve. A Gamescope nem tudott minden beállítást élőben alkalmazni. A NIS a kimenetnél kisebb játékfelbontást igényel.",
+  "files": [
+   "ScreenEffectsPanel.kt"
   ]
  },
  "Saving…": {
@@ -1851,26 +2057,32 @@
    "WowCacheSettingsDialog.kt"
   ]
  },
+ "Sharpness": {
+  "hu": "Élesség",
+  "files": [
+   "ScreenEffectsPanel.kt"
+  ]
+ },
  "Show value": {
   "hu": "Érték mutatása",
   "files": [
    "WowEnvironmentEditorDialog.kt"
   ]
  },
- "Skips a pipeline bind when the previous draw in the same command buffer already used the same pipeline, which saves CPU work on the game's render thread. Experimental and off by default: if you see missing geometry or glitches, turn it off. It only affects DX11 (DXVK); the Quick Menu has no switch for it.": {
-  "hu": "Kihagy egy pipeline-kötést, ha az ugyanabban a parancspufferben előző rajzolás már ugyanazt a pipeline-t használta; ez CPU-munkát spórol a játék render szálán. Kísérleti és alapból ki van kapcsolva: ha hiányzó geometriát vagy hibákat látsz, kapcsold ki. Csak a DX11-et (DXVK) érinti; a Quick Menüben nincs hozzá kapcsoló.",
+ "Sign in there, open \"API keys\" and copy your key into this field.": {
+  "hu": "Jelentkezz be, nyisd meg az „API keys” részt, és másold a kulcsot ebbe a mezőbe.",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
+ "Skips a pipeline bind when the previous draw in the same command buffer already used the same pipeline, which saves CPU work on the game's render thread. On by default: if you see missing geometry or glitches, turn it off. It only affects DX11 (DXVK); the Quick Menu has no switch for it.": {
+  "hu": "Kihagy egy pipeline-kötést, ha az ugyanabban a parancspufferben előző rajzolás már ugyanazt a pipeline-t használta; ez CPU-munkát spórol a játék render szálán. Alapból bekapcsolva: ha hiányzó geometriát vagy hibákat látsz, kapcsold ki. Csak a DX11-et (DXVK) érinti; a Quick Menüben nincs hozzá kapcsoló.",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
  },
  "Smooth (default)": {
   "hu": "Sima (alapértelmezett)",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "Snapdragon X Plus laptop": {
-  "hu": "Snapdragon X Plus laptop",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -1994,8 +2206,8 @@
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "Tells the game which cores are the fastest ones (the phone's prime cores) the way a hybrid laptop CPU does, so WoW's own logs show Hybrid:true and it may place its busiest threads on them. Off = all cores look equal (default). Changes how WoW schedules threads: compare FPS before keeping it on.": {
-  "hu": "Jelzi a játéknak, melyek a leggyorsabb magok (a telefon prime magjai), mint egy hibrid laptop-CPU-nál, így a WoW naplója Hybrid:true-t mutat, és a legterheltebb szálait ezekre teheti. Ki = minden mag egyformának látszik (alapérték). Megváltoztatja, hogyan ütemez a WoW: a megtartás előtt hasonlítsd össze az FPS-t.",
+ "Tells the game which cores are the fastest ones (the phone's prime cores) the way a hybrid laptop CPU does, so WoW's own logs show Hybrid:true and it may place its busiest threads on them. On by default. Off = all cores look equal. Changes how WoW schedules threads.": {
+  "hu": "Jelzi a játéknak, melyek a leggyorsabb magok (a telefon prime magjai), mint egy hibrid laptop-CPU-nál, így a WoW naplója Hybrid:true-t mutat, és a legterheltebb szálait ezekre teheti. Alapból bekapcsolva. Ki = minden mag egyformának látszik. Megváltoztatja, hogyan ütemez a WoW.",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -2030,10 +2242,10 @@
    "WowDisplaySettingsSection.kt"
   ]
  },
- "The display's own scaler enlarges the game image instead of the GPU, so the GPU has a little less work. Works with the HUD and touch controls. Only active when the resolution has the display's aspect ratio (the Full screen resolution) and Screen Effects use Linear or no scaling with no effect (not FSR, DLS, Natural, Nearest or CRT). Applies from the next Play.": {
-  "hu": "A játék képét a GPU helyett a kijelző saját skálázója nagyítja fel, így a GPU-nak kicsit kevesebb a munkája. HUD-dal és érintéses vezérlőkkel is működik. Csak akkor hat, ha a felbontás képaránya megegyezik a kijelzőével (a Teljes képernyő felbontás), és a játék közbeni Screen Effects menüben Linear vagy nincs skálázás, effekt nélkül (nem FSR, DLS, Natural, Nearest vagy CRT). A következő indítástól érvényes.",
+ "The download failed. Check the connection and try again.": {
+  "hu": "A letöltés nem sikerült. Ellenőrizd a kapcsolatot, és próbáld újra.",
   "files": [
-   "WowDisplaySettingsSection.kt"
+   "WowAppUpdater.kt"
   ]
  },
  "The download stopped: ": {
@@ -2048,26 +2260,26 @@
    "WowGameDataCard.kt"
   ]
  },
- "The game image goes straight to the display without the app's GPU compositing pass. Only works while the HUD, touch controls and quick menu are hidden. While on, Hardware scaling (on this tab) is not used.": {
-  "hu": "A játék képe az app GPU-s összerakása nélkül, közvetlenül a kijelzőre kerül. Csak akkor működik, ha a HUD, az érintéses vezérlők és a gyorsmenü el vannak rejtve. Amíg be van kapcsolva, a hardveres skálázás (ezen a fülön) nem használatos.",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
  "The game is running: settings can be changed after it stops.": {
   "hu": "A játék fut: a beállítások a leállítás után módosíthatók.",
   "files": [
    "WowSettingsDialog.kt"
   ]
  },
- "The game is told a frame buffer is free again only after the app has finished drawing it, instead of at once. This rules out the rare case where the game overwrites a buffer that is still on its way to the screen (a flash or torn frame). It does not make anything faster: if the display is late it can cost a little smoothness, so leave it off unless you see such glitches. Takes effect from the next launch.": {
-  "hu": "A játék csak azután kapja meg, hogy egy képkocka-puffer újra szabad, hogy az app végzett a kirajzolásával, nem azonnal. Ez kizárja azt a ritka esetet, amikor a játék felülír egy puffert, ami még úton van a kijelző felé (villanás vagy tört kép). Semmit nem gyorsít: ha a megjelenítés késik, picit ronthatja a simaságot, ezért csak akkor kapcsold be, ha ilyen hibákat látsz. A következő indítástól él.",
+ "The game is told a frame buffer is free again only after the app has finished drawing it, instead of at once. This rules out the rare case where the game overwrites a buffer that is still on its way to the screen (a flash or torn frame). It does not make anything faster; on by default. Takes effect from the next launch.": {
+  "hu": "A játék csak azután kapja meg, hogy egy képkocka-puffer újra szabad, hogy az app végzett a kirajzolásával, nem azonnal. Ez kizárja azt a ritka esetet, amikor a játék felülír egy puffert, ami még úton van a kijelző felé (villanás vagy tört kép). Semmit nem gyorsít; alapból bekapcsolva. A következő indítástól él.",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
  },
  "The game keeps only one frame ahead of the screen (DXVK frame latency 1) instead of up to three, so input reaches the picture sooner. Off = the game may queue frames ahead for slightly smoother but later frames. A maxFrameLatency typed into DXVK_CONFIG wins.": {
   "hu": "A játék csak egy képkockával jár a kijelző előtt (DXVK frame latency 1), nem akár hárommal, így a bevitel hamarabb látszik a képen. Ki = a játék előre sorba állíthat képkockákat: picit simább, de későbbi kép. A DXVK_CONFIG-ba írt maxFrameLatency mindig nyer.",
+  "files": [
+   "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "The game keeps only one frame ahead of the screen (VKD3D swapchain latency 1) instead of up to three, so input reaches the picture sooner. The bundled TurnRIP then raises the GPU clock by frame time, so it costs no FPS. Off = VKD3D's own 3 frames. A VKD3D_SWAPCHAIN_LATENCY_FRAMES typed into Environment Variables wins.": {
+  "hu": "A játék csak egy képkockával jár a kijelző előtt (VKD3D swapchain latency 1), nem akár hárommal, így a bevitel hamarabb látszik a képen. A beépített TurnRIP ilyenkor a képidő alapján emeli a GPU órajelét, így nem kerül FPS-be. Ki = a VKD3D saját 3 képkockája. A környezeti változókba írt VKD3D_SWAPCHAIN_LATENCY_FRAMES mindig nyer.",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -2114,8 +2326,8 @@
    "WoWForeverScreen.kt"
   ]
  },
- "The size WoW renders at. Lower = more FPS but a softer image. Saved for this container; apply while the game is stopped. WoW's own resolution and render scale are aligned on launch.": {
-  "hu": "Ekkora képet renderel a WoW. Kisebb = több FPS, de kevésbé éles kép. A konténerhez mentődik; leállított játék mellett alkalmazd. A WoW saját felbontása és render scale-je indításkor igazodik.",
+ "The size WoW renders at. Lower = more FPS but a softer image. Saved for this container; apply while the game is stopped. WoW's own resolution is aligned on launch; its render scale stays as you set it in the game (kept separately for DX11 and DX12).": {
+  "hu": "Ekkora képet renderel a WoW. Kisebb = több FPS, de kevésbé éles kép. A konténerhez mentődik; leállított játék mellett alkalmazd. A WoW saját felbontása indításkor igazodik; a render scale úgy marad, ahogy a játékban beállítod (DX11-hez és DX12-höz külön megjegyezve).",
   "files": [
    "WowDisplaySettingsSection.kt"
   ]
@@ -2132,6 +2344,12 @@
    "BootingSplash.kt"
   ]
  },
+ "Tooltips": {
+  "hu": "Tooltipek",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
  "Translates DirectX 11 to Vulkan. The bundled DXVK 3.1.1 is recommended and selected by default.": {
   "hu": "A DirectX 11-et fordítja Vulkanra. A beépített DXVK 3.1.1 az ajánlott, és alapból ez van kiválasztva.",
   "files": [
@@ -2142,6 +2360,18 @@
   "hu": "A DirectX 12-t fordítja Vulkanra. Csak akkor használatos, ha a grafikus API DX12.",
   "files": [
    "WowVkd3dSection.kt"
+  ]
+ },
+ "TurnRIP records for 2 frames every 10 seconds which GPU work the game requests (render passes, tile loads/stores, resolves, blits, clears, compute) into the diagnostic export. Each sample causes a short hitch, so turn it off for normal play; the per-second driver counters are recorded with diagnostic logging alone. Needs diagnostic logging on.": {
+  "hu": "A TurnRIP 10 másodpercenként 2 képkockán át rögzíti, milyen GPU-munkát kér a játék (render passok, tile betöltés/mentés, resolve, blit, törlés, compute) a diagnosztikai exportba. Minden minta egy rövid döccenést okoz, ezért normál játékhoz kapcsold ki; a driver másodpercenkénti számlálóit a diagnosztikai naplózás magában is rögzíti. A diagnosztikai naplózás bekapcsolása kell hozzá.",
+  "files": [
+   "WowCacheSettingsDialog.kt"
+  ]
+ },
+ "UPDATE": {
+  "hu": "FRISSÍTÉS",
+  "files": [
+   "WowAppUpdater.kt"
   ]
  },
  "UPDATE TO ": {
@@ -2184,6 +2414,12 @@
   "hu": "A környezeti változók nem menthetők.",
   "files": [
    "WowEnvironmentEditorDialog.kt"
+  ]
+ },
+ "Unit frames": {
+  "hu": "Egységkeretek",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Update": {
@@ -2312,14 +2548,14 @@
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "Where the GPU draws. Sysmem: directly in system memory (recommended). GMEM: in the GPU's small fast on-chip memory, tile by tile. Driver default: Turnip decides per frame.": {
-  "hu": "Hol rajzol a GPU. Sysmem: közvetlenül a rendszermemóriában (ajánlott). GMEM: a GPU kicsi, gyors belső memóriájában, csempénként. A driver alapértelmezése: a Turnip képkockánként dönt.",
+ "Where the GPU draws. Sysmem: directly in system memory (recommended). GMEM: in the GPU's small fast on-chip memory, tile by tile. Driver default: for WoW, TurnRIP measures each render pass both ways and keeps the faster one.": {
+  "hu": "Hol rajzol a GPU. Sysmem: közvetlenül a rendszermemóriában (ajánlott). GMEM: a GPU kicsi, gyors belső memóriájában, csempénként. A driver alapértelmezése: WoW-nál a TurnRIP minden render passt mindkét módon lemér, és a gyorsabbat tartja meg.",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "Who holds the frame rate to the limit. App, vsync-locked (recommended): the app releases frames in step with the display's refresh, so they stay evenly spaced. App, timer: the app uses its own timer instead of the display refresh, which can drift slightly. DXVK / VKD3D: the graphics layer limits with its own timer, which can make motion judder. App, vsync + phase (experimental): like vsync-locked, and the app also measures where frames reach the display and shifts their timing a few milliseconds so they finish mid-refresh: a small timing wobble then no longer moves a frame to the neighbouring refresh (measured at 60 Hz with FIFO). A limiter typed into Environment Variables always uses DXVK / VKD3D.": {
-  "hu": "Ki tartja a képkockasebességet a limiten. App, vsync-hez kötött (ajánlott): az app a kijelző frissítésével lépésben engedi tovább a képkockákat, így egyenletes marad a ritmus. App, időzítős: az app saját időzítőt használ a kijelző frissítése helyett, ez kicsit elcsúszhat. DXVK / VKD3D: a grafikus réteg saját időzítővel limitál, ez ránghatóvá teheti a mozgást. App, vsync + időzítés-igazítás (kísérleti): mint a vsync-hez kötött, de az app azt is méri, mikor érnek a kockák a kijelzőhöz, és néhány ezredmásodperccel eltolja őket a frissítés közepére, így egy kis időzítés-ingadozás már nem viszi át a kockát a szomszéd frissítésre (60 Hz-en, FIFO-val mérve). A környezeti változókba kézzel beírt limiter mindig a DXVK / VKD3D utat használja.",
+ "Who holds the frame rate to the limit. App, vsync-aligned (recommended): the app releases frames in step with the display's refresh and shifts them a few milliseconds so they finish mid-refresh, so they stay evenly spaced. DXVK / VKD3D: the graphics layer limits with its own timer, which can make motion judder; a fallback. A limiter typed into Environment Variables always uses DXVK / VKD3D.": {
+  "hu": "Ki tartja a képkockasebességet a limiten. App, vsync-hez igazított (ajánlott): az app a kijelző frissítésével lépésben engedi tovább a képkockákat, és néhány ezredmásodperccel a frissítés közepére igazítja őket, így egyenletes marad a ritmus. DXVK / VKD3D: a grafikus réteg saját időzítővel limitál, ez ránghatóvá teheti a mozgást; tartalék megoldás. A környezeti változókba kézzel beírt limiter mindig a DXVK / VKD3D utat használja.",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -2350,10 +2586,22 @@
    "WowCacheSettingsDialog.kt"
   ]
  },
+ "XServer with DX12 only. The game's frame reaches the screen only once the GPU has finished drawing it. Without this the screen could sometimes show the previous picture (the loading bar jumping back, stutter while the GPU is busy). The FPS limit and frame pacing stay as they are. Takes effect from the next launch.": {
+  "hu": "Csak XServer + DX12 esetén. A játék képe csak akkor kerül a kijelzőre, amikor a GPU már befejezte a rajzolását. Enélkül a képernyőn néha az előző kép jelenhetett meg (a betöltőcsík visszaugrik, rángás, amikor a GPU terhelt). Az FPS-limit és a képütemezés nem változik. A következő indítástól él.",
+  "files": [
+   "WowLaunchExperimentsSection.kt"
+  ]
+ },
  "Your Classic beta install becomes World of Warcraft: Forever in place: only the new client (about 250 MB) downloads, your game data stays.": {
   "hu": "A Classic béta-telepítésed helyben lesz World of Warcraft: Forever: csak az új kliens töltődik le (kb. 250 MB), a játékfájlok maradnak.",
   "files": [
    "WoWForeverScreen.kt"
+  ]
+ },
+ "Your own key from console.curseforge.com. It is stored only on this phone and sent only to CurseForge. Leave it empty to remove it.": {
+  "hu": "A saját kulcsod a console.curseforge.com oldalról. Csak ezen a telefonon tárolódik, és csak a CurseForge kapja meg. Hagyd üresen a törléséhez.",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "default": {
@@ -2444,37 +2692,19 @@
    "WowAddonsPage.kt"
   ]
  },
- "App, vsync + phase (default)": {
+ "Lowest (default)": {
   "hu": "",
   "files": [
    "release"
   ]
  },
- "App, vsync-locked": {
-  "hu": "",
-  "files": [
-   "release"
-  ]
- },
- "Lower (default)": {
-  "hu": "",
-  "files": [
-   "release"
-  ]
- },
- "Only with FIFO. Smooth: frames queue up as they come, about 60 ms from frame to screen at 60 Hz, never a skipped frame. Lower (default): after a hitch the app takes a queued frame out (one skipped frame) and stops at the first level that works (about 43 ms). Lowest (experimental): also tries one step further each time; if that does not hold it costs one more small hitch, then the app keeps the level that held.": {
+ "Only with FIFO. Smooth: frames queue up as they come, about 60 ms from frame to screen at 60 Hz, never a skipped frame. Lower (experimental): after a hitch the app takes a queued frame out (one skipped frame) and stops at the first level that works (about 43 ms). Lowest (default): also tries one step further each time; if that does not hold it costs one more small hitch, then the app keeps the level that held.": {
   "hu": "",
   "files": [
    "release"
   ]
  },
  "Smooth": {
-  "hu": "",
-  "files": [
-   "release"
-  ]
- },
- "Who holds the frame rate to the limit. App, vsync-locked: the app releases frames in step with the display's refresh, so they stay evenly spaced. App, timer: the app uses its own timer instead of the display refresh, which can drift slightly. DXVK / VKD3D: the graphics layer limits with its own timer, which can make motion judder. App, vsync + phase (default): like vsync-locked, and the app also measures where frames reach the display and shifts their timing a few milliseconds so they finish mid-refresh: a small timing wobble then no longer moves a frame to the neighbouring refresh (measured at 60 Hz with FIFO). A limiter typed into Environment Variables always uses DXVK / VKD3D.": {
   "hu": "",
   "files": [
    "release"

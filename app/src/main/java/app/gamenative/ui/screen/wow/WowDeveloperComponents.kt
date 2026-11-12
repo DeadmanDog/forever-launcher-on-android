@@ -25,6 +25,13 @@ internal object WowDeveloperComponents {
             .filter { runCatching { validateRuntime(ContentsManager.getInstallDir(context, it), it); requireResolvable(context, m, it) }.isSuccess }
     }
 
+    /** Every installed Wine/Proton profile (no validation): what a cleanup may look at. */
+    fun installedRuntimeProfiles(context: Context): List<ContentProfile> {
+        val m = ContentsManager(context).apply { syncContents() }
+        return (m.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_WINE).orEmpty() +
+            m.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_PROTON).orEmpty()).distinctBy { runtimeId(it) }
+    }
+
     fun drivers(context: Context): List<Entry> {
         val manager = AdrenotoolsManager(context)
         val root = File(context.filesDir, "contents/adrenotools")
@@ -233,8 +240,11 @@ internal object WowDeveloperComponents {
             check(drivers(context).any { it.id == entry.id && it.directory.canonicalFile == entry.directory.canonicalFile }) { "Driver is not installed." }
             check(AdrenotoolsManager(context).deleteDriverWithoutReassigning(entry.id)) { "Unable to delete driver." }
         } else {
-            val type = if (entry.kind == Kind.DXVK) ContentProfile.ContentType.CONTENT_TYPE_DXVK else ContentProfile.ContentType.CONTENT_TYPE_WINE
-            val p = manager.getProfiles(type).orEmpty().singleOrNull {
+            // A runtime may be catalogued as Wine or as Proton (the bundled Proton WCP): look in both.
+            val candidates = if (entry.kind == Kind.DXVK) manager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_DXVK).orEmpty()
+                else manager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_WINE).orEmpty() +
+                    manager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_PROTON).orEmpty()
+            val p = candidates.distinctBy { ContentsManager.getInstallDir(context, it).canonicalPath }.singleOrNull {
                 (if (entry.kind == Kind.DXVK) WowDxvkSelector.identifier(it) else runtimeId(it)) == entry.id &&
                     ContentsManager.getInstallDir(context, it).canonicalFile == entry.directory.canonicalFile
             } ?: error("Installed component not found.")

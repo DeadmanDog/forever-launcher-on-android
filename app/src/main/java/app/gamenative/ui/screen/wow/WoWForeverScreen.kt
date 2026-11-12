@@ -123,6 +123,11 @@ private fun WoWForeverScreenContent(
     var showLowDataDialog by remember { mutableStateOf(false) }
     var lowDataAcknowledged by remember { mutableStateOf(false) }
     var gameDataRevision by remember { mutableStateOf(0) }
+    // A newer Forever Launcher release on GitHub (WowAppUpdater): shown as a card until updated or put off.
+    var appUpdate by remember { mutableStateOf(WowAppUpdater.pending(context)) }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { WowAppUpdater.check(context.applicationContext) }?.let { appUpdate = it }
+    }
     var versionStatus by remember { mutableStateOf<WowClientDownloader.VersionCheckResult?>(null) }
     var isCheckingVersion by remember { mutableStateOf(false) }
     var isUpdating by remember { mutableStateOf(false) }
@@ -441,7 +446,8 @@ private fun WoWForeverScreenContent(
                         fullscreen = fullscreen,
                     )
                     container = containerManager.createContainer(containerId, newContainerDefaults)
-                } else if (WowContainerProfile.prepareExistingContainer(container, gamePath) or WowContainerProfile.moveToFullscreen(container, fullscreen)) {
+                } else if (WowContainerProfile.prepareExistingContainer(container, gamePath) or WowContainerProfile.moveToFullscreen(container, fullscreen) or
+                    WowContainerProfile.moveToHalfFullscreen(container, fullscreen, WowDisplaySettings.previousFullscreen(context))) {
                     container.saveData()
                 }
 
@@ -699,6 +705,10 @@ private fun WoWForeverScreenContent(
             val showDataCard = !filesMissing && !isWrongGame && !isUpgradableBeta &&
                 (gameData?.complete == false || WowDataDownloadState.running || WowDataDownloadState.error != null)
             val dataBlock: @Composable ColumnScope.() -> Unit = {
+                appUpdate?.let { release ->
+                    WowAppUpdateCard(release, onDismiss = { appUpdate = null })
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
                 if (showDataCard) {
                     WowGameDataCard(gameData, enabled = !isLaunching && !isUpdating && !storageBusy && !isPreparingBundledComponents && !PluviaApp.keepAlive,
                         gameRoot = gamePath, onChanged = { gameDataRevision++ })
@@ -1371,6 +1381,7 @@ private fun installBundledComponents(context: Context, onStatus: (String) -> Uni
     if (bundledVerifiedAt == 0L || now - bundledVerifiedAt >= BUNDLED_RECHECK_MS) {
         WowBundledComponents.ensureInstalled(context, onStatus)
         WowBundledComponents.upgradeSuperseded(context, onStatus)
+        WowBundledComponents.removeSuperseded(context, onStatus)
         bundledVerifiedAt = android.os.SystemClock.elapsedRealtime()
     }
     com.winlator.xenvironment.ImageFsInstaller.removeOldRedirectLibs(ImageFs.find(context).rootDir)

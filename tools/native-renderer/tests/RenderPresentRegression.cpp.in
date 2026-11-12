@@ -67,6 +67,7 @@ struct VulkanRendererContext {
     int latencyCount = 0; int64_t latencyFloorNs = 0; int highWindows = 0; int drainHoldWindows = 0;
     int64_t latencyBeforeDrainNs = 0; bool drainOne = false; uint64_t presentedContentGen = 0;
     bool latencyWindowDirty = false;
+    bool latencyWindowAppLate = false; int64_t drainReachedNs = 0; int64_t lastShownContentNs = 0;
     int64_t latencyWindowStartNs = 0;
     static constexpr int kSettleWindows = 2; int cleanWindows = kSettleWindows;
     uint64_t drainedContentGen = 0; int64_t drainHoldUntilNs = 0;
@@ -185,23 +186,25 @@ int main(int argc, char** argv) {
         puts("PASS latency window from timings");
     }
     if (n == 10) {
-        // 1.3.36 on the phone: the skip landed in a hitch, the check saw no drop and took 47 ms as the floor. Windows with a
-        // hitch now count for nothing, so the check waits for clean windows.
+        // 1.3.36 on the phone: the skip landed in a hitch, the check saw no drop and took 47 ms as the floor. Hitch windows
+        // never teach the floor nor give the check's verdict; since 1.0.6 they may take out a backlog (WoW hitches every
+        // 1-2 s: clean-only windows left the drain idle in live play).
         const int64_t r = 16666667; int drains = 0;
         auto window = [&](int64_t medianMs, bool dirty) {
             c.latencyWindowDone(medianMs * ms, r, dirty, false);
             if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
         };
-        window(23, false); window(48, true); window(48, true);
-        check(drains == 0, "skipped on windows with a hitch");
-        window(48, false); window(48, false); window(48, false);   // one window to settle after the hitch, then two high
-        check(drains == 1, "no skip on clean high windows");
-        window(48, true); window(48, true); window(48, true);
-        window(31, false); window(31, false); window(31, false);
-        check(c.latencyFloorNs == 23 * ms, "a hitch during the check raised the floor");
-        for (int i = 0; i < 20; ++i) window(31, false);
+        window(23, false); window(48, true);
+        check(drains == 0 && c.latencyFloorNs == 23 * ms, "one hitch window skipped or taught the floor");
+        window(48, true);
+        check(drains == 1, "a backlog in hitch windows is not taken out");
+        window(31, true); window(31, true); window(31, true); window(31, true);
+        check(c.drainHoldWindows == 1 && c.latencyFloorNs == 23 * ms, "a hitch window decided the check");
+        window(31, false);
+        check(c.drainHoldWindows == 0 && c.latencyFloorNs == 23 * ms, "a hitch during the check raised the floor");
+        for (int i = 0; i < 20; ++i) window(31, i % 2 == 0);
         check(drains == 1, "skipped at the floor");
-        puts("PASS hitch windows ignored");
+        puts("PASS hitch windows take out a backlog but decide nothing");
     }
     if (n == 6) {
         c.refreshPeriodNs = 8333333;
@@ -226,6 +229,106 @@ int main(int argc, char** argv) {
         check(p[0] == 2 && (p[1] < 20000 || p[1] > 8333333 - 20000) && p[2] > 950, "edge phase not seen as the edge");
         puts("PASS display phase measurement");
     }
+    if (n == 23) {
+        // 1.1.6 DX12 diag: a skip at 36.8 ms, then a 16 s loading screen, then 40.9 ms. The check was still pending after loading
+        // and took the post-loading level as "the skip changed nothing": the floor became 40.9 and nothing was taken out again.
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](double medianMs, bool dirty, bool slow) {
+            c.latencyWindowDone((int64_t)(medianMs * ms), r, dirty, slow);
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
+        };
+        window(23.7, false, false); window(36.8, false, false); window(36.8, false, false);
+        check(drains == 1, "no skip");
+        window(22.7, true, false);
+        for (int i = 0; i < 15; ++i) window(37.2, false, true);
+        for (int i = 0; i < 6 && drains < 2; ++i) window(40.9, false, false);
+        printf("floor=%lld drains=%d\n", (long long)(c.latencyFloorNs / 1000), drains);
+        check(c.latencyFloorNs == (int64_t)(23.7 * ms), "a check left over from before loading set the floor");
+        check(drains == 2, "the frame loading left in the queue is not taken out");
+        window(24.0, false, false); window(24.0, false, false); window(24.0, false, false);
+        check(c.latencyFloorNs == (int64_t)(23.7 * ms) && drains == 2, "the skip after loading moved the floor");
+        puts("PASS loading cancels a pending check");
+    }
+    if (n == 24) {
+        // 1.1.6 DX12 diag: a skip at 39.7 ms worked (the next windows 24.2/24.3, both with a hitch), a hitch refilled the queue and
+        // the clean check window saw 40.9: the skip was judged useless and 40.9 became the floor.
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](double medianMs, bool dirty) {
+            c.latencyWindowDone((int64_t)(medianMs * ms), r, dirty, false);
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
+        };
+        window(23.7, false); window(39.7, false); window(39.7, false);
+        check(drains == 1, "no skip");
+        window(24.2, true); window(24.3, true); window(40.9, false);
+        printf("floor=%lld\n", (long long)(c.latencyFloorNs / 1000));
+        check(c.latencyFloorNs == (int64_t)(23.7 * ms), "a skip that worked was judged useless");
+        for (int i = 0; i < 3; ++i) window(40.9, false);
+        check(drains == 2, "the refilled frame is not taken out");
+        puts("PASS a working skip is judged by the lowest level it reached");
+    }
+    if (n == 25) {
+        // A refill only keeps the deeper queue when the compositor missed (game content on time, shown late). A late game frame
+        // (WoW hitches every 1-2 s: 123 of 135 long gaps in the 1.1.6 diag) is the game's, not the queue's: the floor stays.
+        const int64_t r = 16666667; int drains = 0;
+        auto window = [&](int64_t medianMs, bool dirty, bool appLate) {
+            c.latencyWindowAppLate = appLate;
+            c.latencyWindowDone(medianMs * ms, r, dirty, false);
+            c.latencyWindowAppLate = false;
+            if (c.drainOne) { c.contentGen++; check(c.drainQueuedFrame(), "pending skip not taken"); ++drains; }
+        };
+        window(25, false, false); window(47, false, false); window(47, false, false);
+        window(30, false, false); window(30, false, false); window(30, false, false);
+        check(drains == 1 && c.refillWatchWindows > 0, "no working skip");
+        window(41, true, false); window(47, false, false);
+        check(c.latencyFloorNs == 25 * ms, "a game hitch raised the floor");
+        window(47, false, false); window(47, false, false);
+        check(drains == 2, "the frame a game hitch left is not taken out");
+        puts("PASS a game hitch is no refill");
+    }
+    if (n == 26) {
+        // collectPresentTimings tells a late frame of the game (its content came late) from a late present (content on time).
+        c.refreshPeriodNs = 16666667; c.frameIntervalNs = 16666667;
+        const uint64_t t = 30000 * ms, P = 16666667ULL;
+        auto present = [&](uint32_t id, uint64_t contentAt, uint64_t shownAt) {
+            c.presentWasGame[id] = 1; c.presentQueuedNs[id] = (int64_t)contentAt + 1 * ms; c.presentContentNs[id] = (int64_t)contentAt;
+            pending = { shown(id, shownAt) }; c.collectPresentTimings();
+        };
+        for (uint32_t id = 1; id <= 3; ++id) present(id, t + id * P, t + id * P + 25 * ms);
+        check(!c.latencyWindowDirty && !c.latencyWindowAppLate, "steady frames marked");
+        present(4, t + 6 * P, t + 6 * P + 25 * ms);   // the game was 3 refreshes late
+        check(c.latencyWindowDirty && !c.latencyWindowAppLate, "a late game frame counted as a compositor miss");
+        c.latencyWindowDirty = false;
+        present(5, t + 7 * P, t + 9 * P + 25 * ms);   // content on time, shown two refreshes late
+        check(c.latencyWindowDirty && c.latencyWindowAppLate, "a compositor miss not recognised");
+        puts("PASS late frame cause");
+    }
+    if (n == 27 || n == 28) {
+        // 1.2.3 (multi-agent review): a limit above the panel rate (FPS chip 90/120/144 on the 60 Hz panel) made every 60-frame
+        // window "slow" (59 frames at 16.7 ms > 59 x 11.1 ms x 10/9), so no floor was learned and the drain never ran: the FIFO
+        // queue stayed full. The panel never shows frames faster than its refresh. n == 27: limit 60 (control), 28: limit 90.
+        const int64_t r = 16666667;
+        c.refreshPeriodNs = r;
+        c.frameIntervalNs = n == 27 ? 16666667 : 1000000000LL / 90;
+        uint32_t id = 1; uint64_t at = 5000000000ULL; int drains = 0;
+        auto frames = [&](int count, int64_t latency) {
+            for (int i = 0; i < count; ++i, ++id, at += r) {
+                uint32_t slot = id & 255;
+                c.presentMetadataId[slot] = id; c.presentWasGame[slot] = 1;
+                c.presentQueuedNs[slot] = (int64_t)at - latency;
+                c.presentContentNs[slot] = (int64_t)at - latency - 1000000;
+                pending.push_back(shown(id, at));
+                c.collectPresentTimings();
+                if (c.drainOne) { c.contentGen++; if (c.drainQueuedFrame()) ++drains; }
+            }
+        };
+        frames(60 * 3, 25 * ms);
+        frames(60 * 4, 50 * ms);
+        printf("limit=%s floor_us=%lld drains=%d late=%lld\n", n == 27 ? "60" : "90", (long long)(c.latencyFloorNs / 1000), drains,
+            (long long)c.statLate.load());
+        check(drains >= 1, "a sustained extra FIFO frame is never drained when the limit is above the panel rate");
+        check(c.statLate.load() == 0, "frames at the panel rate counted late under a limit above it");
+        puts("PASS drain with a limit above the panel rate");
+    }
     if (n == 11) {
         // Choice A: the emptier queue refills within 20 s of a skip that worked -> keep the smooth level, skip no further;
         // a larger backlog later (a loading screen) is still taken out down to that level.
@@ -239,7 +342,7 @@ int main(int argc, char** argv) {
         window(30, false); window(30, false); window(30, false);
         check(c.latencyFloorNs == 25 * ms, "a skip that worked moved the floor");
         for (int i = 0; i < 8; ++i) window(30, false);
-        window(31, true); window(47, false);
+        c.latencyWindowAppLate = true; window(31, true); c.latencyWindowAppLate = false; window(47, false);
         check(c.latencyFloorNs == 47 * ms, "a refill soon after the skip did not keep the smooth level");
         for (int i = 0; i < 40; ++i) window(47, false);
         check(drains == 1, "skipped again below the smooth level");
@@ -326,7 +429,7 @@ int main(int argc, char** argv) {
             c.presentWasGame[id] = 1; c.presentQueuedNs[id] = (int64_t)at - 40 * ms;
             pending = { shown(id, at) }; c.collectPresentTimings();
         }
-        check(c.cleanWindows == 0 && !c.latencyWindowDirty, "the late 60th frame was charged to the next window");
+        check(c.exportWindowState == c.kWindowDirty && !c.latencyWindowDirty, "the late 60th frame was charged to the next window");
         puts("PASS late frame charged to its own window");
     }
     if (n == 18) {
@@ -346,7 +449,8 @@ int main(int argc, char** argv) {
         window(43, true); window(60, false); window(60, false); window(60, false);
         check(drains == 2, "a refill above the reached level is not taken out");
         int64_t v[13]; c.takeDisplayStats(v);
-        check(v[10] == 43000 && v[11] == 60000 && v[12] == c.kWindowClean, "window state export");
+        // A hitch window no longer restarts the settle count: the skip came on the second high window, the third is its check.
+        check(v[10] == 43000 && v[11] == 60000 && v[12] == c.kWindowHold, "window state export");
         puts("PASS one step stops at the first level");
     }
     if (n == 19) {

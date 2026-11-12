@@ -12,6 +12,20 @@ class WowClientDownloaderTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
 
+    @Test fun regionalBuildUsesEuEvenWhenUsHasAlreadyPatched() {
+        val versions = "Region!STRING:0|VersionsName!String:0|BuildConfig!HEX:16\n" +
+            "## seqn = 13\nus|1.2.13|new\neu|1.2.12|old\n"
+        assertEquals("old", WowClientDownloader.regionalRow(versions, "Region", "eu")?.get("BuildConfig"))
+        assertEquals("new", WowClientDownloader.regionalRow(versions, "Region", "us")?.get("BuildConfig"))
+        assertNull(WowClientDownloader.regionalRow(versions, "Region", "kr"))
+    }
+
+    @Test fun regionalCdnUsesNameAndNeverFallsBackToUsRow() {
+        val cdns = "Name!STRING:0|Hosts!STRING:0\nus|us.cdn.blizzard.com\neu|eu.cdn.blizzard.com\n"
+        assertEquals("eu.cdn.blizzard.com", WowClientDownloader.regionalRow(cdns, "Name", "eu")?.get("Hosts"))
+        assertNull(WowClientDownloader.regionalRow(cdns, "Name", "kr"))
+    }
+
     @Test
     fun readBuildInfo_parsesValidPipeDelimitedFile() {
         val root = tempFolder.newFolder("wow")

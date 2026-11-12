@@ -118,6 +118,15 @@ class PresentFramePacerTest {
         assertTrue(released.isEmpty())
     }
 
+    @Test fun aPacerReplacedMeanwhileHandsALateBufferBack() {
+        // PresentExtension swaps pacers (background/foreground) while the X thread may still hold the old one.
+        val p = pacer()
+        p.setFrameRateLimit(60)
+        p.releaseAllAndClose()
+        p.schedule(1, 7, false)
+        assertEquals(listOf(7), released)
+    }
+
     @Test fun callbackDoesNotHoldTheSchedulerMonitor() {
         val finished = CountDownLatch(1)
         lateinit var p: PresentFramePacer<Int>

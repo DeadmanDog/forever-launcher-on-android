@@ -1,0 +1,86 @@
+diff --git a/src/steamcompmgr.cpp b/src/steamcompmgr.cpp
+--- a/src/steamcompmgr.cpp
++++ b/src/steamcompmgr.cpp
+@@ -2448,8 +2448,6 @@
+ 		GetDesiredSize( nDesiredWidth, nDesiredHeight );
+ 		cursor_scale = nDesiredHeight / (float)m_texture->contentHeight();
+ 	}
+-	cursor_scale = std::max(cursor_scale, 1.0f);
+-
+ 	float scaledX, scaledY;
+ 	float currentScaleRatio_x = 1.0;
+ 	float currentScaleRatio_y = 1.0;
+@@ -2457,6 +2455,17 @@
+ 
+ 	calc_scale_factor(frameInfo->eUpscaleScaler, currentScaleRatio_x, currentScaleRatio_y, sourceWidth, sourceHeight);
+ 
++	static const bool bAndroidDrm = getenv("GAMENATIVE_DRM_SOCKET") != nullptr;
++	if ( bAndroidDrm )
++	{
++		// The Android cursor plane is displayed independently of the game's buffer.
++		// Keep the original shape and hotspot, with a readable minimum size at 1:1.
++		const float imageExtent = std::max(m_texture->contentWidth(), m_texture->contentHeight());
++		const float readableScale = 48.0f / imageExtent;
++		cursor_scale = std::max({ cursor_scale, readableScale, std::min(currentScaleRatio_x, currentScaleRatio_y) });
++	}
++	cursor_scale = std::max(cursor_scale, 1.0f);
++
+ 	cursorOffsetX = (currentOutputWidth - sourceWidth * currentScaleRatio_x) / 2.0f;
+ 	cursorOffsetY = (currentOutputHeight - sourceHeight * currentScaleRatio_y) / 2.0f;
+ 
+@@ -7963,11 +7972,15 @@
+ 	if (ev->atom == ctx->atoms.gamescopeReshadeTechniqueIdx)
+ 	{
+ 		uint32_t technique_idx = get_prop(ctx, ctx->root, ctx->atoms.gamescopeReshadeTechniqueIdx, 0);
++		if ( g_reshade_technique_idx != technique_idx )
++			hasRepaintNonBasePlane = true;
+ 		g_reshade_technique_idx = technique_idx;
+ 	}
+ 	if (ev->atom == ctx->atoms.gamescopeReshadeEffect)
+ 	{
+ 		std::string path = get_string_prop( ctx, ctx->root, ctx->atoms.gamescopeReshadeEffect );
++		if ( g_reshade_effect != path )
++			hasRepaintNonBasePlane = true;
+ 		g_reshade_effect = path;
+ 	}
+ 	if (ev->atom == ctx->atoms.gamescopeDisplayDynamicRefreshBasedOnGamePresence)
+diff --git a/src/Backends/DRMBackend.cpp b/src/Backends/DRMBackend.cpp
+--- a/src/Backends/DRMBackend.cpp
++++ b/src/Backends/DRMBackend.cpp
+@@ -586,6 +586,16 @@
+ bool ColorLookInUse();
+ extern bool fadingOut;
+ extern std::string g_reshade_effect;
++extern uint32_t g_reshade_technique_idx;
++
++static bool CanReuseCursorComposite(std::string_view effect, uint32_t technique)
++{
++	// These bundled passes have no uniforms, history or cursor input.
++	return effect.empty() || (technique == 0 &&
++		(effect == "WowForeverDroidDeck-adaptive.fx" ||
++		 effect == "WowForeverDroidDeck-clarity.fx" ||
++		 effect == "WowForeverDroidDeck-vivid.fx"));
++}
+ 
+ #ifndef DRM_CAP_ATOMIC_ASYNC_PAGE_FLIP
+ #define DRM_CAP_ATOMIC_ASYNC_PAGE_FLIP 0x15
+@@ -4467,7 +4477,9 @@
+ 
+ 		virtual glm::uvec2 CursorSurfaceSize( glm::uvec2 uvecSize ) const override
+ 		{
+-			if ( !cv_drm_cursor_plane )
++			// Android accepts an unpadded image. Padding to the maximum would
++			// make even a small cursor exceed the plane limit after scaling.
++			if ( !cv_drm_cursor_plane || g_bCursorOnPlane )
+ 				return uvecSize;
+ 
+ 			return glm::uvec2{ g_DRM.cursor_width, g_DRM.cursor_height };
+@@ -4521,7 +4533,7 @@
+ 				pLastComposite != nullptr &&
+ 				!pFrameInfo->bFadingOut &&
+ 				!pFrameInfo->blurLayer0 &&
+-				g_reshade_effect.empty() &&
++				CanReuseCursorComposite(g_reshade_effect, g_reshade_technique_idx) &&
+ 				g_uCompositeDebug == 0;
+ 
+ 			gamescope::Rc<CVulkanTexture> pComposite;

@@ -17,6 +17,7 @@ public interface XServerRendererView {
     void requestRender();
     /** A cursor position the game set itself: only the drawn cursor has to move. */
     default void moveCursorTo(short x, short y) { requestRender(); }
+    default void setGuestCursorVisible(boolean visible) { getRenderer().setCursorVisible(visible); }
     void setFrameRateLimit(int limit);
     void onResume();
     void onPause();

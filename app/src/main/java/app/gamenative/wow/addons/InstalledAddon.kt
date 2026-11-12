@@ -22,6 +22,7 @@ data class InstalledAddon(
 object ProviderIds {
     const val WOWINTERFACE = "wowinterface"
     const val GITHUB = "github"
+    const val CURSEFORGE = "curseforge"
 
     /** A direct zip URL installed via "Install from URL"; `projectId` is the URL. */
     const val URL = "url"

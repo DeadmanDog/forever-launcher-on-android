@@ -13,12 +13,14 @@ final class PresentFramePacer<T> implements IdlePacer<T> {
         final T value;
         final long sequence;
         final long deadline;
+        final boolean paced;
 
-        Release(int windowId, T value, long sequence, long deadline) {
+        Release(int windowId, T value, long sequence, long deadline, boolean paced) {
             this.windowId = windowId;
             this.value = value;
             this.sequence = sequence;
             this.deadline = deadline;
+            this.paced = paced;
         }
 
         @Override public int compareTo(Release<T> other) {
@@ -37,6 +39,8 @@ final class PresentFramePacer<T> implements IdlePacer<T> {
     private int limit;
     private long sequence;
     private boolean closed;
+    /** Closed because a new pacer took over (releaseAllAndClose), not cancelled with the session (close). */
+    private boolean replaced;
 
     PresentFramePacer(Consumer<T> release) {
         this(release, System::nanoTime, true);
@@ -59,7 +63,7 @@ final class PresentFramePacer<T> implements IdlePacer<T> {
             PriorityQueue<Release<T>> due = new PriorityQueue<>();
             long now = clock.getAsLong();
             for (Release<T> item : pending) {
-                due.add(new Release<>(item.windowId, item.value, item.sequence, now));
+                due.add(new Release<>(item.windowId, item.value, item.sequence, now, false));
             }
             pending.clear();
             pending.addAll(due);
@@ -70,8 +74,10 @@ final class PresentFramePacer<T> implements IdlePacer<T> {
     @Override public void schedule(int windowId, T value, boolean eagerRelease) {
         boolean immediate;
         synchronized (monitor) {
-            if (closed) return;
-            immediate = limit <= 0;
+            // A pacer replaced meanwhile (PresentExtension reads its field without a lock): the buffer goes back to the client at
+            // once instead of being dropped, which left the game one swapchain image short for good.
+            if (closed && !replaced) return;   // cancelled with its session (close): nobody waits for the buffer any more
+            immediate = closed || limit <= 0;
             if (!immediate) {
                 long now = clock.getAsLong();
                 long period = Math.max(1L, 1_000_000_000L / limit);
@@ -80,17 +86,19 @@ final class PresentFramePacer<T> implements IdlePacer<T> {
                 Long previous = nextDeadlines.get(windowId);
                 long deadline = previous == null ? now : Math.max(now, previous + period);
                 nextDeadlines.put(windowId, deadline);
+                // Windows that stopped presenting (destroyed, XIDs reused) are forgotten once their deadline is a second old.
+                if (nextDeadlines.size() > 4) nextDeadlines.values().removeIf(d -> d < now - 1_000_000_000L);
                 // Eager/mailbox mode returns EVERY superseded buffer, not just the last one.
                 if (eagerRelease) {
                     PriorityQueue<Release<T>> updated = new PriorityQueue<>();
                     for (Release<T> item : pending) {
                         updated.add(item.windowId == windowId
-                            ? new Release<>(item.windowId, item.value, item.sequence, now) : item);
+                            ? new Release<>(item.windowId, item.value, item.sequence, now, false) : item);
                     }
                     pending.clear();
                     pending.addAll(updated);
                 }
-                pending.add(new Release<>(windowId, value, sequence++, deadline));
+                pending.add(new Release<>(windowId, value, sequence++, deadline, true));
                 if (automatic && worker == null) {
                     worker = new Thread(this::run, "PresentPacer");
                     worker.setDaemon(true);
@@ -101,6 +109,25 @@ final class PresentFramePacer<T> implements IdlePacer<T> {
             }
         }
         if (immediate) release.accept(value);
+    }
+
+    private void rebaseOverdueBacklog(Release<T> first, long now) {
+        if (!first.paced || pending.isEmpty()) return;
+        long delay = now - first.deadline;
+        if (delay < Math.max(1L, 1_000_000_000L / limit)) return;
+        Long tail = nextDeadlines.get(first.windowId);
+        if (tail == null || tail <= first.deadline) return;
+
+        // A late timer must hand back one buffer now, without catching up the missed slots in a burst.
+        // Keep the interval for the existing backlog. An isolated late frame still starts fresh on the next submission.
+        PriorityQueue<Release<T>> rebased = new PriorityQueue<>();
+        for (Release<T> item : pending) {
+            rebased.add(item.windowId == first.windowId && item.paced
+                ? new Release<>(item.windowId, item.value, item.sequence, item.deadline + delay, true) : item);
+        }
+        pending.clear();
+        pending.addAll(rebased);
+        nextDeadlines.put(first.windowId, tail + delay);
     }
 
     private void run() {
@@ -115,9 +142,11 @@ final class PresentFramePacer<T> implements IdlePacer<T> {
                         if (item == null) {
                             monitor.wait();
                         } else {
-                            long remaining = item.deadline - clock.getAsLong();
+                            long now = clock.getAsLong();
+                            long remaining = item.deadline - now;
                             if (remaining <= 0L) {
                                 pending.remove();
+                                rebaseOverdueBacklog(item, now);
                                 break;
                             }
                             monitor.wait(remaining / 1_000_000L, (int) (remaining % 1_000_000L));
@@ -138,8 +167,10 @@ final class PresentFramePacer<T> implements IdlePacer<T> {
             Release<T> item;
             synchronized (monitor) {
                 item = pending.peek();
-                if (closed || item == null || item.deadline > clock.getAsLong()) return;
+                long now = clock.getAsLong();
+                if (closed || item == null || item.deadline > now) return;
                 pending.remove();
+                rebaseOverdueBacklog(item, now);
             }
             release.accept(item.value);
         }
@@ -151,6 +182,7 @@ final class PresentFramePacer<T> implements IdlePacer<T> {
             held = new java.util.ArrayList<>(pending);
             java.util.Collections.sort(held);
             closed = true;
+            replaced = true;
             pending.clear();
             nextDeadlines.clear();
             monitor.notifyAll();

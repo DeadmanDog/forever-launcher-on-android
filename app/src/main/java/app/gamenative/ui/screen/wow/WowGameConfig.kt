@@ -65,12 +65,51 @@ internal object WowGameConfig {
             writeAtomically(configWtf, defaults.entries.joinToString("\n") { "SET ${it.key} ${it.value}" } + "\n")
         } else {
             val before = configWtf.readLines()
-            val after = selectGameAccount(prepareExistingLines(before, defaults, locale != null), gameAccount)
+            val scaled = renderScalePerApi(before, graphicsApi, File(flavorDir, "WTF/$RENDER_SCALE_MEMORY"))
+            val after = selectGameAccount(prepareExistingLines(scaled, defaults, locale != null), gameAccount)
             if (before != after) writeAtomically(configWtf, after.joinToString("\n", postfix = "\n"))
         }
         WowDisplaySettings.alignGameConfig(configWtf, resolution)
     }
 
+
+    /** The launcher's own note of the last render scale under each graphics API ("D3D11=1.25"), next to Config.wtf. */
+    const val RENDER_SCALE_MEMORY = "forever-renderscale.properties"
+
+    /**
+     * WoW keeps one renderScale for both APIs, and its DX12 renderer allows at most 100% on this phone (DX11 up to 200%): after one
+     * DX12 session the file says 1 and a 125% chosen under DX11 was gone. The last value seen under each API is noted in [memory];
+     * when the next launch switches the API, the value noted for the new one replaces the file's. Without a switch nothing changes.
+     */
+    internal fun renderScalePerApi(lines: List<String>, api: String, memory: File): List<String> {
+        val setting = Regex("^\\s*SET\\s+(\\S+)\\s+\"([^\"]*)\".*$", RegexOption.IGNORE_CASE)
+        fun value(name: String) = lines.firstNotNullOfOrNull { line ->
+            setting.matchEntire(line)?.takeIf { it.groupValues[1].equals(name, true) }?.groupValues?.get(2) }
+        val current = value("gxApi")?.uppercase()?.takeIf { it == "D3D11" || it == "D3D12" }
+        // 1.1.9: WoW leaves a CVar at its default out of the file, so no line is 100% ("1"), not "unknown".
+        val written = value("renderScale")
+        val scale = if (written == null) "1" else written.takeIf { it.toDoubleOrNull()?.let { v -> v > 0.0 && v <= 4.0 } == true }
+        val noted = java.util.Properties()
+        runCatching { if (memory.isFile) memory.inputStream().use { noted.load(it) } }
+        val before = noted.toMap()
+        if (current != null && scale != null) noted.setProperty(current, scale)
+        var result = lines
+        val wanted = noted.getProperty(api)
+        if (current != null && current != api && wanted != null && wanted != scale) {
+            var replaced = false
+            result = lines.mapNotNull { line ->
+                if (setting.matchEntire(line)?.groupValues?.get(1)?.equals("renderScale", true) != true) line
+                else if (replaced) null
+                else { replaced = true; Regex("(?i)^(\\s*SET\\s+\\S+\\s+\")[^\"]*").replace(line) { it.groupValues[1] + wanted } }
+            }
+            if (!replaced) result = result + "SET renderScale \"$wanted\""
+        }
+        if (noted.toMap() != before) runCatching {
+            memory.parentFile?.mkdirs()
+            memory.outputStream().use { noted.store(it, "Forever Launcher: last WoW renderScale per graphics API") }
+        }
+        return result
+    }
 
     /** What the game uses now, for the Settings Game tab: region code, game language, game account ("1", "2"). */
     data class Current(val region: String, val locale: String, val account: String)

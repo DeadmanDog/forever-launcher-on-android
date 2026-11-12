@@ -35,9 +35,32 @@ public class Keyboard {
 
     public ArraySet<Byte> getPressedKeys() { return pressedKeys; }
 
-    /** Releases every key the guest still sees as held, e.g. when a menu takes the keyboard and their key-up would never reach it. */
+    /**
+     * Releases every key the guest still sees as held, e.g. when a menu takes the keyboard and their key-up would never reach it.
+     * 1.2.3: through XServer.injectKeyRelease (input lock; under Gamescope the release must reach the input sink, the guest's seat).
+     */
     public void releaseAllKeys() {
-        for (Byte key : new java.util.ArrayList<>(pressedKeys)) setKeyRelease(key);
+        for (Byte key : new java.util.ArrayList<>(pressedKeys)) {
+            XKeycode xKeycode = keycodeById(key);
+            if (xKeycode != null) xServer.injectKeyRelease(xKeycode);
+            else setKeyRelease(key);
+        }
+    }
+
+    /**
+     * 1.2.3: a key that went to the Gamescope input sink instead of the X server. Tracked like a real one (pressed keys, modifier
+     * mask) without notifying listeners, so releaseAllKeys and the synthetic-Shift test see it.
+     */
+    public void trackSinkKey(byte keycode, boolean pressed) {
+        if (pressed) {
+            pressedKeys.add(keycode);
+            if (isModifier(keycode)) modifiersMask.set(getModifierFlag(keycode));
+        } else if (pressedKeys.remove(keycode) && isModifier(keycode)) modifiersMask.unset(getModifierFlag(keycode));
+    }
+
+    private static XKeycode keycodeById(byte id) {
+        for (XKeycode k : XKeycode.values()) if (k.getId() == id) return k;
+        return null;
     }
 
     public void setKeysyms(byte keycode, int minKeysym, int majKeysym) {
@@ -136,6 +159,9 @@ public class Keyboard {
     private boolean needsSyntheticShift(KeyEvent event) {
         if (pressedKeys.contains(XKeycode.KEY_SHIFT_L.getId()) || pressedKeys.contains(XKeycode.KEY_SHIFT_R.getId())) return false;
         int keyCode = event.getKeyCode();
+        // 1.2.3: a modifier's own down event carries its meta state (a Shift key-down has META_SHIFT_ON): wrapping it in a synthetic
+        // Shift_L press/release released a held Left Shift at once (Shift+click became a plain click).
+        if (KeyEvent.isModifierKey(keyCode)) return false;
         return event.isShiftPressed() || keyCode == KeyEvent.KEYCODE_AT || keyCode == KeyEvent.KEYCODE_STAR || keyCode == KeyEvent.KEYCODE_POUND || keyCode == KeyEvent.KEYCODE_PLUS;
     }
 

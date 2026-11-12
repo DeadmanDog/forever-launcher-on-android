@@ -66,6 +66,8 @@ class WowBundledComponentsTest {
     }
 
     @Test fun onlyEarlierBundledProtonAndVkd3dAreSuperseded() {
+        assertTrue(WowBundledComponents.supersededProton("proton-11.0-90639.33-arm64ec-33"))   // 1.2.2
+        assertTrue(WowBundledComponents.supersededProton("proton-11.0-90639.32-arm64ec-32"))   // 1.0.1 .. 1.2.1
         assertTrue(WowBundledComponents.supersededProton("proton-11.0-90639.30-arm64ec-30"))
         assertTrue(WowBundledComponents.supersededProton("proton-11.0-90639.29-arm64ec-29"))
         assertTrue(WowBundledComponents.supersededProton("proton-11.0-90639.28-arm64ec-28"))
@@ -83,12 +85,31 @@ class WowBundledComponentsTest {
         // The old package name is replaced even for the same r10; the renamed r10 itself stays.
         assertTrue(WowBundledComponents.supersededVkd3d("vkd3d-FrontMage-VKD3D-Proton-3.0.1-ARM64-r10-10"))
         assertTrue(WowBundledComponents.supersededVkd3d("vkd3d-VKD3D-Proton-3.0.1-ARM64-r9-9"))
+        assertTrue(WowBundledComponents.supersededVkd3d("vkd3d-VKD3D-Proton-3.0.1-ARM64-r10-10"))   // 1.3.57 .. 1.1.6
+        assertTrue(WowBundledComponents.supersededVkd3d("vkd3d-VKD3D-Proton-3.0.1-ARM64-r11-11"))   // 1.1.7 .. 1.1.9
         assertFalse(WowBundledComponents.supersededVkd3d("vkd3d-${WowBundledComponents.VKD3D_NAME}-${WowBundledComponents.VKD3D_VERSION_CODE}"))
         assertFalse(WowBundledComponents.supersededVkd3d("vkd3d-Other-VKD3D-2.13-1"))
         assertFalse(WowBundledComponents.supersededVkd3d(""))
     }
     @Test fun everyEarlierBundledTurnRipIsSuperseded() {
         assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.14"))   // the old default
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.23"))   // Codex's import-only DX12 test
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.22"))   // 1.0.4 .. 1.1.3
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.24"))   // 1.1.4
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.25"))   // 1.1.5, 1.1.6
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.26"))   // 1.1.7, 1.1.8
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.27"))   // 1.1.9, 1.2.0
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.28"))   // 1.2.1, 1.2.2
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.29"))   // 1.2.3
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.30"))   // 1.2.4
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.31"))   // 1.2.5
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.32"))   // 1.2.6
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.33"))   // 1.2.7
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.34"))   // 1.2.8
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.35"))   // 1.2.9, 1.3.0 (black screen)
+        assertFalse(WowBundledComponents.supersededDriver(WowBundledComponents.DRIVER_NAME))
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.21"))   // 1.0.3 code1048
+        assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.20"))   // 1.0.1 code1046
         assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.19"))
         assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.18"))
         assertTrue(WowBundledComponents.supersededDriver("TurnRIP A840 Performance v1.1.17"))
@@ -122,14 +143,14 @@ class WowBundledComponentsTest {
         assertEquals(1, WowBundledComponents.bundles.count {
             it.type == ContentProfile.ContentType.CONTENT_TYPE_PROTON
         })
-        // One VKD3D (r10, it supersedes r2..r9) and one Proton (r31).
+        // One VKD3D (r12, it supersedes r2..r11) and one Proton (r34).
         assertEquals(listOf(WowBundledComponents.VKD3D_NAME),
             WowBundledComponents.bundles.filter { it.type == ContentProfile.ContentType.CONTENT_TYPE_VKD3D }.map { it.name })
         assertTrue(WowBundledComponents.bundles.none { it.experimental })
         // Only the current 3.1.1 DXVK is shipped; the retired 2.7.3 package stays in the local backup.
         assertEquals(listOf(WowBundledComponents.DXVK_NAME),
             WowBundledComponents.bundles.filter { it.type == ContentProfile.ContentType.CONTENT_TYPE_DXVK }.map { it.name })
-        // One driver: TurnRIP 1.1.20 (it supersedes the old default 1.1.14 and 1.1.15 .. 1.1.19).
+        // One driver: TurnRIP 1.1.29 (it supersedes the old default 1.1.14 and 1.1.15 .. 1.1.28).
         assertEquals(listOf(WowBundledComponents.DRIVER_NAME),
             WowBundledComponents.bundles.filter { it.type == null }.map { it.name })
     }

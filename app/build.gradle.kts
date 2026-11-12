@@ -47,9 +47,9 @@ android {
 
         manifestPlaceholders["screenOrientation"] = "unspecified"
 
-        versionCode = 1025
+        versionCode = 1082
         // One number per change round (1.0.1, 1.0.2, ...): the APK version, the archive version and the notes use the same value.
-        versionName = "1.0.0"
+        versionName = "1.1.0"
         manifestPlaceholders["appLabel"] = if (wowRelease) "Forever Launcher" else "Forever Launcher Beta"
 
         val iconValue = "@mipmap/ic_package_042"

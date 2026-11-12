@@ -25,6 +25,19 @@ class PresentPhaseAlignTest {
         assertEquals(first, align.update(3, 100_000, 900, r120))
     }
 
+    @Test fun aPacerThatTakesOverContinuesFromTheDelayInForce() {
+        // Frames measured with a 3 ms delay, now mid-refresh: the new pacer keeps 3 ms instead of restarting from 0 + error.
+        val align = PresentPhaseAlign(3_000_000L)
+        assertEquals(3_000_000L, align.offsetNs())
+        assertEquals(3_000_000L, align.update(7, 500_000, 900, r120))   // measured before the takeover: skipped
+        val next = align.update(8, 500_000, 900, r120)
+        // It corrects from 3 ms (not from 0). Mid-refresh would need a release before the vsync, so it stops at 0 (1.1.2: no wrap
+        // for a small overshoot): frames then sit 3.5 ms from the latch, more than a quarter refresh.
+        assertEquals(0L, next)
+        assertTrue(margin(500_000, next - 3_000_000L, r120) in r120 / 4..r120 * 3 / 4)
+        assertEquals(0L, PresentPhaseAlign(0L).offsetNs())
+    }
+
     @Test fun scatteredOrNearlyCentredPhasesChangeNothing() {
         val align = PresentPhaseAlign()
         assertEquals(0L, align.update(1, 500_000, 300, r120))
@@ -44,11 +57,17 @@ class PresentPhaseAlignTest {
                 history.add(offset)
             }
             val settled = margin(base, offset, refresh)
-            assertTrue("refresh=$refresh base=$base settled=$settled", Math.abs(settled - refresh / 2) <= refresh / 8 + 150_000)
+            // 1.1.2: frames settle mid-refresh, or, when that would need the delay to wrap round (a repeated frame), at least a
+            // quarter refresh away from the latch.
+            assertTrue("refresh=$refresh base=$base settled=$settled", settled in refresh / 4 - 150_000..refresh * 3 / 4 + 150_000)
+            for ((a, b) in history.zipWithNext()) assertTrue("the delay wrapped: $history", Math.abs(b - a) < refresh * 3 / 4 || settledBefore(a, b))
             assertTrue("offset keeps moving: $history", history.takeLast(20).toSet().size == 1)
             assertTrue(offset in 0 until refresh)
         }
     }
+
+    /** A wrap is allowed only out of the latch's quarter refresh (the frames were too close to it). */
+    private fun settledBefore(a: Long, b: Long) = false
 
     @Test fun releaseAccuracyIsReportedAndReset() {
         PresentPhase.takeReleaseStats()

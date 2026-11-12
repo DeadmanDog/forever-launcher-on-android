@@ -6,7 +6,7 @@ package app.gamenative.ui.screen.wow
  * would show intervals the game never had. The reading reports the window with the most intervals (the game's own).
  */
 internal class DiagnosticFrames {
-    enum class Source { NONE, RENDERER_CALLBACK, X_PRESENT_REQUEST }
+    enum class Source { NONE, RENDERER_CALLBACK, X_PRESENT_REQUEST, GAMESCOPE_PRODUCED }
     private class Window { var last = 0L; var count = 0; var sum = 0L; var max = 0L; var over33 = 0; var idleTakes = 0 }
     private companion object { const val IDLE_TAKES_BEFORE_FORGET = 5 }
     private var source = Source.NONE

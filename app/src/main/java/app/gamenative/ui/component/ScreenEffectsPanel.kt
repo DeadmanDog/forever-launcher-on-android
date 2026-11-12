@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -56,6 +57,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.gamenative.R
+import app.gamenative.display.GameNativeDrm
+import app.gamenative.display.GamescopeEffects
+import app.gamenative.display.GamescopePictureLook
+import app.gamenative.display.WowDisplayBackend
+import app.gamenative.display.WowGamescopeRuntime
+import app.gamenative.ui.screen.wow.WowI18n
 import app.gamenative.ui.theme.PluviaTheme
 import app.gamenative.ui.util.ScreenEffectsConfig
 import app.gamenative.ui.util.applyScreenEffectsConfig
@@ -64,6 +71,8 @@ import app.gamenative.ui.util.persistScreenEffectsConfig
 import app.gamenative.utils.BrightnessManager
 import com.winlator.container.Container
 import com.winlator.renderer.VulkanRenderer
+import com.winlator.xenvironment.ImageFs
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -206,6 +215,16 @@ fun ScreenEffectsTabContent(
     firstItemFocusRequester: FocusRequester? = null,
     scrollState: ScrollState = rememberScrollState(),
 ) {
+    val context = LocalContext.current
+    val gamescope = WowDisplayBackend.isGamescope(container)
+    val gamescopeInitial = remember(container, gamescope) {
+        container?.takeIf { gamescope }?.let {
+            GamescopeEffects.load(it).copy(look = GameNativeDrm.activeEffects?.look ?: GamescopePictureLook.OFF)
+        }
+    }
+    var gamescopeEffectMounted by remember(container, gamescope) { mutableStateOf(false) }
+    var pictureLook by remember(container, gamescope) { mutableStateOf(gamescopeInitial?.look ?: GamescopePictureLook.OFF) }
+    var gamescopeMessage by remember(container) { mutableStateOf<String?>(null) }
     val initialConfig = remember(renderer, container) { loadScreenEffectsConfig(container) }
 
     val sanitizedInitialMode = if (initialConfig.scalingMode in VULKAN_SUPPORTED_SCALING_MODES) {
@@ -215,10 +234,10 @@ fun ScreenEffectsTabContent(
     }
 
     var scalingMode by remember(renderer, container) {
-        mutableIntStateOf(sanitizedInitialMode)
+        mutableIntStateOf(gamescopeInitial?.mode ?: sanitizedInitialMode)
     }
     var fsrSharpnessLevel by remember(renderer, container) {
-        mutableIntStateOf(initialConfig.fsrSharpnessLevel)
+        mutableIntStateOf(gamescopeInitial?.sharpness ?: initialConfig.fsrSharpnessLevel)
     }
     var brightness by remember(renderer, container) {
         mutableFloatStateOf(initialConfig.brightness)
@@ -248,6 +267,7 @@ fun ScreenEffectsTabContent(
     LaunchedEffect(
         scalingMode,
         fsrSharpnessLevel,
+        pictureLook,
         brightness,
         contrast,
         gamma,
@@ -269,6 +289,37 @@ fun ScreenEffectsTabContent(
             enableCRT = enableCRT,
             enableNTSC = enableNTSC,
         )
+        if (gamescope && container != null) {
+            val next = GamescopeEffects(scalingMode, fsrSharpnessLevel, pictureLook, config.copy(
+                scalingMode = ScreenEffectsConfig.SCALING_MODE_NONE,
+                fsrSharpnessLevel = ScreenEffectsConfig.FSR_DEFAULT_LEVEL))
+            if (!gamescopeEffectMounted) {
+                gamescopeEffectMounted = true
+                if (next == gamescopeInitial) return@LaunchedEffect
+            }
+            val live = try {
+                persistGamescopeEffects(context, container, next)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                gamescopeMessage = WowI18n.pick(context, "Could not save the Gamescope effects.",
+                    "A Gamescope-effektek mentése sikertelen.")
+                return@LaunchedEffect
+            }
+            GameNativeDrm.activeEffects?.let { renderer.setGamescopeInputScaling(it.inputScalingMode) }
+            // The output size is fixed when the session starts (game-sized unless an upscaler was on, to save power): an upscaler
+            // chosen mid-session runs at 1:1 (FSR only sharpens, NIS is off) until the next start. Say so instead of nothing.
+            val outputNow = GameNativeDrm.outputSize
+            val needsRestart = next.needsPanelOutput && outputNow != null &&
+                !GamescopeEffects.canUpscale(WowGamescopeRuntime.geometry(container.screenSize), outputNow)
+            gamescopeMessage = if (needsRestart) WowI18n.pick(context,
+                "Saved. FSR and NIS upscale fully from the next game start.",
+                "Mentve. Az FSR és a NIS a következő játékindítástól skáláz fel teljesen.")
+            else if (live) null else WowI18n.pick(context,
+                "Saved. Gamescope could not apply every setting live. NIS needs a game resolution smaller than the output.",
+                "Mentve. A Gamescope nem tudott minden beállítást élőben alkalmazni. A NIS a kimenetnél kisebb játékfelbontást igényel.")
+            return@LaunchedEffect
+        }
         // Apply immediately for live preview
         applyScreenEffectsConfig(renderer, config)
         // Debounce persist to disk
@@ -286,6 +337,7 @@ fun ScreenEffectsTabContent(
     fun resetEffects() {
         scalingMode = ScreenEffectsConfig.SCALING_MODE_NONE
         fsrSharpnessLevel = ScreenEffectsConfig.FSR_DEFAULT_LEVEL
+        if (gamescope) pictureLook = GamescopePictureLook.OFF
         brightness = 0f
         contrast = 0f
         gamma = 1.0f
@@ -303,6 +355,26 @@ fun ScreenEffectsTabContent(
             .padding(vertical = 12.dp),
     ) {
         DisplayBrightnessRow(focusRequester = firstItemFocusRequester)
+
+        if (gamescope) {
+            gamescopeMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            GameNativeDrm.outputSize?.let { (width, height) ->
+                val guest = container?.screenSize.orEmpty().replace('x', '×')
+                Text(WowI18n.pick(context, "Game $guest · Gamescope output ${width}×$height",
+                    "Játék $guest · Gamescope-kimenet ${width}×$height"), style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(Modifier.height(20.dp))
+            OptionSectionHeader(text = WowI18n.pick(context, "DroidDeck picture presets", "DroidDeck képprofilok"))
+            Text(WowI18n.pick(context, "Picture presets apply to the current game session only.",
+                "A képprofil csak az aktuális játékmenetre érvényes."), style = MaterialTheme.typography.bodySmall)
+            GamescopePictureLook.entries.forEach { look ->
+                ScreenEffectRadioRow(
+                    title = if (look == GamescopePictureLook.OFF) WowI18n.pick(context, "Off", "Ki") else look.label,
+                    selected = pictureLook == look,
+                    onSelect = { pictureLook = look },
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -323,13 +395,20 @@ fun ScreenEffectsTabContent(
                 onSelect = { scalingMode = mode },
             )
         }
+        if (gamescope) ScreenEffectRadioRow(
+            title = "NVIDIA Image Scaling (NIS)",
+            selected = scalingMode == ScreenEffectsConfig.SCALING_MODE_NIS,
+            onSelect = { scalingMode = ScreenEffectsConfig.SCALING_MODE_NIS },
+        )
 
         if (scalingMode == ScreenEffectsConfig.SCALING_MODE_FSR ||
             scalingMode == ScreenEffectsConfig.SCALING_MODE_FSR_ASPECT ||
-            scalingMode == ScreenEffectsConfig.SCALING_MODE_DLS
+            scalingMode == ScreenEffectsConfig.SCALING_MODE_DLS ||
+            scalingMode == ScreenEffectsConfig.SCALING_MODE_NIS
         ) {
             ScreenEffectAdjustmentRow(
-                title = stringResource(R.string.screen_effects_fsr_sharpness),
+                title = if (scalingMode == ScreenEffectsConfig.SCALING_MODE_NIS) "NIS · " +
+                    WowI18n.pick(context, "Sharpness", "Élesség") else stringResource(R.string.screen_effects_fsr_sharpness),
                 valueText = stringResource(R.string.screen_effects_fsr_sharpness_value, fsrSharpnessLevel),
                 progress = normalizedProgress(
                     fsrSharpnessLevel.toFloat(),
@@ -443,6 +522,47 @@ fun ScreenEffectsTabContent(
     }
 }
 
+private suspend fun persistGamescopeEffects(
+    context: android.content.Context,
+    container: Container,
+    effects: GamescopeEffects,
+): Boolean {
+    val epoch = GameNativeDrm.sessionEpoch()
+    val guest = WowGamescopeRuntime.geometry(container.screenSize)
+    return withContext(Dispatchers.IO + NonCancellable) {
+        effectsPersistLock.withLock {
+            val scaling = effects.copy(look = GamescopePictureLook.OFF)
+            if (scaling != GamescopeEffects.load(container)) {
+                scaling.save(container)
+                container.saveData()
+            }
+            val output = GameNativeDrm.outputSize
+            val active = GameNativeDrm.activeEffects
+            if (epoch != GameNativeDrm.sessionEpoch() || active == null || output == null) return@withLock false
+
+            if (effects.look != active.look) {
+                val lookApplied = runCatching {
+                    val name = effects.look.stage(context, File(ImageFs.find(context).home_path))
+                    if (epoch != GameNativeDrm.sessionEpoch()) return@runCatching false
+                    if (name == null) GameNativeDrm.nativeReshadeDisable() else GameNativeDrm.nativeReshadeSetEffect(name)
+                    true
+                }.getOrDefault(false)
+                if (!lookApplied) return@withLock false
+                GameNativeDrm.activeEffects = active.copy(look = effects.look)
+            }
+            val applied = runCatching {
+                val ready = if (effects.isNis && !GamescopeEffects.canUpscale(guest, output))
+                    effects.copy(mode = ScreenEffectsConfig.SCALING_MODE_NONE) else effects
+                ready.apply(active,
+                    setScaler = { epoch == GameNativeDrm.sessionEpoch() && GamescopeEffects.setScaler(context, it) },
+                    send = { if (epoch == GameNativeDrm.sessionEpoch()) GameNativeDrm.nativeGamescopeCommand(it) else -1 })
+                    .also { if (it && epoch == GameNativeDrm.sessionEpoch()) GameNativeDrm.activeEffects = ready }
+            }.getOrDefault(false)
+            applied && (!effects.isNis || GamescopeEffects.canUpscale(guest, output))
+        }
+    }
+}
+
 @Composable
 private fun ScreenEffectAdjustmentRow(
     title: String,
@@ -451,6 +571,7 @@ private fun ScreenEffectAdjustmentRow(
     onDecrease: () -> Unit,
     onIncrease: () -> Unit,
     focusRequester: FocusRequester? = null,
+    available: Boolean = true,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -460,6 +581,7 @@ private fun ScreenEffectAdjustmentRow(
 
     Column(
         modifier = Modifier
+            .alpha(if (available) 1f else 0.45f)
             .padding(horizontal = 8.dp, vertical = 2.dp)
             .clip(shape)
             .background(
@@ -502,9 +624,9 @@ private fun ScreenEffectAdjustmentRow(
                     isAdjustmentLocked = false
                 }
             }
-            .focusable(interactionSource = interactionSource)
+            .focusable(enabled = available, interactionSource = interactionSource)
             .onPreviewKeyEvent { keyEvent ->
-                if (keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && isFocused) {
+                if (available && keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN && isFocused) {
                     when {
                         keyEvent.nativeKeyEvent.keyCode == KeyEvent.KEYCODE_BUTTON_A -> {
                             isAdjustmentLocked = !isAdjustmentLocked
@@ -534,6 +656,7 @@ private fun ScreenEffectAdjustmentRow(
                 }
             }
             .selectable(
+                enabled = available,
                 selected = isFocused,
                 interactionSource = interactionSource,
                 indication = null,
@@ -586,6 +709,7 @@ private fun ScreenEffectAdjustmentRow(
                 isAdjustmentLocked = isAdjustmentLocked,
                 accentColor = accentColor,
                 onClick = onDecrease,
+                available = available,
             )
 
             Box(
@@ -612,6 +736,7 @@ private fun ScreenEffectAdjustmentRow(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
+                                enabled = available,
                                 onClick = onDecrease,
                             ),
                     )
@@ -622,6 +747,7 @@ private fun ScreenEffectAdjustmentRow(
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
+                                enabled = available,
                                 onClick = onIncrease,
                             ),
                     )
@@ -634,6 +760,7 @@ private fun ScreenEffectAdjustmentRow(
                 isAdjustmentLocked = isAdjustmentLocked,
                 accentColor = accentColor,
                 onClick = onIncrease,
+                available = available,
             )
         }
     }
@@ -646,6 +773,7 @@ private fun ScreenEffectAdjustmentButton(
     isAdjustmentLocked: Boolean,
     accentColor: Color,
     onClick: () -> Unit,
+    available: Boolean = true,
 ) {
     Box(
         modifier = Modifier
@@ -671,6 +799,7 @@ private fun ScreenEffectAdjustmentButton(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
+                enabled = available,
                 onClick = onClick,
             ),
         contentAlignment = Alignment.Center,
@@ -690,6 +819,7 @@ private fun ScreenEffectToggleRow(
     subtitle: String? = null,
     enabled: Boolean,
     onToggle: () -> Unit,
+    available: Boolean = true,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -697,6 +827,7 @@ private fun ScreenEffectToggleRow(
 
     Row(
         modifier = Modifier
+            .alpha(if (available) 1f else 0.45f)
             .padding(horizontal = 8.dp, vertical = 2.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(
@@ -728,6 +859,7 @@ private fun ScreenEffectToggleRow(
                 },
             )
             .selectable(
+                enabled = available,
                 selected = isFocused,
                 interactionSource = interactionSource,
                 indication = null,
@@ -767,6 +899,7 @@ private fun ScreenEffectRadioRow(
     selected: Boolean,
     onSelect: () -> Unit,
     focusRequester: FocusRequester? = null,
+    available: Boolean = true,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
@@ -775,6 +908,7 @@ private fun ScreenEffectRadioRow(
 
     Row(
         modifier = Modifier
+            .alpha(if (available) 1f else 0.45f)
             .padding(horizontal = 8.dp, vertical = 2.dp)
             .clip(shape)
             .background(
@@ -805,6 +939,7 @@ private fun ScreenEffectRadioRow(
                 if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier,
             )
             .selectable(
+                enabled = available,
                 selected = selected,
                 interactionSource = interactionSource,
                 indication = null,

@@ -337,7 +337,7 @@ void VulkanRendererContext::createSwapchain() {
     activePresentMode.store(presentMode, std::memory_order_relaxed);
     // Timings of the old swapchain are gone with it: no gap to count, a new pacing chain and a fresh refresh query.
     lastTimingId=nextPresentId-1; lastShownGameNs=0; refreshQueriedNs=0;
-    latencyCount=0; latencyFloorNs=0; highWindows=0; drainHoldWindows=0; drainOne=false; latencyWindowDirty=false;
+    latencyCount=0; latencyFloorNs=0; highWindows=0; drainHoldWindows=0; drainOne=false; latencyWindowDirty=false; latencyWindowAppLate=false; drainReachedNs=0; lastShownContentNs=0;
     refillWatchWindows=0; refilled=false; cleanWindows=kSettleWindows; drainedContentGen=0;
     phaseSumCos=phaseSumSin=0; phaseFrames=0;
     RLOG("swapchain created: %dx%d format=%d presentMode=%d compositeAlpha=%d imgCount=%u preTransform=%d rotation=%u",
@@ -1156,6 +1156,10 @@ void VulkanRendererContext::renderFrame() {
 
             std::lock_guard<std::mutex> lk(renderMutex);
             renderList.clear();
+            // 1.2.3: the buffers last shown through the compositor are no longer drawn: hand their Present tokens back after this
+            // black frame's fence (they used to wait out the 2 s stall limit, one swapchain image short, each time scanout began).
+            for (auto& entry : windowIdleTokens) retireIdleTokens(entry.second);
+            windowIdleTokens.clear();
             sceneGen.fetch_add(1, std::memory_order_acq_rel);
         } else {
             return;
@@ -1443,15 +1447,22 @@ void VulkanRendererContext::collectPresentTimings() {
             if (gap < 1000000000LL) {
                 if (gap > statMaxIntervalNs.load(std::memory_order_relaxed)) statMaxIntervalNs.store(gap, std::memory_order_relaxed);
                 // Late: on screen at least one refresh longer than the limit allows (without a limit: than the recent average).
-                const int64_t expected = interval > 0 ? interval : shownGapAvgNs;
+                // 1.2.3: never shorter than a refresh: the panel cannot show frames faster than its rate (a limit of 90 on 60 Hz).
+                const int64_t expected = interval > 0 ? (refresh > interval ? refresh : interval) : shownGapAvgNs;
                 if (expected > 0 && refresh > 0 && gap > expected + refresh * 3 / 4) {
                     statLate.fetch_add(1, std::memory_order_relaxed);
                     latencyWindowDirty = true;
+                    // The game's content came on time (within half a refresh of the expected spacing) yet was shown late: the
+                    // compositor missed. Otherwise the game itself was late (its hitch, not the queue's).
+                    const int64_t contentGap = presentContentNs[slot] - lastShownContentNs;
+                    if (lastShownContentNs > 0 && presentContentNs[slot] > 0 && contentGap > 0 && contentGap <= expected + refresh / 2)
+                        latencyWindowAppLate = true;
                 }
                 shownGapAvgNs = shownGapAvgNs ? shownGapAvgNs + (gap - shownGapAvgNs) / 16 : gap;
             }
         }
         lastShownGameNs = shownAt;
+        if (presentContentNs[slot] > 0) lastShownContentNs = presentContentNs[slot];
         const int64_t queuedAt = presentQueuedNs[slot];
         if (queuedAt > 0 && (int64_t)shownAt > queuedAt && (int64_t)shownAt - queuedAt < 1000000000LL) {
             const int64_t latency = (int64_t)shownAt - queuedAt;
@@ -1461,11 +1472,13 @@ void VulkanRendererContext::collectPresentTimings() {
             if (latencyCount == kLatencyWindow) {
                 std::nth_element(latencySamples, latencySamples + kLatencyWindow / 2, latencySamples + kLatencyWindow);
                 // Under 90% of the frame rate across the window (loading, a run of hitches): nothing to learn from it.
-                const int64_t expected = interval > 0 ? interval : refresh;
+                // 1.2.3: never shorter than a refresh (a limit above the panel rate made every window "slow": the drain never ran).
+                const int64_t expected = interval > refresh ? interval : refresh;
                 const bool slow = expected > 0 &&
                     (int64_t)shownAt - latencyWindowStartNs > (int64_t)(kLatencyWindow - 1) * expected * 10 / 9;
                 latencyWindowDone(latencySamples[kLatencyWindow / 2], refresh, latencyWindowDirty, slow);
                 latencyWindowDirty = false;
+                latencyWindowAppLate = false;
                 latencyCount = 0;
             }
         }
@@ -1503,17 +1516,37 @@ void VulkanRendererContext::latencyWindowDone(int64_t medianNs, int64_t refreshN
         return;
     }
     if (slow) {
-        // Loading or a run of hitches: neither a floor nor a refill is learned from it.
+        // Loading or a run of hitches: neither a floor nor a refill is learned from it. 1.1.8: a skip's pending check and refill
+        // watch end here too; a window after loading has nothing to do with the skip before it (1.1.6 DX12 diag: a check left
+        // over from before a 16 s loading screen took the post-loading 40.9 ms as the floor, one frame above the real one).
         highWindows = 0;
         cleanWindows = 0;
+        drainHoldWindows = 0;
+        refillWatchWindows = 0;
+        refilled = false;
         state(kWindowSlow);
         return;
     }
+    if (drainHoldWindows > 0 && (!drainReachedNs || medianNs < drainReachedNs)) drainReachedNs = medianNs;
     if (dirty) {
-        highWindows = 0;
-        cleanWindows = 0;
-        if (refillWatchWindows > 0) refilled = true;
+        // In the world WoW hitches every 1-2 s, so 40-70% of the windows have a drop or a late frame. When only clean windows
+        // could act, the drain almost never ran in live play (0-4 skips a session, median latency 31 vs 32 ms off). A hitch
+        // window's median still shows how deep the queue is: it may count towards and trigger a skip and it advances a hold,
+        // but it never teaches the floor and never gives the hold's verdict (1.3.36: a check decided inside a hitch took 47 ms
+        // as the floor) - those stay with clean windows. It does not restart the settle count either.
         state(kWindowDirty);
+        // Only a compositor miss refills the emptier queue; the game's own late frames leave a frame the next skip takes out.
+        if (refillWatchWindows > 0 && latencyWindowAppLate) { refilled = true; highWindows = 0; return; }
+        if (drainHoldWindows > 0) { if (drainHoldWindows > 1) --drainHoldWindows; return; }
+        if (!latencyFloorNs || cleanWindows < kSettleWindows) { highWindows = 0; return; }
+        highWindows = medianNs > latencyFloorNs + refreshNs * 3 / 4 ? highWindows + 1 : 0;
+        if (highWindows >= 2) {
+            drainOne = true;
+            highWindows = 0;
+            drainHoldWindows = 3;
+            latencyBeforeDrainNs = medianNs;
+            drainReachedNs = 0;
+        }
         return;
     }
     ++cleanWindows;
@@ -1528,7 +1561,11 @@ void VulkanRendererContext::latencyWindowDone(int64_t medianNs, int64_t refreshN
     if (drainHoldWindows > 0) {
         if (--drainHoldWindows == 0) {
             // One step: the level a working skip reached is where it stops. Probe: keep the old floor and try again lower.
-            if (latencyBeforeDrainNs - medianNs < refreshNs / 2 || mode == kDrainOneStep) latencyFloorNs = medianNs;
+            // 1.1.8: judged by the lowest window since the skip, hitch windows included: a hitch right after a working skip
+            // refills the queue, and the clean check window alone called the skip useless (1.1.6 DX12 diag: 39.7 -> 24.2 -> 40.9).
+            const int64_t reached = drainReachedNs ? std::min(drainReachedNs, medianNs) : medianNs;
+            if (latencyBeforeDrainNs - reached < refreshNs / 2) latencyFloorNs = medianNs;
+            else if (mode == kDrainOneStep) latencyFloorNs = reached;
             else refillWatchWindows = kRefillWatchWindows;
         }
         state(kWindowHold);
@@ -1543,6 +1580,7 @@ void VulkanRendererContext::latencyWindowDone(int64_t medianNs, int64_t refreshN
         highWindows = 0;
         drainHoldWindows = 3;
         latencyBeforeDrainNs = medianNs;
+        drainReachedNs = 0;
     }
 }
 
@@ -1931,7 +1969,8 @@ void VulkanRendererContext::updateWindowContent(int64_t id, void* px, short w, s
 void VulkanRendererContext::updateWindowContentAHB(int64_t id, AHardwareBuffer* ahb, short, short, int offX, int offY, int winW, int winH, int64_t idleToken) {
     if (!ahb) return;
     std::lock_guard<std::mutex> lk(renderMutex);
-
+    const size_t pendingRetirements = deleteQueue.size();
+    const size_t pendingIdleReleases = idleReleased.size();
 
 
 
@@ -2054,8 +2093,16 @@ void VulkanRendererContext::updateWindowContentAHB(int64_t id, AHardwareBuffer* 
         noteEviction(fattestId, fattest->size() + 1);
         releaseAhbOwnership(old);
     }
-    contentGen.fetch_add(1, std::memory_order_relaxed);
-    lastContentNs.store(monotonicNs(), std::memory_order_relaxed);
+    // Keep the latest buffer even for a covered window. The render list wakes
+    // the compositor if the window is revealed.
+    const bool drawn = scanoutActive.load() || std::any_of(renderList.begin(), renderList.end(),
+        [id](const RenderEntry& entry) { return entry.id == id; });
+    if (drawn) {
+        contentGen.fetch_add(1, std::memory_order_relaxed);
+        lastContentNs.store(monotonicNs(), std::memory_order_relaxed);
+    } else if (deleteQueue.size() == pendingRetirements && idleReleased.size() == pendingIdleReleases) {
+        return;
+    }
     markSceneDirty(); renderWake.notify();
 }
 

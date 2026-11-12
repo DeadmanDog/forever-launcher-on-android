@@ -5,6 +5,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,7 @@ internal fun WowCacheDiagnosticsSection(part: WowCachePart, onBusyChanged: (Bool
     var retention by remember { mutableIntStateOf(WowDiagnostics.retention(context)) }
     var detailedLogging by remember { mutableStateOf(WowDiagnostics.detailed(context)) }
     var audioLogging by remember { mutableStateOf(WowDiagnostics.audioDebugSaved(context)) }
+    var gpuProfiling by remember { mutableStateOf(WowDiagnostics.gpuProfileSaved(context)) }
     LaunchedEffect(saving) { onBusyChanged(saving) }
     DisposableEffect(Unit) { onDispose { onBusyChanged(false) } }
     LaunchedEffect(Unit) {
@@ -109,6 +111,23 @@ internal fun WowCacheDiagnosticsSection(part: WowCachePart, onBusyChanged: (Bool
         }
         Text(tx("Records the Wine audio trace (winepulse, mmdevapi), the PulseAudio server log and a microphone bridge log (how much sound the phone microphone delivers and how much reaches the game) into the diagnostic export. Short tests only: it slows the game and the logs get large. Needs diagnostic logging on.",
             "Rögzíti a Wine hang-nyomkövetését (winepulse, mmdevapi), a PulseAudio szerver naplóját és egy mikrofon-bridge naplót (mennyi hangot ad a telefon mikrofonja és mennyi jut el a játékig) a diagnosztikai exportba. Csak rövid teszthez: lassítja a játékot és nagy naplókat ad. A diagnosztikai naplózás bekapcsolása kell hozzá."))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = androidx.compose.ui.Alignment.Top) {
+            Text(tx("GPU driver profile (what the game asks of the driver)", "GPU-driver profil (mit kér a játék a drivertől)"), modifier = Modifier.weight(1f))
+            WowSwitch(checked = gpuProfiling, enabled = logging && !saving && !active, onCheckedChange = { value ->
+                saving = true
+                scope.launch {
+                    try {
+                        withContext(Dispatchers.IO) { WowDiagnostics.saveGpuProfile(context, value) { PluviaApp.keepAlive || PluviaApp.xEnvironment != null } }
+                        gpuProfiling = value; message = t("GPU driver profile saved. Applies on the next launch.", "A GPU-driver profil mentve. A következő indítástól érvényes.")
+                    } catch (e: CancellationException) { throw e }
+                    catch (e: Exception) { message = e.message }
+                    finally { saving = false }
+                }
+            })
+        }
+        Text(tx("TurnRIP records for 2 frames every 10 seconds which GPU work the game requests (render passes, tile loads/stores, resolves, blits, clears, compute) into the diagnostic export. Each sample causes a short hitch, so turn it off for normal play; the per-second driver counters are recorded with diagnostic logging alone. Needs diagnostic logging on.",
+            "A TurnRIP 10 másodpercenként 2 képkockán át rögzíti, milyen GPU-munkát kér a játék (render passok, tile betöltés/mentés, resolve, blit, törlés, compute) a diagnosztikai exportba. Minden minta egy rövid döccenést okoz, ezért normál játékhoz kapcsold ki; a driver másodpercenkénti számlálóit a diagnosztikai naplózás magában is rögzíti. A diagnosztikai naplózás bekapcsolása kell hozzá."))
         Text(tx("Off by default. Enabled mode records runtime errors, app/Android exit data and renderer/CPU samples. Detailed mode adds Wine tracing and DXVK debug messages for short reproductions; it can affect performance.",
             "Alapból ki van kapcsolva. Bekapcsolva rögzíti a runtime-hibákat, az app/Android kilépési adatokat és a renderer/CPU mintákat. A részletes mód Wine-nyomkövetést és DXVK debug üzeneteket is ad rövid hibareprodukcióhoz; ez lassíthat."))
         Text(tx("Retained diagnostic sessions: $retention (logs of this many recent launches are kept)", "Megőrzött diagnosztikai sessionök: $retention (ennyi legutóbbi indítás naplója marad meg)"))
@@ -150,7 +169,7 @@ internal fun WowCacheDiagnosticsSection(part: WowCachePart, onBusyChanged: (Bool
         locations.forEach { (id, label) ->
             // Picking the other location asks once and saves it; no separate Save button.
             Row(Modifier.fillMaxWidth().selectable(selected = selected == id, enabled = current != null && !saving && !active,
-                role = Role.RadioButton, onClick = { message = null; if (id != current) { selected = id; confirmLocation = id } }), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                role = Role.RadioButton, onClick = { message = null; if (id != current) { selected = id; confirmLocation = id } }), verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = selected == id, onClick = null, enabled = current != null && !saving && !active)
                 Spacer(Modifier.width(8.dp))
                 Text(label + if (current == id) tx(" · CURRENT", " · JELENLEGI") else "")

@@ -36,6 +36,56 @@ class WowGameConfigTest {
         }
     }
 
+    // 1.1.6: WoW's DX12 renderer caps the render scale at 100% on this phone and saves 1 when it exits, so a 125% chosen under
+    // DX11 was lost after one DX12 session. The launcher keeps the last render scale of each API and gives it back on the switch.
+    @Test fun switchingBackToDx11RestoresItsRenderScale() {
+        val root = temp.newFolder()
+        WowGameConfig.prepare(root, "1344x608", "D3D11")
+        val file = config(root)
+        file.writeText(file.readText().replace("SET RenderScale \"1\"", "SET renderScale \"1.25\""))   // the player's DX11 choice
+        WowGameConfig.prepare(root, "1344x608", "D3D12")
+        assertTrue(file.readText().contains("SET gxApi \"D3D12\""))
+        file.writeText(file.readText().replace("SET renderScale \"1.25\"", "SET renderScale \"1\""))   // WoW DX12 clamps and saves
+        WowGameConfig.prepare(root, "1344x608", "D3D11")
+        val text = file.readText()
+        assertTrue(text, text.contains("SET renderScale \"1.25\""))
+        assertEquals(1, Regex("(?im)^SET renderScale ").findAll(text).count())
+        // And DX12 gets its own last value back the other way round.
+        WowGameConfig.prepare(root, "1344x608", "D3D12")
+        assertTrue(file.readText().contains("SET renderScale \"1\""))
+    }
+
+    // 1.1.9: WoW leaves a CVar at its default out of Config.wtf, so no renderScale line means 100%. Read as "nothing known", a
+    // player's later return to 100% under DX11 was undone by the 125% noted before.
+    @Test fun aMissingRenderScaleLineIsTheDefaultNotUnknown() {
+        val root = temp.newFolder()
+        WowGameConfig.prepare(root, "1344x608", "D3D11")
+        val file = config(root)
+        fun wowSaves(scale: String?) = file.writeText(file.readLines().filterNot { it.startsWith("SET RenderScale", true) }
+            .let { if (scale == null) it else it + "SET renderScale \"$scale\"" }.joinToString("\n", postfix = "\n"))
+        wowSaves("1.25")
+        WowGameConfig.prepare(root, "1344x608", "D3D12"); wowSaves(null)          // DX12 caps at 100%: WoW drops the line
+        WowGameConfig.prepare(root, "1344x608", "D3D11")
+        assertTrue(file.readText().contains("SET renderScale \"1.25\""))
+        wowSaves(null)                                                           // the player sets 100% under DX11
+        WowGameConfig.prepare(root, "1344x608", "D3D11")
+        WowGameConfig.prepare(root, "1344x608", "D3D12")
+        WowGameConfig.prepare(root, "1344x608", "D3D11")
+        val text = file.readText()
+        assertFalse(text, Regex("(?im)^SET renderScale \"1\\.25\"").containsMatchIn(text))
+    }
+
+    @Test fun theSameApiKeepsWhatThePlayerSetInTheGame() {
+        val root = temp.newFolder()
+        WowGameConfig.prepare(root, "1344x608", "D3D11")
+        val file = config(root)
+        WowGameConfig.prepare(root, "1344x608", "D3D11")
+        file.writeText(file.readText().replace("SET RenderScale \"1\"", "SET RenderScale \"0.8\""))
+        val saved = file.readBytes()
+        WowGameConfig.prepare(root, "1344x608", "D3D11")
+        assertArrayEquals(saved, file.readBytes())
+    }
+
     @Test fun changingOutputResolutionPreservesInternalRenderingAndOtherGraphics() {
         val root = temp.newFolder()
         val file = config(root).apply { parentFile!!.mkdirs() }
@@ -46,11 +96,12 @@ class WowGameConfigTest {
         file.writeText((choices + "SET gxResolution \"1920x1080\"").joinToString("\n", postfix = "\n"))
         WowGameConfig.prepare(root, "1344x608")
         choices.forEach { assertTrue("Lost user setting: $it", it in file.readLines()) }
-        assertTrue("SET gxResolution \"1344x608\"" in file.readLines())
+        assertTrue("SET gxFullscreenResolution \"1344x608\"" in file.readLines())
+        assertFalse(file.readLines().any { it.startsWith("SET gxResolution ") })
         assertTrue("SET gxWindowedResolution \"1344x608\"" in file.readLines())
         WowGameConfig.prepare(root, "1280x720")
         choices.forEach { assertTrue("Lost user setting: $it", it in file.readLines()) }
-        assertTrue("SET gxResolution \"1280x720\"" in file.readLines())
+        assertTrue("SET gxFullscreenResolution \"1280x720\"" in file.readLines())
         assertFalse(file.readText().contains("1344x608"))
     }
 
@@ -60,7 +111,7 @@ class WowGameConfigTest {
         val lines = config(root).readLines()
         for (line in listOf("SET gxApi \"D3D11\"", "SET RenderScale \"1\"",
             "SET ResampleQuality \"0\"", "SET graphicsQuality \"0\"",
-            "SET GamePadEnable \"1\"", "SET gxResolution \"1344x608\""))
+            "SET GamePadEnable \"1\"", "SET gxFullscreenResolution \"1344x608\""))
             assertTrue("Missing initial default: $line", line in lines)
         val flavor = File(root, "_forever_/.flavor.info")
         assertEquals("Product Flavor!STRING:0\nwowf\n", flavor.readText())

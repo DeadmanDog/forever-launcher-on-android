@@ -1,0 +1,113 @@
+diff --git a/src/reshade_effect_manager.cpp b/src/reshade_effect_manager.cpp
+--- a/src/reshade_effect_manager.cpp
++++ b/src/reshade_effect_manager.cpp
+@@ -898,17 +898,17 @@
+ 
+     m_cmdBuffer = std::nullopt;
+ 
++    if (m_mappedPtr)
++        m_device->vk.UnmapMemory(m_device->device(), m_bufferMemory);
+     m_device->vk.DestroyBuffer(m_device->device(), m_buffer, nullptr);
+     m_device->vk.FreeMemory(m_device->device(), m_bufferMemory, nullptr);
+     m_mappedPtr = nullptr;
+ 
+-    for (uint32_t i = 0; i < GAMESCOPE_RESHADE_DESCRIPTOR_SET_COUNT; i++)
+-    {
+-        m_device->vk.FreeDescriptorSets(m_device->device(), m_descriptorPool, 1, &m_descriptorSets[i]);
+-        m_device->vk.DestroyDescriptorSetLayout(m_device->device(), m_descriptorSetLayouts[i], nullptr);
+-    }
+-
+-    m_device->vk.DestroyDescriptorPool(m_device->device(), m_descriptorPool, nullptr);
++    // Destroying the pool also frees sets allocated before an init failure.
++    if (m_descriptorPool)
++        m_device->vk.DestroyDescriptorPool(m_device->device(), m_descriptorPool, nullptr);
++    for (VkDescriptorSetLayout layout : m_descriptorSetLayouts)
++        m_device->vk.DestroyDescriptorSetLayout(m_device->device(), layout, nullptr);
+     m_device->vk.DestroyPipelineLayout(m_device->device(), m_pipelineLayout, nullptr);
+ }
+ 
+@@ -1020,7 +1020,8 @@
+         VkBufferCreateInfo bufferCreateInfo =
+         {
+             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+-            .size  = m_module->total_uniform_size,
++            // Set 0 has a UBO binding even if the shader has no uniforms.
++            .size  = std::max<VkDeviceSize>(16, m_module->total_uniform_size),
+             .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+         };
+ 
+@@ -1034,8 +1035,12 @@
+         VkMemoryRequirements memRequirements;
+         device->vk.GetBufferMemoryRequirements(device->device(), m_buffer, &memRequirements);
+ 
+-        uint32_t memTypeIndex = device->findMemoryType(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, memRequirements.memoryTypeBits);
+-        assert(memTypeIndex != ~0u);
++        uint32_t memTypeIndex = device->findMemoryType(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, memRequirements.memoryTypeBits);
++        if (memTypeIndex == ~0u)
++        {
++            reshade_log.errorf("No compatible ReShade uniform buffer memory type");
++            return false;
++        }
+         VkMemoryAllocateInfo allocInfo =
+         {
+             .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+@@ -1048,7 +1053,7 @@
+             reshade_log.errorf("vkAllocateMemory failed");
+             return false;
+         }
+-        device->vk.BindBufferMemory(device->device(), m_buffer, m_bufferMemory, 0);
++        result = device->vk.BindBufferMemory(device->device(), m_buffer, m_bufferMemory, 0);
+         if (result != VK_SUCCESS)
+         {
+             reshade_log.errorf("vkBindBufferMemory failed");
+@@ -1074,8 +1079,11 @@
+         flags.bStorage = true;
+         flags.bColorAttachment = true;
+ 
+-        bool ret = m_rt->BInit(m_key.bufferWidth, m_key.bufferHeight, 1, VulkanFormatToDRM(m_key.bufferFormat), flags, nullptr);
+-        assert(ret);
++        if (!m_rt->BInit(m_key.bufferWidth, m_key.bufferHeight, 1, VulkanFormatToDRM(m_key.bufferFormat), flags, nullptr))
++        {
++            reshade_log.errorf("Could not initialize the ReShade render target");
++            return false;
++        }
+     }
+ 
+     for (const auto& tex : m_module->textures)
+@@ -1319,7 +1327,7 @@
+ 
+     {
+         std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+-        for (uint32_t i = 0; i < m_module->samplers.size(); i++)
++        for (uint32_t i = 0; i < m_module->storages.size(); i++)
+         {
+             VkDescriptorSetLayoutBinding layoutBinding;
+             layoutBinding.binding            = i;
+@@ -1367,12 +1375,13 @@
+     }
+ 
+     {
+-        VkDescriptorPoolSize descriptorPoolSizes[] =
+-        {
+-            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         uint32_t(GAMESCOPE_RESHADE_DESCRIPTOR_SET_COUNT * 1u) },
+-            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, uint32_t(GAMESCOPE_RESHADE_DESCRIPTOR_SET_COUNT * m_module->samplers.size()) },
+-            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          uint32_t(GAMESCOPE_RESHADE_DESCRIPTOR_SET_COUNT * m_module->storages.size()) },
++        std::vector<VkDescriptorPoolSize> descriptorPoolSizes = {
++            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 },
+         };
++        if (!m_module->samplers.empty())
++            descriptorPoolSizes.push_back({ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, uint32_t(m_module->samplers.size()) });
++        if (!m_module->storages.empty())
++            descriptorPoolSizes.push_back({ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, uint32_t(m_module->storages.size()) });
+ 
+         VkDescriptorPoolCreateInfo descriptorPoolCreateInfo;
+         descriptorPoolCreateInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+@@ -1380,7 +1389,7 @@
+         descriptorPoolCreateInfo.flags         = 0;
+         descriptorPoolCreateInfo.maxSets       = GAMESCOPE_RESHADE_DESCRIPTOR_SET_COUNT;
+         descriptorPoolCreateInfo.poolSizeCount = std::size(descriptorPoolSizes);
+-        descriptorPoolCreateInfo.pPoolSizes    = descriptorPoolSizes;
++        descriptorPoolCreateInfo.pPoolSizes    = descriptorPoolSizes.data();
+ 
+         VkResult result = device->vk.CreateDescriptorPool(device->device(), &descriptorPoolCreateInfo, nullptr, &m_descriptorPool);
+         if (result != VK_SUCCESS)

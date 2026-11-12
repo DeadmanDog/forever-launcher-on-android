@@ -69,6 +69,25 @@ class PresentExtensionPacingTest {
         }
     }
 
+    @Test fun theBackgroundCapsTheFrameRateAndTheForegroundGetsTheLimitBack() {
+        val extension = PresentExtension()
+        try {
+            extension.setFrameRateLimit(60)
+            assertEquals(60, extension.effectiveLimit())
+            extension.setBackground(true)
+            assertEquals(PresentExtension.BACKGROUND_FPS, extension.effectiveLimit())
+            extension.setFrameRateLimit(0)          // no limit of the player's: the background still has one
+            assertEquals(PresentExtension.BACKGROUND_FPS, extension.effectiveLimit())
+            extension.setFrameRateLimit(10)
+            assertEquals(10, extension.effectiveLimit())
+            extension.setFrameRateLimit(60)
+            extension.setBackground(false)
+            assertEquals(60, extension.effectiveLimit())
+        } finally {
+            extension.close()
+        }
+    }
+
     @Test fun switchingThePacingModeReleasesEveryHeldBufferImmediately() {
         val extension = PresentExtension()
         val sync = mock(SyncExtension::class.java)

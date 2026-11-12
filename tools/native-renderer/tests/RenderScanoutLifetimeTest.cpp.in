@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <utility>
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>
@@ -83,6 +85,7 @@ struct VulkanRendererContext {
     std::atomic<bool> scanoutActive{false}, gameFrameDelivered{false};
     void* scanoutGameSC = nullptr; void* scanoutCursorSC = nullptr; void* scanoutCursorBuf = nullptr;
     int32_t scanoutCursorBufW = 0, scanoutCursorBufH = 0;
+    void* scanoutCursorSpare = nullptr; int32_t scanoutCursorSpareW = 0, scanoutCursorSpareH = 0;
     void* scanoutTx = nullptr; void* scanoutGameTx = nullptr;
     ARect scanoutLastSrc{}, scanoutLastDst{};
     bool scanoutGeoDirty = true, scanoutVisShown = false, scanoutApiLoaded = false, gameScVisible = false;
@@ -188,16 +191,22 @@ int main(int argc, char** argv) {
         check(applyCalls.load() == before, "nothing to apply in the new lifetime");
     }
     if (which == 4) {
-        // A cursor size change whose new buffer cannot be allocated must not leave the old size without a buffer.
+        // A cursor size change whose new buffer cannot be allocated keeps the cursor on screen as it was: the shown buffer and
+        // its size stay together, and the spare is left empty with no size.
         uint32_t px[16] = {1}; c.scanoutSetCursorImage(px, 4, 4, 4);
         check(c.scanoutCursorBuf != nullptr && c.scanoutCursorBufW == 4, "first cursor buffer");
+        void* shown = c.scanoutCursorBuf;
         failAllocate = true; uint32_t big[64] = {1};
         c.scanoutSetCursorImage(big, 8, 8, 8);
         failAllocate = false;
-        check(c.scanoutCursorBuf == nullptr && c.scanoutCursorBufW == 0 && c.scanoutCursorBufH == 0, "size and buffer stay consistent");
-        c.scanoutSetCursorPos(1, 1, 0, 0);
-        int before = applyCalls.load(); c.applyScanoutBuffer();
-        check(applyCalls.load() == before, "nothing is applied for a cursor without a buffer");
+        check(c.scanoutCursorBuf == shown && c.scanoutCursorBufW == 4 && c.scanoutCursorBufH == 4, "the shown cursor stays consistent");
+        check(c.scanoutCursorSpare == nullptr && c.scanoutCursorSpareW == 0 && c.scanoutCursorSpareH == 0, "spare and size stay consistent");
+        // Two images of the same size alternate between two buffers: the CPU never writes the one on screen.
+        c.scanoutSetCursorImage(px, 4, 4, 4);
+        check(c.scanoutCursorBuf != shown && c.scanoutCursorSpare == shown, "the new image went into the other buffer");
+        void* second = c.scanoutCursorBuf;
+        c.scanoutSetCursorImage(px, 4, 4, 4);
+        check(c.scanoutCursorBuf == shown && c.scanoutCursorSpare == second, "the buffers keep alternating");
     }
     c.destroyScanout();
     check(misuse.load() == 0, "no misuse at the end");

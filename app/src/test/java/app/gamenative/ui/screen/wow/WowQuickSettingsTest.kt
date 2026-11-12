@@ -73,26 +73,14 @@ class WowQuickSettingsTest {
         context.getSharedPreferences(WowLaunchPolicy.PREFS, 0).edit().clear().commit()
     }
 
-    @Test fun regulatedGpuModeSetsFloorAndTurnsPwrMaxOffUnlessSaved() {
-        for (dx12 in listOf(false, true)) {
-            val launch = EnvVars(); WowRuntimeTuning.applyChoices(launch, EnvVars(), dx12, mapOf("gpu" to "f65"))
-            assertEquals("0", launch.get("TU_KGSL_PWR_MAX")); assertEquals("65", launch.get("TU_KGSL_GPU_FLOOR"))
-        }
-        val saved = EnvVars("TU_KGSL_PWR_MAX=1"); val launch = EnvVars(saved.toString())
-        WowRuntimeTuning.applyChoices(launch, saved, true, mapOf("gpu" to "f50"))
-        assertEquals("1", launch.get("TU_KGSL_PWR_MAX")); assertEquals("50", launch.get("TU_KGSL_GPU_FLOOR"))
-        val savedFloor = EnvVars("TU_KGSL_GPU_FLOOR=40"); val launch2 = EnvVars(savedFloor.toString())
-        WowRuntimeTuning.applyChoices(launch2, savedFloor, true, mapOf("gpu" to "f80"))
-        assertEquals("40", launch2.get("TU_KGSL_GPU_FLOOR")); assertEquals("0", launch2.get("TU_KGSL_PWR_MAX"))
+    @Test fun aSavedFloorStillActsUnderEitherMenuChoice() {
+        // 1.1.5: the menu has no Regulated floors any more (Review5SettingsTest); a TU_KGSL_GPU_FLOOR typed into Environment
+        // Variables is still passed through with PWR_MAX off.
+        val savedFloor = EnvVars("TU_KGSL_GPU_FLOOR=40"); val launch = EnvVars(savedFloor.toString())
+        WowRuntimeTuning.applyChoices(launch, savedFloor, true, mapOf("gpu" to ""))
+        assertEquals("40", launch.get("TU_KGSL_GPU_FLOOR")); assertEquals("0", launch.get("TU_KGSL_PWR_MAX"))
         val plain = EnvVars(); WowRuntimeTuning.applyChoices(plain, EnvVars(), true, mapOf("gpu" to "0"))
         assertFalse(plain.has("TU_KGSL_GPU_FLOOR"))
-        assertNull(WowRuntimeTuning.gpuFloor("f70")); assertNull(WowRuntimeTuning.gpuFloor("1")); assertEquals(80, WowRuntimeTuning.gpuFloor("f80"))
-        context.getSharedPreferences(WowLaunchPolicy.PREFS, 0).edit().clear().commit()
-        assertThrows(IllegalArgumentException::class.java) { WowRuntimeTuning.save(context, "gpu", "f70") }
-        WowRuntimeTuning.save(context, "gpu", "f65")
-        val c = Container("wow_forever").apply { envVars = "" }
-        assertEquals("floor65", WowQuickSettings.status(context, c).gpuMode)
-        context.getSharedPreferences(WowLaunchPolicy.PREFS, 0).edit().clear().commit()
     }
 
     @Test fun nextLaunchShowsVkd3dForDx12AndDxvkForDx11() {
@@ -119,14 +107,14 @@ class WowQuickSettingsTest {
             return WowQuickSettings.status(context, Container("wow_forever").apply { envVars = saved }).gpuMode
         }
         assertEquals("floor80", gpu(null, "TU_KGSL_PWR_MAX=0 TU_KGSL_GPU_FLOOR=80"))
-        assertEquals("floor65", gpu("f65", "TU_KGSL_PWR_MAX=0"))
+        assertEquals("balanced", gpu("f65", "TU_KGSL_PWR_MAX=0"))   // an old Regulated choice runs as Balanced (1.1.5)
         assertEquals("floor80", gpu("f50", "TU_KGSL_GPU_FLOOR=80"))
         assertEquals("floor80", gpu("1", "TU_KGSL_PWR_MAX=0 TU_KGSL_GPU_FLOOR=80"))
         assertEquals("floor40", gpu("f80", "TU_KGSL_GPU_FLOOR=40"))
         assertEquals("performance", gpu("f65", "TU_KGSL_PWR_MAX=1"))
         assertEquals("performance", gpu("1", ""))
         assertEquals("balanced", gpu(null, ""))
-        assertEquals("floor50", gpu("f50", ""))
+        assertEquals("balanced", gpu("f50", ""))
         prefs.edit().clear().commit()
     }
 
@@ -177,9 +165,16 @@ class WowQuickSettingsTest {
         assertThrows(IllegalArgumentException::class.java) { WowRuntimeTuning.save(context, "pacing", "bogus") }
         WowRuntimeTuning.save(context, "pacing", ""); assertTrue(WowRuntimeTuning.appPacing(context, c))
         assertTrue(WowRuntimeTuning.vsyncPacing(context))
-        WowRuntimeTuning.save(context, "pacing", "timer"); assertTrue(WowRuntimeTuning.appPacing(context, c))
-        assertFalse(WowRuntimeTuning.vsyncPacing(context))
-        WowRuntimeTuning.save(context, "pacing", "")
+        // 1.3.2: two limiters only. The timer and the separate phase choice are gone; an old saved one is the app pacer.
+        for (retired in listOf("timer", "phase")) {
+            assertThrows(IllegalArgumentException::class.java) { WowRuntimeTuning.save(context, "pacing", retired) }
+            check(prefs.edit().putString("pacing", retired).commit())
+            assertEquals("", WowRuntimeTuning.selected(context, "pacing"))
+            assertTrue(WowRuntimeTuning.appPacing(context, c)); assertTrue(WowRuntimeTuning.vsyncPacing(context))
+            assertTrue(WowRuntimeTuning.phaseAlign(context))
+        }
+        WowRuntimeTuning.save(context, "pacing", "api"); assertFalse(WowRuntimeTuning.phaseAlign(context))
+        WowRuntimeTuning.save(context, "pacing", ""); assertTrue(WowRuntimeTuning.phaseAlign(context))
         // A limiter typed by the user keeps the API path.
         c.envVars = "DXVK_CONFIG=dxgi.maxFrameRate=45"; assertFalse(WowRuntimeTuning.appPacing(context, c))
         c.envVars = "VKD3D_FRAME_RATE=50"; assertFalse(WowRuntimeTuning.appPacing(context, c))

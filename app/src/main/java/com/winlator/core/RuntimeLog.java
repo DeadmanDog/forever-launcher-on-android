@@ -19,12 +19,25 @@ public final class RuntimeLog implements Closeable {
         this(file, maxBytes, false);
     }
     public RuntimeLog(File file, long maxBytes, boolean rotating) throws IOException {
+        this(file, maxBytes, rotating, null);
+    }
+    /** [header]: written at the start of the file and of every file a rotation starts (a CSV keeps its column names). */
+    public RuntimeLog(File file, long maxBytes, boolean rotating, byte[] header) throws IOException {
         this.file = file;
         this.limit = maxBytes;
         this.rotating = rotating;
+        this.header = header != null && header.length < maxBytes ? header : null;
         if (maxBytes < 0) throw new IllegalArgumentException("Negative log limit");
         output = new BufferedOutputStream(new FileOutputStream(file), 8192);
         remaining = maxBytes;
+        writeHeader();
+    }
+    private final byte[] header;
+    private void writeHeader() throws IOException {
+        if (header == null) return;
+        output.write(header);
+        output.flush();
+        remaining -= header.length;
     }
     public synchronized void append(byte[] bytes, int count) {
         if (failed || limit == 0) return;
@@ -39,6 +52,7 @@ public final class RuntimeLog implements Closeable {
                     if (!file.renameTo(previous)) throw new IOException("Log rotation failed");
                     output = new BufferedOutputStream(new FileOutputStream(file), 8192);
                     remaining = limit;
+                    writeHeader();
                 }
                 int length = (int)Math.min(count - offset, remaining);
                 output.write(bytes, offset, length);

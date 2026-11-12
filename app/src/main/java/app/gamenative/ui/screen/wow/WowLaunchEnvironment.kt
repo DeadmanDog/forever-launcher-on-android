@@ -107,8 +107,12 @@ internal object WowLaunchEnvironment {
         if (container.id != WowContainerProfile.CONTAINER_ID) return
         applyRuntimeDefaults(container, env)
         keepWinegstreamerVisibleForDiagnostics(container, env, WowDiagnostics.enabled(context))
-        applyPresentation(container.rendererPresentMode, container.envVars, env,
-            com.winlator.core.KeyValueSet(container.graphicsDriverConfig).get("presentMode"), WowRuntimeTuning.selected(context, "present"))
+        val gamescope = app.gamenative.display.WowDisplayBackend.isGamescope(container)
+        applyPresentation(if (gamescope) "fifo" else container.rendererPresentMode, container.envVars, env,
+            if (gamescope) "" else com.winlator.core.KeyValueSet(container.graphicsDriverConfig).get("presentMode"),
+            WowRuntimeTuning.selected(context, "present"))
+        WowRuntimeTuning.applyGameGpuWait(env, EnvVars(container.envVars), !gamescope &&
+            WowVkd3dComponents.api(container) == WowVkd3dComponents.DX12 && WowLaunchPolicy.enabled(context, WowRuntimeTuning.GAME_GPU_WAIT))
         if (location(container) == GAMENATIVE_DEFAULT) {
             mergeUserOverrides(container, env)
             return

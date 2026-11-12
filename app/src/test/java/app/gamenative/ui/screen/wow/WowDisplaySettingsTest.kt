@@ -100,8 +100,9 @@ class WowDisplaySettingsTest {
             "SET gxResolution \"800x600\"", "SET RenderScale \"1.5\"", "SET uiScale \"0.65\"", "SET farclip \"1200\"", "SET gxWindow \"1\"")
         val result = WowDisplaySettings.configLines(source, "1344x608")
         assertTrue(result.contains("SET gxWindowedResolution \"1344x608\""))
-        assertEquals(1, result.count { it.startsWith("SET gxResolution ") })
-        assertTrue(result.contains("SET gxResolution \"1344x608\"")); assertTrue(result.contains("SET RenderScale \"1.5\""))
+        // gxResolution is not a CVar of this client: dropped; the full-screen size is set alongside the windowed one.
+        assertEquals(0, result.count { it.startsWith("SET gxResolution ", ignoreCase = true) })
+        assertTrue(result.contains("SET gxFullscreenResolution \"1344x608\"")); assertTrue(result.contains("SET RenderScale \"1.5\""))
         for (line in source.takeLast(3)) assertTrue(result.contains(line))
         assertEquals(result, WowDisplaySettings.configLines(result, "1344x608"))
     }
@@ -110,7 +111,7 @@ class WowDisplaySettingsTest {
         WowDisplaySettings.alignGameConfig(file, null); assertEquals("SET custom \"keep\"\n", file.readText())
         WowDisplaySettings.alignGameConfig(file, "1344x608")
         WowDisplaySettings.alignGameConfig(file, "1280x720")
-        assertTrue(file.readText().contains("SET gxResolution \"1280x720\"")); assertFalse(file.readText().contains("1344x608"))
+        assertTrue(file.readText().contains("SET gxFullscreenResolution \"1280x720\"")); assertFalse(file.readText().contains("1344x608"))
     }
     @Test fun cutoutPolicyAppliesOnlyToNativeLandscapeModeAndSupportsOldAndroid() {
         assertEquals(3, WowDisplaySettings.cutoutMode("1344x608", false, 30))
@@ -135,9 +136,11 @@ class WowDisplaySettingsTest {
         assertTrue(text.contains("width=1792 height=810")); assertTrue(text.contains("not internal 3D target"))
     }
 
-    @Test fun fullScreenIs720HighInTheDisplaysOwnAspect() {
-        assertEquals("1590x720", WowDisplaySettings.fullscreenFor(2688, 1216))   // RedMagic 11 Pro
-        assertEquals("1590x720", WowDisplaySettings.fullscreenFor(1216, 2688))   // portrait sizes give the landscape value
+    @Test fun fullScreenIsHalfTheDisplayOr720HighInItsOwnAspect() {
+        assertEquals("1344x608", WowDisplaySettings.fullscreenFor(2688, 1216))   // RedMagic 11 Pro: exactly half
+        assertEquals("1344x608", WowDisplaySettings.fullscreenFor(1216, 2688))   // portrait sizes give the landscape value
+        assertEquals(WowDisplaySettings.REDMAGIC, WowDisplaySettings.fullscreenFor(2688, 1216))
+        assertEquals("1590x720", WowDisplaySettings.fullscreen720For(2688, 1216)) // 1.0.0's value, the migration source
         assertEquals("1600x720", WowDisplaySettings.fullscreenFor(2400, 1080))
         assertEquals("1600x720", WowDisplaySettings.fullscreenFor(3200, 1440))
         assertEquals("1560x720", WowDisplaySettings.fullscreenFor(2340, 1080))
@@ -146,6 +149,10 @@ class WowDisplaySettingsTest {
         listOf(2688 to 1216, 2400 to 1080, 3200 to 1440, 2340 to 1080).forEach { (w, h) ->
             assertTrue("$w x $h", WowHardwareScale.fitsDisplay(w, h, WowDisplaySettings.fullscreenFor(w, h)!!))
         }
+        val redMagic = WowDisplaySettings.options("1590x720", "1344x608")
+        assertEquals("1344x608", redMagic.first().value); assertTrue(redMagic.first().fullscreen)
+        assertEquals(1, redMagic.count { it.value == "1344x608" })                 // Full screen is the RedMagic entry, listed once
+        assertTrue(redMagic.any { it.value == "1590x720" && !it.fullscreen })      // a saved 1.0.0 value stays selectable
         val options = WowDisplaySettings.options("1344x608", "1590x720")
         assertEquals("1590x720", options.first().value); assertTrue(options.first().fullscreen)
         assertTrue(options.single { it.value == "1344x608" }.let { !it.fullscreen })   // the saved value stays selectable
@@ -162,5 +169,19 @@ class WowDisplaySettingsTest {
         assertFalse(WowContainerProfile.moveToFullscreen(c, "1590x720")); assertEquals("1344x608", c.screenSize)
         val custom = container("fs2"); custom.screenSize = "1920x1080"; custom.putExtra(WowDisplaySettings.MANAGED, "1"); custom.putExtra("fullscreen720Migration", null)
         WowContainerProfile.moveToFullscreen(custom, "1590x720"); assertEquals("1920x1080", custom.screenSize)
+    }
+
+    @Test fun aManaged100FullScreenValueMovesOnceToTheExactHalf() {
+        val c = container("half"); c.screenSize = "1590x720"; c.putExtra(WowDisplaySettings.MANAGED, "1"); c.putExtra("fullscreenHalfMigration", null)
+        assertTrue(WowContainerProfile.moveToHalfFullscreen(c, "1344x608", "1590x720")); assertEquals("1344x608", c.screenSize)
+        c.screenSize = "1590x720"   // picked again by hand later: the one-time move does not repeat
+        assertFalse(WowContainerProfile.moveToHalfFullscreen(c, "1344x608", "1590x720")); assertEquals("1590x720", c.screenSize)
+        val custom = container("half2"); custom.screenSize = "1920x1080"; custom.putExtra(WowDisplaySettings.MANAGED, "1"); custom.putExtra("fullscreenHalfMigration", null)
+        WowContainerProfile.moveToHalfFullscreen(custom, "1344x608", "1590x720"); assertEquals("1920x1080", custom.screenSize)
+        val unmanaged = container("half3"); unmanaged.screenSize = "1590x720"; unmanaged.putExtra(WowDisplaySettings.MANAGED, null); unmanaged.putExtra("fullscreenHalfMigration", null)
+        WowContainerProfile.moveToHalfFullscreen(unmanaged, "1344x608", "1590x720"); assertEquals("1590x720", unmanaged.screenSize)
+        // A phone whose Full screen did not change (2400x1080 -> 1600x720 both ways) keeps its value.
+        val other = container("half4"); other.screenSize = "1600x720"; other.putExtra(WowDisplaySettings.MANAGED, "1"); other.putExtra("fullscreenHalfMigration", null)
+        WowContainerProfile.moveToHalfFullscreen(other, "1600x720", "1600x720"); assertEquals("1600x720", other.screenSize)
     }
 }

@@ -52,6 +52,7 @@ private data class SettingsSnapshot(
     val legacyTuDefault: Boolean,
     /** The saved graphics API is DX12 (VKD3D): DX11-only choices are greyed out, DX12-only ones enabled. */
     val dx12: Boolean,
+    val gamescope: Boolean,
     val limiter: String,
     val info: List<Pair<String, String>>,
     /** What the next launch resolves the present mode from, besides the Quick tab choice (WowLaunchEnvironment.resolvePresentMode). */
@@ -99,8 +100,11 @@ internal fun WowSettingsDialog(
                     hybridAvailable = WowRuntimeTuning.supportsHybrid(c),
                     legacyTuDefault = WowContainerProfile.hasLegacyManagedTuDebug(c),
                     dx12 = runCatching { app.gamenative.ui.screen.wow.WowVkd3dComponents.api(c) == app.gamenative.ui.screen.wow.WowVkd3dComponents.DX12 }.getOrDefault(false),
+                    gamescope = app.gamenative.display.WowDisplayBackend.isGamescope(c),
                     limiter = WowRuntimeTuning.description(context, c),
-                    present = WowQuickPresentInputs(c.envVars, KeyValueSet(c.graphicsDriverConfig).get("presentMode"), c.rendererPresentMode),
+                    present = if (app.gamenative.display.WowDisplayBackend.isGamescope(c))
+                        WowQuickPresentInputs(c.envVars, rendererMode = "fifo")
+                    else WowQuickPresentInputs(c.envVars, KeyValueSet(c.graphicsDriverConfig).get("presentMode"), c.rendererPresentMode),
                     info = listOf(
                         "Container ID" to c.id, "executablePath" to c.executablePath, "execArgs" to c.execArgs,
                         "variant" to c.containerVariant, "Wine/Proton" to c.wineVersion, "DXVK" to c.getDXWrapper(),
@@ -164,7 +168,7 @@ internal fun WowSettingsDialog(
                                 }
                             }
                         }
-                        WowCard { WowQuickTuningSection(blocked, s.hybridAvailable, s.dx12, s.present) }
+                        WowCard { WowQuickTuningSection(blocked, s.hybridAvailable, s.dx12, s.present, s.gamescope) }
                         WowCard { WowDisplaySettingsSection(current = s.screenSize, blocked = blocked, onSaved = refresh, onBusyChanged = { busy("display", it) }) }
                     }
                     WowCard {
@@ -217,8 +221,8 @@ internal fun WowSettingsDialog(
                     WowCard { WowVkd3dSection(blocked, onBusy = { busy("vkd3d", it) }, part = WowVkd3dPart.PROFILES, onChanged = refresh) }
                 }
                 SettingsTab.ADVANCED -> if (s != null) {
-                    WowCard { WowAdvancedTuningSection(blocked, s.environment, s.legacyTuDefault, s.dx12) }
-                    WowCard { HardwareScaleSwitch(s.screenSize, blocked) }
+                    WowCard { WowAdvancedTuningSection(blocked, s.environment, s.legacyTuDefault, s.dx12, s.gamescope) }
+                    WowCard { HardwareScaleSwitch(s.screenSize, blocked, s.gamescope) }
                     WowCard {
                         Text(tx("EXPERT TOOLS", "SZAKÉRTŐI ESZKÖZÖK"), style = MaterialTheme.typography.titleMedium)
                         Text(tx("For advanced users: edit the container's environment variables by hand, or open a command shell inside it. A manually typed value overrides the switches above.",

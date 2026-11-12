@@ -145,6 +145,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         PluviaApp.isActivityInForeground = true
+        // 1.2.3: a session started while the app was in the background runs without its keep-alive service until now.
+        app.gamenative.ui.screen.wow.WowSessionService.ensureRunning(this, PluviaApp.keepAlive)
 
         // Re-apply immersive mode to ensure fullscreen persists
         if (!desiredSystemUiVisible) {

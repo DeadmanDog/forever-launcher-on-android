@@ -1,0 +1,18 @@
+--- a/src/steamcompmgr.cpp
++++ b/src/steamcompmgr.cpp
+@@ -2512,7 +2512,14 @@
+ 		// The Android cursor plane is displayed independently of the game's buffer.
+ 		// Keep the original shape and hotspot, with a readable minimum size at 1:1.
+ 		const float imageExtent = std::max(m_texture->contentWidth(), m_texture->contentHeight());
+-		const float readableScale = 48.0f / imageExtent;
++		// The 48-pixel readable minimum is meant in display pixels: with a game-sized output the panel enlarges the
++		// cursor plane too (2x on 1344x608 -> 2688x1216), so the launcher passes the output-pixel equivalent.
++		static const float readablePixels = [] {
++			const char *value = getenv("GNDRM_CURSOR_MIN_PX");
++			const float pixels = value ? strtof(value, nullptr) : 0.0f;
++			return pixels > 0.0f ? pixels : 48.0f;
++		}();
++		const float readableScale = readablePixels / imageExtent;
+ 		cursor_scale = std::max({ cursor_scale, readableScale, std::min(currentScaleRatio_x, currentScaleRatio_y) });
+ 	}
+ 	cursor_scale = std::max(cursor_scale, 1.0f);

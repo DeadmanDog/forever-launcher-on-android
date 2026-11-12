@@ -252,6 +252,10 @@ fun PluviaMain(
                 if (!app.gamenative.ui.screen.wow.WoWLauncherState.autoLaunchEnabled(context)) {
                     app.gamenative.ui.screen.wow.WoWLauncherState.shouldAutoLaunch = false
                 }
+                // A newer GitHub release that the player has not put off: show the home page with its update card instead.
+                if (app.gamenative.ui.screen.wow.WowAppUpdater.pending(context) != null) {
+                    app.gamenative.ui.screen.wow.WoWLauncherState.shouldAutoLaunch = false
+                }
                 mutableStateOf(app.gamenative.ui.screen.wow.WoWLauncherState.shouldAutoLaunch && app.gamenative.ui.screen.wow.GamePath.isReady(context))
             }
             var preLaunchJob by remember { mutableStateOf<Job?>(null) }
@@ -434,6 +438,19 @@ fun preLaunchApp(
 
         val containerManager = ContainerManager(context)
         val container = ContainerUtils.getOrCreateContainer(context, appId, containerManager)
+        if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) {
+            try {
+                app.gamenative.display.WowGamescopePayload.ensure(context)
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) {
+                setLoadingDialogVisible(false)
+                setMessageDialogState(MessageDialogState(visible = true, type = DialogType.SYNC_FAIL,
+                    title = "Gamescope", message = e.message ?: "Gamescope runtime preparation failed",
+                    dismissBtnText = context.getString(R.string.ok)))
+                return@launch
+            }
+        }
+
 
         val legacyImageFsRoot = File(context.filesDir, "imagefs")
         val migrationOk = ImageFSLegacyMigrator.migrateLegacyDirsIfNeeded(

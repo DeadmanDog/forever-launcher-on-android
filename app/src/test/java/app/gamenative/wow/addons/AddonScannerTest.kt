@@ -107,13 +107,14 @@ class AddonScannerTest {
 
         val questie = result.getValue("Questie")
         assertEquals(listOf("Questie"), questie.folders)
-        assertNull(questie.source)   // a CurseForge project id is no source here: the addon is local
+        // 1.3.5: CurseForge is a source now, so the project id in the TOC makes the addon updatable.
+        assertEquals(SourceRef(ProviderIds.CURSEFORGE, "334372"), questie.source)
         assertEquals(AddonFlavor.CLASSIC, questie.flavor)
         assertEquals("10.1.0", questie.version)
 
         val dbm = result.getValue("DBM Core")
         assertEquals(listOf("DBM-Core", "DBM-StatusBarTimers"), dbm.folders.sorted())
-        assertNull(dbm.source)
+        assertEquals(SourceRef(ProviderIds.CURSEFORGE, "3358"), dbm.source)
         assertEquals(AddonFlavor.FOREVER, dbm.flavor)
 
         val mine = result.getValue("My Addon")
@@ -161,7 +162,8 @@ class AddonScannerTest {
         )
         File(addons, "MyAddon").deleteRecursively()
         val result = AddonScanner.scan(addons, known).associateBy { it.id }
-        assertEquals(setOf("wowinterface:3358", "local:Questie"), result.keys)
+        // 1.3.5: Questie's TOC carries its CurseForge project id, which is a source now (it was "local:Questie").
+        assertEquals(setOf("wowinterface:3358", "curseforge:334372"), result.keys)
         assertEquals(listOf("DBM-Core", "DBM-StatusBarTimers"), result.getValue("wowinterface:3358").folders)
     }
 

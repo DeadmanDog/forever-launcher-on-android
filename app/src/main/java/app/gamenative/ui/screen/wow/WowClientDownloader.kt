@@ -281,8 +281,8 @@ object WowClientDownloader {
     fun install(gameRoot: File, region: String, onStatus: (String) -> Unit) {
         require(region in REGIONS) { "Unknown region: $region" }
         onStatus(Text.checking().first)
-        val target = fetchRemote(fast = false, localRow = null)
-            ?: throw IOException("Couldn't reach Blizzard's version server. Check your connection.")
+        val target = fetchRemote(fast = false, localRow = null, region = region)
+            ?: throw IOException("No client build available for ${region.uppercase(Locale.ROOT)}. Check your connection or try again later.")
         check(target.remoteBuildConfig.isNotBlank()) { "Blizzard's version server returned no build." }
         listOf("Data/data", "Data/indices", "Data/config").forEach { File(gameRoot, it).mkdirs() }
         // The Battle.net app records which shared archives a product uses in Data/<product>/; the beta's record fits the release.
@@ -323,14 +323,29 @@ object WowClientDownloader {
             return null
         }
 
-        val remote = fetchRemote(fast, row) ?: return null
+        val remote = fetchRemote(fast, row, region(gameRoot)) ?: return null
         val isOutdated = localVersion != remote.remoteVersion ||
             (remote.remoteBuildConfig.isNotBlank() && localBuildKey != remote.remoteBuildConfig)
         return remote.copy(localVersion = localVersion, isOutdated = isOutdated)
     }
 
+    internal fun regionalRow(text: String, column: String, region: String): Map<String, String>? {
+        val lines = text.lineSequence().map(String::trim).filter { it.isNotEmpty() && !it.startsWith("#") }.iterator()
+        if (!lines.hasNext()) return null
+        val columns = lines.next().removePrefix("\uFEFF").split('|').map { it.substringBefore('!') }
+        val regionIndex = columns.indexOf(column)
+        if (regionIndex < 0) return null
+        while (lines.hasNext()) {
+            val cells = lines.next().split('|')
+            if (cells.size == columns.size && cells[regionIndex].equals(region, ignoreCase = true)) {
+                return columns.zip(cells).toMap()
+            }
+        }
+        return null
+    }
+
     /** The current build on Blizzard's version server; [localRow] fills in CDN details the server does not answer (fast mode). */
-    private fun fetchRemote(fast: Boolean, localRow: Map<String, String>?): VersionCheckResult? {
+    private fun fetchRemote(fast: Boolean, localRow: Map<String, String>?, region: String): VersionCheckResult? {
         val request = Request.Builder()
             .url("$VERSION_SERVER/$TARGET_PRODUCT/versions")
             .build()
@@ -345,10 +360,7 @@ object WowClientDownloader {
             }
         }.getOrNull() ?: return null
 
-        val lines = text.lines().filter { it.isNotBlank() && !it.startsWith("#") }
-        if (lines.size < 2) return null
-        val header = lines.first().split("|").map { it.substringBefore("!") }
-        val remoteRow = lines.drop(1).map { header.zip(it.split("|")).toMap() }.firstOrNull() ?: return null
+        val remoteRow = regionalRow(text, "Region", region) ?: return null
         val remoteVersion = remoteRow["VersionsName"] ?: remoteRow["VersionName"] ?: remoteRow["Version"] ?: return null
         val remoteBuildKey = remoteRow["BuildConfig"] ?: ""
         val remoteCdnKey = remoteRow["CDNConfig"] ?: ""
@@ -364,16 +376,11 @@ object WowClientDownloader {
             }
         }.getOrNull()
 
-        val cdnsLines = cdnsText?.lines()?.filter { it.isNotBlank() && !it.startsWith("#") } ?: emptyList()
-        val cdnsRow = if (cdnsLines.size >= 2) {
-            val cdnsHeader = cdnsLines.first().split("|").map { it.substringBefore("!") }
-            cdnsLines.drop(1).map { cdnsHeader.zip(it.split("|")).toMap() }.firstOrNull { it["Name"] == "us" }
-                ?: cdnsLines.drop(1).map { cdnsHeader.zip(it.split("|")).toMap() }.firstOrNull()
-        } else null
+        val cdnsRow = cdnsText?.let { regionalRow(it, "Name", region) }
 
         val cdnHosts = cdnsRow?.get("Hosts")?.split(" ")?.filter { it.isNotBlank() }
             ?: localRow?.get("CDN Hosts")?.split(" ")?.filter { it.isNotBlank() }
-            ?: listOf("level3.blizzard.com", "us.cdn.blizzard.com")
+            ?: listOfNotNull(regionalCdn(region), "level3.blizzard.com")
         val cdnPath = cdnsRow?.get("Path") ?: localRow?.get("CDN Path") ?: "tpr/wow"
         val cdnServers = (cdnsRow?.get("Servers") ?: localRow?.get("CDN Servers"))?.split(" ")?.filter { it.isNotBlank() }.orEmpty()
 

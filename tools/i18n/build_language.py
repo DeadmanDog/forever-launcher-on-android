@@ -21,14 +21,13 @@ from xml.sax.saxutils import escape
 ROOT = Path(__file__).resolve().parents[2]
 I18N = ROOT / "tools/i18n"
 QUALIFIER = {"de": "de", "fr": "fr", "es": "es", "pt-BR": "pt-rBR", "ru": "ru", "ko": "ko", "zh-CN": "zh-rCN", "zh-TW": "zh-rTW"}
+# R0/R1/R5 were the release relabels of the pacing choice; it has one app mode since 1.3.2 (lines kept in the files, ignored).
+RETIRED = {"R0", "R1", "R5"}
 SPECIAL = {
     "T": "Tip: in the game, swipe back (or press Back) to open the Quick Menu.",
-    "R0": "App, vsync + phase (default)",
-    "R1": "App, vsync-locked",
-    "R2": "Lower (default)",
+    "R2": "Lowest (default)",
     "R3": None,  # the FIFO latency hint, release wording
     "R4": "Smooth",
-    "R5": None,  # the pacing hint, release wording
 }
 
 
@@ -42,7 +41,6 @@ def main():
     source = json.loads((I18N / "source_en.json").read_text())
     release = [k for k, v in source.items() if v["files"] == ["release"]]
     SPECIAL["R3"] = next(k for k in release if k.startswith("Only with FIFO. Smooth:"))
-    SPECIAL["R5"] = next(k for k in release if k.startswith("Who holds the frame rate"))
     resources_en = json.loads((I18N / "resources_en.json").read_text())
     table, resources, errors = {}, {}, []
     for line in file.read_text().splitlines():
@@ -58,6 +56,8 @@ def main():
             if placeholders(resources_en[name]) != placeholders(text):
                 errors.append(f"placeholder mismatch in {name}")
             resources[name] = text
+            continue
+        if tag in RETIRED:
             continue
         en = SPECIAL.get(tag) if tag in SPECIAL else keys[int(tag)]
         if placeholders(en) != placeholders(text):

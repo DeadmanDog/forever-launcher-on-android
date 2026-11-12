@@ -95,5 +95,10 @@ object AddonScanner {
     }
 
     /** Only a source this app can update from; other project ids in a TOC just group folders (see [group]). */
-    private fun sourceOf(toc: Toc): SourceRef? = toc.wowiId?.let { SourceRef(ProviderIds.WOWINTERFACE, it) }
+    private fun sourceOf(toc: Toc): SourceRef? = sourceOfToc(toc)
+
+    /** 1.3.5: CurseForge first (the Browse source; packagers write `X-Curse-Project-ID` into the TOC), then WoWInterface. */
+    fun sourceOfToc(toc: Toc): SourceRef? =
+        toc.curseId?.takeIf { it.toLongOrNull() != null }?.let { SourceRef(ProviderIds.CURSEFORGE, it) }
+            ?: toc.wowiId?.let { SourceRef(ProviderIds.WOWINTERFACE, it) }
 }

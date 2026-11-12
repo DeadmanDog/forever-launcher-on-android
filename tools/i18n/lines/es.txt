@@ -355,7 +355,7 @@
 354|AL ABRIR LA APP
 355|SE REQUIERE WOW FOREVER
 356|Despierta solo al hilo en espera que recibe la señal. Desactivado = comportamiento original.
-357|Dónde dibuja la GPU. Sysmem: directamente en la memoria del sistema (recomendado). GMEM: en la pequeña memoria rápida interna de la GPU, por mosaicos. Predeterminado del controlador: Turnip decide en cada fotograma.
+357|Dónde dibuja la GPU. Sysmem: directamente en la memoria del sistema (recomendado). GMEM: en la pequeña memoria rápida interna de la GPU, por mosaicos. Predeterminado del controlador: en WoW, TurnRIP mide cada pase de renderizado de ambas formas y se queda con la más rápida.
 358|Quién mantiene la tasa de fotogramas en el límite. App, ligada a vsync (recomendado): la app libera los fotogramas al ritmo del refresco de la pantalla, así quedan espaciados por igual. App, temporizador: la app usa su propio temporizador en lugar del refresco, lo que puede desviarse un poco. DXVK / VKD3D: la capa gráfica limita con su propio temporizador, lo que puede dar tirones al movimiento. App, vsync + fase (experimental): como la ligada a vsync, y además la app mide cuándo llegan los fotogramas a la pantalla y desplaza su momento unos milisegundos para que terminen a mitad del refresco: así una pequeña variación ya no pasa un fotograma al refresco vecino (medido a 60 Hz con FIFO). Un limitador escrito en las variables de entorno siempre usa DXVK / VKD3D.
 359|Wine / Proton
 360|El contenedor de WoW aún no se ha creado
@@ -377,8 +377,8 @@
 T|Consejo: en el juego, el gesto Atrás (o el botón Atrás) abre el menú rápido.
 R0|App, vsync + fase (predeterminado)
 R1|App, ligada a vsync
-R2|Menor (predeterminado)
-R3|Solo con FIFO. Fluido: los fotogramas se ponen en cola según llegan, unos 60 ms del fotograma a la pantalla a 60 Hz, nunca se salta un fotograma. Menor (predeterminado): tras un tirón la app quita un fotograma en cola (un fotograma saltado) y se queda en el primer nivel que funciona (unos 43 ms). Mínima (experimental): además prueba un paso más cada vez; si no aguanta, cuesta otro pequeño tirón y luego la app mantiene el nivel que aguantó.
+R2|Mínima (predeterminada)
+R3|Solo con FIFO. Fluido: los fotogramas se ponen en cola según llegan, unos 60 ms del fotograma a la pantalla a 60 Hz, nunca se salta un fotograma. Menor (experimental): tras un tirón la app quita un fotograma en cola (un fotograma saltado) y se queda en el primer nivel que funciona (unos 43 ms). Mínima (predeterminada): además prueba un paso más cada vez; si no aguanta, cuesta otro pequeño tirón y luego la app mantiene el nivel que aguantó.
 R4|Fluido
 R5|Quién mantiene la tasa de fotogramas en el límite. App, ligada a vsync: la app libera los fotogramas al ritmo del refresco de la pantalla, así quedan espaciados por igual. App, temporizador: la app usa su propio temporizador en lugar del refresco, lo que puede desviarse un poco. DXVK / VKD3D: la capa gráfica limita con su propio temporizador, lo que puede dar tirones al movimiento. App, vsync + fase (predeterminado): como la ligada a vsync, y además la app mide cuándo llegan los fotogramas a la pantalla y desplaza su momento unos milisegundos para que terminen a mitad del refresco: así una pequeña variación ya no pasa un fotograma al refresco vecino (medido a 60 Hz con FIFO). Un limitador escrito en las variables de entorno siempre usa DXVK / VKD3D.
 res:quick_menu_title|Menú rápido
@@ -484,3 +484,89 @@ res:screen_effects_scaling_mode_dls_desc|Pase de nitidez / claridad.
 409|Faltan {0} GB. Descargar ahora es mucho más rápido que mientras juegas, cuando el juego solo descarga lo que necesita. Se recomienda Wi-Fi.
 410|Archivos de datos del juego (aún sin descargar)
 411|Archivos de datos del juego ({0} %)
+412|Reutilizar eventos de Wine (Proton r32)
+413|Durante uno o dos minutos tras iniciar sesión, WoW crea y cierra miles de pequeños eventos por segundo. Cada uno pasaba por el único servidor de Wine, y el hilo principal del juego tenía que esperar detrás de ellos: la imagen daba tirones. Activado, Proton conserva esos eventos y los reutiliza, así el servidor queda libre. Desactivado = exactamente el comportamiento del Proton anterior (r31). Se aplica desde el próximo inicio.
+414|Permite «Instalar apps desconocidas» para Forever Launcher y vuelve a tocar Instalar.
+415|Aplicar backend de pantalla
+416|Disponible con XServer. Gamescope usa su propio compositor.
+417|No se pudieron guardar los efectos de Gamescope.
+418|Backend de pantalla
+419|Perfiles de imagen de DroidDeck
+420|GPL
+421|Juego {0} · salida de Gamescope {1}×{2}
+422|Gamescope (experimental)
+423|Gamescope usa su propio Xwayland. Aplícalo con WoW detenido; se usa en el próximo inicio. Se conservan las selecciones de Wine, DXVK y driver.
+424|El límite de FPS del lado del juego de Gamescope se actualiza en el próximo inicio.
+425|Cómo se compilan los shaders de DX11 mientras juegas. Híbrido (predeterminado): omite un dibujado solo mientras se compila su shader; con «Híbrido mantiene GPL» (Avanzado) también enlaza pipelines rápido. GPL: enlaza pipelines rápido y nunca omite un dibujado. Async: el modo antiguo en segundo plano.
+426|Híbrido (predeterminado)
+427|INSTALAR
+428|Más tarde
+429|NUEVA VERSIÓN: {0}
+430|Desactivado
+431|Solo importa si la compilación de shaders DX11 está en Híbrido. Normalmente Híbrido compila por completo cada shader que falta, lo que puede congelar el hilo de render más de 100 ms. Activado, Híbrido enlaza pipelines rápido como GPL y solo omite dibujados mientras un shader no está listo. Activado por defecto: si el juego se cierra o la pantalla queda negra, desactívalo o usa GPL.
+432|Los perfiles de imagen solo se aplican a la sesión de juego actual.
+433|Preparando…
+434|Guardado. Gamescope no pudo aplicar todos los ajustes en vivo. NIS necesita una resolución de juego menor que la salida.
+435|Nitidez
+436|Omite un enlace de pipeline cuando el dibujado anterior del mismo búfer de comandos ya usó el mismo pipeline, lo que ahorra trabajo de CPU en el hilo de render del juego. Activado por defecto: si ves geometría faltante o fallos gráficos, desactívalo. Solo afecta a DX11 (DXVK); el menú rápido no tiene interruptor para esto.
+437|Indica al juego qué núcleos son los más rápidos (los núcleos prime del teléfono), como una CPU híbrida de portátil, para que los registros de WoW muestren Hybrid:true y pueda poner en ellos sus hilos más ocupados. Activado por defecto. Desactivado = todos los núcleos parecen iguales. Cambia cómo WoW reparte sus hilos.
+438|La descarga falló. Revisa la conexión e inténtalo de nuevo.
+439|Al juego se le dice que un búfer de imagen vuelve a estar libre solo cuando la app terminó de dibujarlo, no de inmediato. Así se evita el caso raro en que el juego sobrescribe un búfer que aún va camino a la pantalla (destello o imagen cortada). No acelera nada; activado por defecto. Se aplica desde el próximo inicio.
+440|ACTUALIZAR
+441|Salida directa de Gamescope (experimental)
+442|Solo con Gamescope. Gamescope entrega la imagen del juego directamente a la pantalla en lugar de redibujarla en la GPU en cada fotograma, lo que ahorra energía. Si no es posible (efectos, una imagen rechazada), vuelve a redibujar por sí mismo. Si la imagen parpadea o se pone negra, desactívalo. Se aplica desde el próximo inicio.
+443|Guardado. FSR y NIS escalan por completo a partir del próximo inicio del juego.
+444|Scanout a pantalla completa (controles táctiles ocultos)
+445|La imagen del juego va directa a la pantalla, sin la pasada de composición por GPU de la app. Funciona también con el HUD de rendimiento activado; los controles táctiles y el menú rápido deben estar ocultos. Mientras está activado, no se usa el escalado por hardware (esta pestaña).
+446|DX12: esperar a la GPU antes de mostrar un fotograma
+447|Solo XServer con DX12. La imagen del juego llega a la pantalla solo cuando la GPU ha terminado de dibujarla. Sin esto, a veces se podía ver la imagen anterior (la barra de carga que retrocede, tirones con la GPU ocupada). El límite de FPS y el ritmo de fotogramas no cambian. Se aplica desde el próximo inicio.
+448|Baja latencia de entrada (DX11 y DX12)
+449|El juego va solo un fotograma por delante de la pantalla (DX11: latencia de fotograma DXVK 1, DX12: latencia de swapchain VKD3D 1) en vez de hasta tres, así la entrada llega antes a la imagen. Desactivado = el juego puede adelantar fotogramas: algo más fluido pero más tarde. Un maxFrameLatency escrito en DXVK_CONFIG o un VKD3D_SWAPCHAIN_LATENCY_FRAMES guardado tiene prioridad.
+450|Cómo se comporta la frecuencia de la GPU mientras juegas. Balanced (predeterminado): la frecuencia sigue a la carga; el controlador la sube solo lo que el juego necesita (en DX12 con 1 fotograma de latencia: lo que necesita el límite de FPS). Performance: la GPU se mantiene siempre a su frecuencia máxima (unos 1200 MHz): más calor y consumo.
+451|Cuántos fotogramas puede preparar la CPU por delante de la GPU. Menos = menos retraso de entrada. Predeterminado: 1 fotograma mientras Baja latencia de entrada (abajo) está activada; si no, los 3 propios de VKD3D. Con 1 fotograma, el TurnRIP incluido sube la frecuencia de la GPU según el tiempo de fotograma, así que ya no cuesta FPS. Un número elegido aquí prevalece sobre el interruptor.
+452|Disponible con Gamescope. XServer usa el compositor propio de la app.
+453|Baja latencia de entrada (DX11)
+454|El juego va solo un fotograma por delante de la pantalla (latencia de fotogramas DXVK 1) en vez de hasta tres, así la entrada llega antes a la imagen. Desactivado = el juego puede encolar fotogramas: algo más fluido pero más tarde. Un maxFrameLatency escrito en DXVK_CONFIG prevalece.
+455|Baja latencia de entrada (DX12)
+456|El juego va solo un fotograma por delante de la pantalla (latencia de swapchain VKD3D 1) en vez de hasta tres, así la entrada llega antes a la imagen. El TurnRIP incluido sube entonces la frecuencia de la GPU según el tiempo de fotograma, así que no cuesta FPS. Desactivado = los 3 fotogramas propios de VKD3D. Un VKD3D_SWAPCHAIN_LATENCY_FRAMES escrito en las variables de entorno prevalece.
+457|DX12: indicar una GPU dedicada (experimental)
+458|VKD3D le dice al juego que la GPU tiene memoria propia, como una tarjeta gráfica de PC. WoW en DX12 permite entonces una escala de renderizado superior al 100 % (con la respuesta de memoria compartida se queda en 100 %; DX11 lo permite igualmente). El juego puede copiar más datos, lo que puede costar algo de rendimiento. Desactivado por defecto. Se aplica desde el próximo inicio.
+459|El tamaño al que WoW renderiza. Menor = más FPS pero una imagen más suave. Se guarda para este contenedor; aplícalo con el juego detenido. La resolución propia de WoW se ajusta al iniciar; su escala de renderizado se queda como la pongas en el juego (guardada por separado para DX11 y DX12).
+460|Perfil del driver de GPU (lo que el juego pide al driver)
+461|Perfil del driver de GPU guardado. Se aplica en el próximo inicio.
+462|TurnRIP registra durante 2 fotogramas cada 10 segundos qué trabajo de GPU pide el juego (pases de renderizado, cargas/guardados de tiles, resolves, blits, borrados, compute) en la exportación de diagnóstico. Cada muestra causa un breve tirón, así que desactívalo para jugar normalmente; los contadores del driver por segundo se registran solo con el registro de diagnóstico. Requiere el registro de diagnóstico activado.
+463|Quién mantiene la tasa de fotogramas en el límite. App, alineada con VSync (recomendado): la app libera los fotogramas al ritmo del refresco de la pantalla y los desplaza unos milisegundos para que terminen a mitad del refresco, así quedan espaciados de forma uniforme. DXVK / VKD3D: la capa gráfica limita con su propio temporizador, lo que puede causar tirones; una alternativa de reserva. Un limitador escrito en las variables de entorno siempre usa DXVK / VKD3D.
+464|App, alineada con VSync (recomendado)
+465|Salida de la imagen del juego
+466|Cómo llega la imagen del juego a la pantalla. Escalado por hardware (predeterminado): la app junta el juego, el HUD y los controles táctiles, y el escalador de la propia pantalla amplía la imagen, así la GPU trabaja un poco menos; solo actúa cuando la resolución tiene la relación de aspecto de la pantalla (la resolución Pantalla completa) y los Screen Effects usan Linear o ningún escalado sin efecto (no FSR, DLS, Natural, Nearest ni CRT). Composición por la app: el paso de GPU de la app también hace el escalado. Scanout a pantalla completa: la imagen del juego va directa a la pantalla sin el paso de GPU de la app y se escala por hardware; funciona con el HUD de rendimiento, pero los controles táctiles y el menú rápido deben estar ocultos (mientras se ven, la app compone la imagen). Se aplica en el próximo inicio.
+467|Escalado por hardware (predeterminado)
+468|Composición por la app
+469|Clave de CurseForge
+470|La exploración usa CurseForge y necesita tu propia clave de API gratuita. Consigue una en console.curseforge.com y luego toca «Clave de CurseForge».
+471|Clave de API de CurseForge
+472|Tu propia clave de console.curseforge.com. Se guarda solo en este teléfono y se envía solo a CurseForge. Déjala vacía para quitarla.
+473|Barras de acción
+474|Todas las categorías
+475|Subasta y oro
+476|Bolsas e inventario
+477|Beneficios y reutilizaciones
+478|Chat y social
+479|Clase
+480|Combate y medidores
+481|Interfaz y medios
+482|Bibliotecas
+483|Mapa y navegación
+484|Más descargados
+485|Monturas y mascotas
+486|Otros
+487|Populares
+488|Profesiones
+489|JcJ
+490|Misiones y subida de nivel
+491|Bandas y jefes
+492|Actualizados recientemente
+493|Descripciones emergentes
+494|Marcos de unidad
+495|Su autor solo permite descargarlo en la web de CurseForge. Toca «Download» en la página (puede empezar solo); la app instala el archivo.
+496|Obtener una clave en CurseForge
+497|Inicia sesión, abre «API keys» y copia tu clave en este campo.

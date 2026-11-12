@@ -355,7 +355,7 @@
 354|AO ABRIR O APP
 355|WOW FOREVER NECESSÁRIO
 356|Acorda só a thread em espera que recebe o sinal. Desativado = comportamento original.
-357|Onde a GPU desenha. Sysmem: direto na memória do sistema (recomendado). GMEM: na pequena memória rápida interna da GPU, bloco por bloco. Padrão do driver: o Turnip decide a cada quadro.
+357|Onde a GPU desenha. Sysmem: direto na memória do sistema (recomendado). GMEM: na pequena memória rápida interna da GPU, bloco por bloco. Padrão do driver: no WoW, o TurnRIP mede cada passe de renderização dos dois jeitos e fica com o mais rápido.
 358|Quem mantém a taxa de quadros no limite. App, sincronizado com vsync (recomendado): o app libera os quadros no ritmo da atualização da tela, então eles ficam espaçados por igual. App, temporizador: o app usa o próprio temporizador em vez da atualização da tela, o que pode desviar um pouco. DXVK / VKD3D: a camada gráfica limita com o próprio temporizador, o que pode deixar o movimento travado. App, vsync + fase (experimental): como o sincronizado com vsync, e o app também mede quando os quadros chegam à tela e desloca o tempo deles alguns milissegundos para terminarem no meio da atualização: assim uma pequena oscilação não joga mais um quadro para a atualização vizinha (medido a 60 Hz com FIFO). Um limitador digitado nas variáveis de ambiente sempre usa DXVK / VKD3D.
 359|Wine / Proton
 360|O contêiner do WoW ainda não foi criado
@@ -377,8 +377,8 @@
 T|Dica: no jogo, o gesto Voltar (ou o botão Voltar) abre o menu rápido.
 R0|App, vsync + fase (padrão)
 R1|App, sincronizado com vsync
-R2|Menor (padrão)
-R3|Só com FIFO. Suave: os quadros entram na fila conforme chegam, cerca de 60 ms do quadro à tela a 60 Hz, nunca um quadro pulado. Menor (padrão): após uma travadinha o app tira um quadro da fila (um quadro pulado) e para no primeiro nível que funciona (cerca de 43 ms). Mínima (experimental): também tenta um passo a mais a cada vez; se não segurar, custa mais uma pequena travadinha e depois o app mantém o nível que segurou.
+R2|Mínima (padrão)
+R3|Só com FIFO. Suave: os quadros entram na fila conforme chegam, cerca de 60 ms do quadro à tela a 60 Hz, nunca um quadro pulado. Menor (experimental): após uma travadinha o app tira um quadro da fila (um quadro pulado) e para no primeiro nível que funciona (cerca de 43 ms). Mínima (padrão): também tenta um passo a mais a cada vez; se não segurar, custa mais uma pequena travadinha e depois o app mantém o nível que segurou.
 R4|Suave
 R5|Quem mantém a taxa de quadros no limite. App, sincronizado com vsync: o app libera os quadros no ritmo da atualização da tela, então eles ficam espaçados por igual. App, temporizador: o app usa o próprio temporizador em vez da atualização da tela, o que pode desviar um pouco. DXVK / VKD3D: a camada gráfica limita com o próprio temporizador, o que pode deixar o movimento travado. App, vsync + fase (padrão): como o sincronizado com vsync, e o app também mede quando os quadros chegam à tela e desloca o tempo deles alguns milissegundos para terminarem no meio da atualização: assim uma pequena oscilação não joga mais um quadro para a atualização vizinha (medido a 60 Hz com FIFO). Um limitador digitado nas variáveis de ambiente sempre usa DXVK / VKD3D.
 res:quick_menu_title|Menu rápido
@@ -484,3 +484,89 @@ res:screen_effects_scaling_mode_dls_desc|Etapa de nitidez / clareza.
 409|Faltam {0} GB. Baixar agora é muito mais rápido do que durante o jogo, quando ele baixa só o que precisa. Recomenda-se Wi-Fi.
 410|Arquivos de dados do jogo (ainda não baixados)
 411|Arquivos de dados do jogo ({0}%)
+412|Reutilizar eventos do Wine (Proton r32)
+413|Por um ou dois minutos após o login, o WoW cria e fecha milhares de pequenos eventos por segundo. Cada um passava pelo único servidor do Wine, e a thread principal do jogo tinha que esperar atrás deles: a imagem engasgava. Ligado, o Proton guarda esses eventos e os reutiliza, então o servidor fica livre. Desligado = exatamente o comportamento do Proton anterior (r31). Vale a partir da próxima inicialização.
+414|Permita "Instalar apps desconhecidos" para o Forever Launcher e toque em Instalar de novo.
+415|Aplicar backend de exibição
+416|Disponível com o XServer. O Gamescope usa o próprio compositor.
+417|Não foi possível salvar os efeitos do Gamescope.
+418|Backend de exibição
+419|Perfis de imagem do DroidDeck
+420|GPL
+421|Jogo {0} · saída do Gamescope {1}×{2}
+422|Gamescope (experimental)
+423|O Gamescope usa o próprio Xwayland. Aplique com o WoW parado; vale a partir da próxima inicialização. As escolhas de Wine, DXVK e driver são mantidas.
+424|O limite de FPS do lado do jogo do Gamescope é atualizado na próxima inicialização.
+425|Como os shaders DX11 são compilados enquanto você joga. Híbrido (padrão): pula um desenho só enquanto o shader dele compila; com "Híbrido mantém GPL" (Avançado) também liga pipelines rápido. GPL: liga pipelines rápido e nunca pula um desenho. Async: o modo antigo em segundo plano.
+426|Híbrido (padrão)
+427|INSTALAR
+428|Depois
+429|NOVA VERSÃO: {0}
+430|Desligado
+431|Só importa quando a compilação de shaders DX11 está em Híbrido. Normalmente o Híbrido compila por completo cada shader que falta, o que pode travar a thread de render por mais de 100 ms. Ligado, o Híbrido liga pipelines rápido como o GPL e só pula desenhos enquanto um shader não está pronto. Ligado por padrão: se o jogo travar ou a tela ficar preta, desligue ou use GPL.
+432|Os perfis de imagem valem só para a sessão de jogo atual.
+433|Preparando…
+434|Salvo. O Gamescope não conseguiu aplicar todos os ajustes ao vivo. O NIS precisa de uma resolução de jogo menor que a saída.
+435|Nitidez
+436|Pula a ligação de um pipeline quando o desenho anterior no mesmo buffer de comandos já usou o mesmo pipeline, o que poupa trabalho de CPU na thread de render do jogo. Ligado por padrão: se vir geometria faltando ou falhas, desligue. Afeta só o DX11 (DXVK); o Menu Rápido não tem chave para isso.
+437|Indica ao jogo quais núcleos são os mais rápidos (os núcleos prime do telefone), como uma CPU híbrida de notebook, para que os logs do WoW mostrem Hybrid:true e ele possa pôr suas threads mais ocupadas neles. Ligado por padrão. Desligado = todos os núcleos parecem iguais. Muda como o WoW distribui as threads.
+438|O download falhou. Verifique a conexão e tente de novo.
+439|O jogo só fica sabendo que um buffer de imagem está livre depois que o app termina de desenhá-lo, e não na hora. Isso evita o caso raro em que o jogo sobrescreve um buffer ainda a caminho da tela (piscada ou imagem rasgada). Não acelera nada; ligado por padrão. Vale a partir da próxima inicialização.
+440|ATUALIZAR
+441|Saída direta do Gamescope (experimental)
+442|Só com o Gamescope. O Gamescope entrega a imagem do jogo direto à tela em vez de redesenhá-la na GPU a cada quadro, o que economiza energia. Quando não for possível (efeitos, uma imagem recusada), ele volta a redesenhar sozinho. Se a imagem piscar ou ficar preta, desligue. Vale a partir da próxima inicialização.
+443|Salvo. FSR e NIS fazem o upscaling completo a partir da próxima abertura do jogo.
+444|Scanout em tela cheia (controles de toque ocultos)
+445|A imagem do jogo vai direto para a tela, sem a etapa de composição na GPU do app. Funciona também com o HUD de desempenho ligado; os controles de toque e o menu rápido precisam estar ocultos. Enquanto estiver ligado, o dimensionamento por hardware (esta aba) não é usado.
+446|DX12: esperar a GPU antes de mostrar um quadro
+447|Somente XServer com DX12. A imagem do jogo só chega à tela quando a GPU termina de desenhá-la. Sem isso, às vezes a tela mostrava a imagem anterior (a barra de carregamento voltando, travadas com a GPU ocupada). O limite de FPS e o ritmo dos quadros não mudam. Vale a partir da próxima abertura.
+448|Baixa latência de entrada (DX11 e DX12)
+449|O jogo fica só um quadro à frente da tela (DX11: latência de quadro DXVK 1, DX12: latência de swapchain VKD3D 1) em vez de até três, então a entrada chega antes à imagem. Desligado = o jogo pode adiantar quadros: um pouco mais suave, porém mais tarde. Um maxFrameLatency digitado em DXVK_CONFIG ou um VKD3D_SWAPCHAIN_LATENCY_FRAMES salvo tem prioridade.
+450|Como a frequência da GPU se comporta enquanto você joga. Balanced (padrão): a frequência acompanha a carga; o driver a eleva apenas o quanto o jogo precisa (no DX12 com 1 quadro de latência: o quanto o limite de FPS precisa). Performance: a GPU fica o tempo todo na frequência máxima (cerca de 1200 MHz): mais calor e consumo.
+451|Quantos quadros a CPU pode preparar à frente da GPU. Menos = menos atraso de entrada. Padrão: 1 quadro enquanto Baixa latência de entrada (abaixo) estiver ligada; caso contrário, os 3 do próprio VKD3D. Com 1 quadro, o TurnRIP incluído eleva a frequência da GPU pelo tempo de quadro, então não custa mais FPS. Um número escolhido aqui vale mais que o interruptor.
+452|Disponível com Gamescope. O XServer usa o compositor próprio do app.
+453|Baixa latência de entrada (DX11)
+454|O jogo fica só um quadro à frente da tela (latência de quadros DXVK 1) em vez de até três, então a entrada aparece antes na imagem. Desligado = o jogo pode enfileirar quadros: um pouco mais suave, porém mais tarde. Um maxFrameLatency digitado em DXVK_CONFIG prevalece.
+455|Baixa latência de entrada (DX12)
+456|O jogo fica só um quadro à frente da tela (latência de swapchain VKD3D 1) em vez de até três, então a entrada aparece antes na imagem. O TurnRIP incluído então eleva a frequência da GPU pelo tempo de quadro, então não custa FPS. Desligado = os 3 quadros do próprio VKD3D. Um VKD3D_SWAPCHAIN_LATENCY_FRAMES digitado nas variáveis de ambiente prevalece.
+457|DX12: informar GPU dedicada (experimental)
+458|O VKD3D informa ao jogo que a GPU tem memória própria, como uma placa de vídeo de PC. O WoW em DX12 então permite escala de renderização acima de 100% (com a resposta de memória compartilhada ele para em 100%; o DX11 permite de qualquer forma). O jogo pode copiar mais dados, o que pode custar um pouco de desempenho. Desligado por padrão. Vale a partir da próxima inicialização.
+459|O tamanho em que o WoW renderiza. Menor = mais FPS, mas imagem mais suave. Salvo para este contêiner; aplique com o jogo parado. A resolução própria do WoW é ajustada ao iniciar; a escala de renderização fica como você define no jogo (guardada separadamente para DX11 e DX12).
+460|Perfil do driver de GPU (o que o jogo pede ao driver)
+461|Perfil do driver de GPU salvo. Vale a partir da próxima inicialização.
+462|O TurnRIP registra por 2 quadros a cada 10 segundos qual trabalho de GPU o jogo pede (passes de renderização, carregamentos/gravações de tiles, resolves, blits, limpezas, compute) na exportação de diagnóstico. Cada amostra causa um breve engasgo, então desligue para jogar normalmente; os contadores do driver por segundo são gravados só com o registro de diagnóstico. Requer o registro de diagnóstico ativado.
+463|Quem mantém a taxa de quadros no limite. App, alinhado ao VSync (recomendado): o app libera os quadros no ritmo da atualização da tela e os desloca alguns milissegundos para terminarem no meio da atualização, assim ficam espaçados por igual. DXVK / VKD3D: a camada gráfica limita com temporizador próprio, o que pode causar trepidação; uma alternativa de reserva. Um limitador digitado nas variáveis de ambiente sempre usa DXVK / VKD3D.
+464|App, alinhado ao VSync (recomendado)
+465|Saída da imagem do jogo
+466|Como a imagem do jogo chega à tela. Escala por hardware (padrão): o app junta o jogo, o HUD e os controles de toque, e o escalador da própria tela amplia a imagem, então a GPU trabalha um pouco menos; só atua quando a resolução tem a proporção da tela (a resolução Tela cheia) e os Screen Effects usam Linear ou nenhuma escala sem efeito (não FSR, DLS, Natural, Nearest ou CRT). Composição pelo app: o passo de GPU do app também faz a escala. Scanout em tela cheia: a imagem do jogo vai direto para a tela sem o passo de GPU do app e é escalada por hardware; funciona com o HUD de desempenho, mas os controles de toque e o menu rápido precisam estar ocultos (enquanto aparecem, o app compõe a imagem). Vale a partir da próxima inicialização.
+467|Escala por hardware (padrão)
+468|Composição pelo app
+469|Chave do CurseForge
+470|A navegação usa o CurseForge e precisa da sua própria chave de API gratuita. Obtenha uma em console.curseforge.com e toque em "Chave do CurseForge".
+471|Chave de API do CurseForge
+472|Sua própria chave de console.curseforge.com. Ela fica guardada só neste telefone e é enviada só ao CurseForge. Deixe em branco para removê-la.
+473|Barras de ação
+474|Todas as categorias
+475|Leilão e ouro
+476|Bolsas e inventário
+477|Buffs e recargas
+478|Chat e social
+479|Classe
+480|Combate e medidores
+481|Interface e mídia
+482|Bibliotecas
+483|Mapa e navegação
+484|Mais baixados
+485|Montarias e mascotes
+486|Outros
+487|Populares
+488|Profissões
+489|JxJ
+490|Missões e evolução
+491|Raides e chefes
+492|Atualizados recentemente
+493|Dicas de ferramenta
+494|Quadros de unidade
+495|O autor só permite baixar no site do CurseForge. Toque em "Download" na página (pode começar sozinho); o app instala o arquivo.
+496|Obter uma chave no CurseForge
+497|Entre na conta, abra "API keys" e copie sua chave neste campo.

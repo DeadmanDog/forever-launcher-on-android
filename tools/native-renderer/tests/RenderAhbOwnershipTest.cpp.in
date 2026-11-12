@@ -41,6 +41,7 @@ struct VulkanRendererContext{
  std::unordered_map<int64_t,WinTex>texMap;std::unordered_map<AHardwareBuffer*,WinTex>ahbImportCache;
  std::unordered_map<int64_t,std::vector<AHardwareBuffer*>>windowAhbs;std::unordered_map<AHardwareBuffer*,uint32_t>ahbOwnerCounts;
  std::vector<WinTex>deleteQueue;std::vector<RenderEntry>renderList;bool failImport=false;
+ std::atomic<bool>scanoutActive{false};
  size_t ahbPeakPerWindow=0,ahbPeakTotal=0,ahbEvictions=0;
  int importsCreated=0,freedByRollback=0;
  std::unordered_map<int64_t,std::vector<int64_t>> windowIdleTokens;std::vector<int64_t> idleReleased;
@@ -48,6 +49,7 @@ struct VulkanRendererContext{
  bool importAHBToWinTex(WinTex&wt,AHardwareBuffer*b){if(failImport)return false;++importsCreated;wt.img=wt.view=wt.ds=b->id;wt.mem=b->id;wt.w=wt.h=32;wt.isAHB=true;wt.needsTransition=true;return true;}
  void destroyWinTex(WinTex&wt);
  void updateWindowContentAHB(int64_t,AHardwareBuffer*,short,short,int,int,int=0,int=0,int64_t=0);
+ void setRenderList(const int64_t*,const int*,const int*,int);
  void retireIdleTokens(std::vector<int64_t>&);
  void removeWindow(int64_t);
  void releaseAhbOwnership(AHardwareBuffer*);
@@ -178,5 +180,45 @@ int main(int argc,char**argv){int which=atoi(argv[1]);VulkanRendererContext c;AH
   d.updateWindowContentAHB(1,&y,32,32,0,0,32,32,71);
   size_t carriers=0;for(auto&t:d.deleteQueue)if(t.idleToken)++carriers;
   check(carriers==64&&d.windowIdleTokens[1]==std::vector<int64_t>{71},"a different buffer retires the remaining tokens behind the frames");
+ }
+ if(which==22){
+  const int coords[]={0};
+  int64_t id[]={1};
+  c.setRenderList(id,coords,coords,1);
+  update(c,1,&a);
+  const auto before=c.contentGen.load();
+  unsigned wakes=0;
+  for(int i=0;i<100;++i){
+   c.needsRender=false;
+   update(c,2,i%2==0?&a:&b);
+   wakes+=c.needsRender.load();
+  }
+  const auto updates=c.contentGen.load()-before;
+  std::printf("covered AHB: 100 updates, %u render requests, %llu false game updates\n",wakes,(unsigned long long)updates);
+  c.needsRender=false;
+  id[0]=2;
+  c.setRenderList(id,coords,coords,1);
+  c.snapshot();
+  check(c.needsRender&&c.frameDraws.size()==1&&c.frameDraws[0].ahb==&b,"reveal redraws with latest covered AHB");
+  c.needsRender=false;
+  const auto beforeVisible=c.contentGen.load();
+  update(c,2,&a);
+  check(c.needsRender&&c.contentGen==beforeVisible+1,"visible AHB still publishes a game frame");
+  check(wakes==0&&updates==0,"covered AHB updates must not enqueue unchanged game frames");
+ }
+ if(which==23){
+  const int64_t id[]={1};
+  const int coords[]={0};
+  c.setRenderList(id,coords,coords,1);
+  c.updateWindowContentAHB(2,&a,32,32,0,0,32,32,123);
+  const auto before=c.contentGen.load();
+  c.needsRender=false;
+  c.updateWindowContentAHB(2,&b,32,32,0,0,32,32,124);
+  check(c.needsRender&&c.deleteQueue.size()==1&&c.deleteQueue[0].idleToken==123,"covered AHB still schedules PresentIdle retirement");
+  check(c.contentGen==before,"idle retirement is not game content");
+  c.scanoutActive=true;
+  c.needsRender=false;
+  update(c,1,&a);
+  check(c.needsRender&&c.contentGen==before+1,"active scanout retains the signal");
  }
  puts("PASS AHB ownership");}

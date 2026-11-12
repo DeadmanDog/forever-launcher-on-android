@@ -67,14 +67,19 @@ public class Pointer {
     }
 
     public void setButton(Button button, boolean pressed) {
-        boolean oldPressed = isButtonPressed(button);
-        buttonMask.set(button.flag(), pressed);
-        if (oldPressed != pressed) {
+        if (updateButtonState(button, pressed)) {
             if (pressed) {
                 triggerOnPointerButtonPress(button);
             }
             else triggerOnPointerButtonRelease(button);
         }
+    }
+
+    /** Update Android input bookkeeping without emitting events to the inactive X11 server. */
+    public boolean updateButtonState(Button button, boolean pressed) {
+        boolean changed = isButtonPressed(button) != pressed;
+        buttonMask.set(button.flag(), pressed);
+        return changed;
     }
 
     public boolean isButtonPressed(Button button) {

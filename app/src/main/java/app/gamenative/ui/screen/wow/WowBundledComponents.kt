@@ -12,16 +12,16 @@ import java.security.MessageDigest
 
 /** Installs bundled profiles into the existing catalog. Never creates or edits a container. Call on IO. */
 internal object WowBundledComponents {
-    const val PROTON_NAME = "proton-11.0-90639.31-arm64ec"
+    const val PROTON_NAME = "proton-11.0-90639.34-arm64ec"
     /** The only bundled/default DXVK: Vegas r63 on upstream 3.1.1, including the cache, bind-skip and pipeline-handle fixes. */
     const val DXVK_NAME = "Vegas-3.1.1-wow-arm64-hybrid-gamenative-r63"
-    /** The only bundled driver: TurnRIP 1.1.14 + community A8xx fixes (1.1.15) + 1.1.16 + 1.1.17 + 1.1.18 (A830 check) + 1.1.19 (wait-any mixed list, unsorted binding flags) + 1.1.20 (no diagnostic counter atomics without TU_STATS_FILE). */
-    const val DRIVER_NAME = "TurnRIP A840 Performance v1.1.20"
-    /** The only bundled VKD3D: r2 + one fallback pipeline compile per PSO (r3) + fence/query/OOM fixes (r4) + swapchain OOM/cleanup fixes (r5) + fallback variants compiled in parallel (r6) + disk-cache merge recovery, worker wait and short-write fixes (r7) + no busy retry when the worker cannot grow its queue (r8) + upstream WoW MSAA workaround (also for Wow-ARM64.exe / Wow-ARM64.exe), no CPU fence waits on the shared Turnip queue, racy fence signal order (r9) + depth/stencil barrier fusion, disjoint copy rectangles, sparse-fallback leak (r10). */
-    const val VKD3D_NAME = "VKD3D-Proton-3.0.1-ARM64-r10"
-    const val VKD3D_VERSION_CODE = 10
-    /** r31: r30 without the DirectX modules WoW never loads (Wine D3D10, DirectComposition, DXVA2, DirectWrite, XAudio2). r30: r29 + the wineserver request statistics + spin cap and cached tid in ntsync. */
-    const val PROTON_VERSION_CODE = 31
+    /** The only bundled driver: TurnRIP 1.1.14 + community A8xx fixes (1.1.15) + 1.1.16 + 1.1.17 + 1.1.18 (A830 check) + 1.1.19 (wait-any mixed list, unsorted binding flags) + 1.1.20 (no diagnostic counter atomics without TU_STATS_FILE) + 1.1.21 (Gamescope pacing threads no longer steer the wait boost) + 1.1.22 (TU_KGSL_WAITBOOST_PRESENT_STEERS for DX12 under Gamescope) + 1.1.24 (TU_KGSL_WAITBOOST_VKD3D_STEERS: VKD3D waits steer under DX12 latency 1; helper_ms stats) + 1.1.25 (TU_KGSL_WAITBOOST_FRAME_STEER) + 1.1.26 (frame steering holds the GPU-wait share at 60-80% of the frame: only the clock the frame rate needs) + 1.1.27 (a single late frame, WoW's own CPU hitch, no longer raises it) + 1.1.28 (TU_FPS_FILE: a limit changed in the running game retargets ADPF and frame steering) + 1.1.29 (the panel refresh in TU_FPS_FILE: frames on the vsync grid are not late) + 1.1.30 (opt-in GPU profile: TU_PROFILE_SAMPLE_MS samples u_trace, per-second API counters in TU_STATS_FILE) + 1.1.31 (WoW: GMEM or sysmem measured per render pass instead of the DX driconf prefer_sysmem; redundancy counters) + 1.1.32 (a descriptor bind that changes nothing is skipped: 98% of WoW DX12's binds) + 1.1.33 (shader caches survive driver updates: keyed on the shader epoch, not the build id; desc_why counters) + 1.1.34 (push reuse, removed in 1.1.35: 0.05% hit) + 1.1.35 (compute shader statistics with diagnostics; its disassembly crashed: black screen) + 1.1.36 (raw instruction words instead). */
+    const val DRIVER_NAME = "TurnRIP A840 Performance v1.1.36"
+    /** The only bundled VKD3D: r2 + one fallback pipeline compile per PSO (r3) + fence/query/OOM fixes (r4) + swapchain OOM/cleanup fixes (r5) + fallback variants compiled in parallel (r6) + disk-cache merge recovery, worker wait and short-write fixes (r7) + no busy retry when the worker cannot grow its queue (r8) + upstream WoW MSAA workaround (also for Wow-ARM64.exe / Wow-ARM64.exe), no CPU fence waits on the shared Turnip queue, racy fence signal order (r9) + depth/stencil barrier fusion, disjoint copy rectangles, sparse-fallback leak (r10) + VKD3D_REPORT_DISCRETE: the GPU reported as not UMA, for WoW's DX12 render scale above 100% (r11) + with it the dedicated-GPU heap layout accepted (r12). */
+    const val VKD3D_NAME = "VKD3D-Proton-3.0.1-ARM64-r12"
+    const val VKD3D_VERSION_CODE = 12
+    /** r34: r33 + the event pool hardened against stale handles (DUPLICATE_CLOSE_SOURCE of a pooled event fails, a stale entry is dropped). r33: r32 + a duplicated event (DuplicateHandle without DUPLICATE_CLOSE_SOURCE) is never reused by the event pool. r32: r31 + event reuse in ntdll (WINE_EVENT_POOL, see WowRuntimeTuning.EVENT_POOL): WoW's post-login Net Queue/TACT ping-pong no longer floods the wineserver. r31: r30 without the DirectX modules WoW never loads (Wine D3D10, DirectComposition, DXVA2, DirectWrite, XAudio2). r30: r29 + the wineserver request statistics + spin cap and cached tid in ntsync. */
+    const val PROTON_VERSION_CODE = 34
     const val DXVK_VERSION_CODE = 63
     const val PROTON_ID = "$PROTON_NAME-$PROTON_VERSION_CODE"
     const val DXVK_VERSION = "$DXVK_NAME-$DXVK_VERSION_CODE"
@@ -31,14 +31,14 @@ internal object WowBundledComponents {
                       val experimental: Boolean = false)
 
     val bundles = listOf(
-        Bundle("VKD3D-Proton-ARM64-r10.wcp", VKD3D_NAME, "1915c6f6a6660170ffbbe58575304a5c493f64b6610891cb731ad48e1eae84a8", ContentProfile.ContentType.CONTENT_TYPE_VKD3D),
-        Bundle("proton-11.0-90639.31-arm64ec-r31.wcp", PROTON_NAME,
-            "6b07212bad6a477406f55c6e2f3765bc6090935a37e99b81d061a216b5c17308", ContentProfile.ContentType.CONTENT_TYPE_PROTON),
+        Bundle("VKD3D-Proton-ARM64-r12.wcp", VKD3D_NAME, "0681f7bb882ec298b66cab45c9cacbabd1f12b0eac6dc6c27a0029bd35633fea", ContentProfile.ContentType.CONTENT_TYPE_VKD3D),
+        Bundle("proton-11.0-90639.34-arm64ec-r34.wcp", PROTON_NAME,
+            "a99eb0850b402d4ea1c4fc9ab5d9cc15aa62163ce91c3eb1ff800a1f72ec6cc5", ContentProfile.ContentType.CONTENT_TYPE_PROTON),
         Bundle("Vegas-3.1.1-wow-arm64-hybrid-gamenative-r63.wcp", DXVK_NAME,
             "e2d75a833298943794055e17ead33cfc17c3d6fe0b84ee476972adb7f6195477", ContentProfile.ContentType.CONTENT_TYPE_DXVK,
             DXVK_VERSION_CODE),
-        Bundle("TurnRIP-A840-Performance-v1.1.20.zip", DRIVER_NAME,
-            "8b5745920baddcda3e66de048d39400c75105646e506c21c48c46b262db60cdc", null),
+        Bundle("TurnRIP-A840-Performance-v1.1.36.zip", DRIVER_NAME,
+            "ebaa5597783ef1e5caade38380caca5ef432242e011cc12656724b39c6a172e4", null),
     )
     val protectedNames = bundles.map { it.name }.toSet()
 
@@ -62,9 +62,9 @@ internal object WowBundledComponents {
     fun supersededDefaultDxvk(id: String): Boolean =
         bundledDxvk2.matchEntire(id)?.let { it.groupValues[1].toInt() <= 51 } ?: false
 
-    /** An earlier bundled TurnRIP (the old default 1.1.14, the experimental 1.1.15 .. 1.1.19) that 1.1.20 replaces; imported drivers are kept. */
+    /** An earlier bundled TurnRIP (1.1.14 .. 1.1.35, and Codex's import-only 1.1.23 test) that 1.1.36 replaces; other imported drivers are kept. */
     fun supersededDriver(id: String): Boolean =
-        bundledDriver.matchEntire(id)?.let { it.groupValues[1].toInt() < 20 } ?: false
+        bundledDriver.matchEntire(id)?.let { it.groupValues[1].toInt() < 36 } ?: false
 
     /** An earlier bundled VKD3D, or any build under the old package name (the same r10 included), that this build's VKD3D replaces. */
     fun supersededVkd3d(id: String): Boolean = legacyVkd3d.matches(id) ||
@@ -126,6 +126,65 @@ internal object WowBundledComponents {
             if (isSessionActive()) throw e
             android.util.Log.w("WowBundled", "Proton upgrade to $PROTON_ID failed; the previous one stays", e)
         }
+    }
+
+    /**
+     * 1.3.0 (user: "ha telepítem az új APK-t, törölje a régi drivereket, Protont, DXVK-t és VKD3D-t"): the installed components an
+     * update leaves behind that this build replaces - older bundled TurnRIP, Proton, Vegas DXVK and VKD3D builds. Only the bundled
+     * families are matched (the same [supersededDriver] .. [supersededVkd3d] rules as the upgrade), so a component the player
+     * imported is never selected, and neither is anything this build ships.
+     */
+    fun supersededInstalled(drivers: List<String>, dxvks: List<String>, vkd3ds: List<String>, runtimes: List<String>): List<String> =
+        drivers.filter(::supersededDriver) + dxvks.filter { supersededDxvk(it) || supersededDefaultDxvk(it) } +
+            vkd3ds.filter(::supersededVkd3d) + runtimes.filter(::supersededProton)
+
+    internal class Removal(val id: String, val remove: () -> Unit)
+
+    /**
+     * Runs the removals one by one: a component still in use (a failed upgrade keeps the old one in the container) or one that
+     * cannot be deleted is skipped and logged, never fatal; nothing is removed once a game session starts. Returns the removed ids.
+     */
+    internal fun runRemovals(removals: List<Removal>, onStatus: (String) -> Unit, isSessionActive: () -> Boolean): List<String> {
+        val removed = mutableListOf<String>()
+        for (removal in removals) {
+            if (isSessionActive()) break
+            try {
+                onStatus("Removing the old ${removal.id}...")
+                removal.remove()
+                removed += removal.id
+            } catch (e: Exception) {
+                android.util.Log.w("WowBundled", "Old component ${removal.id} was kept", e)
+            }
+        }
+        return removed
+    }
+
+    /** Deletes the older bundled builds after [upgradeSuperseded] moved the container off them. Call on IO; never blocks the game. */
+    fun removeSuperseded(context: Context, onStatus: (String) -> Unit = {}, isSessionActive: () -> Boolean = { PluviaApp.keepAlive }): List<String> {
+        if (isSessionActive()) return emptyList()
+        val drivers = runCatching { WowDeveloperComponents.drivers(context) }.getOrDefault(emptyList())
+        val dxvks = runCatching { WowDxvkSelector.installedProfiles(context) }.getOrDefault(emptyList())
+        val vkd3ds = runCatching { WowVkd3dComponents.profiles(context) }.getOrDefault(emptyList())
+        val runtimes = runCatching { WowDeveloperComponents.installedRuntimeProfiles(context) }.getOrDefault(emptyList())
+        val wanted = supersededInstalled(drivers.map { it.id }, dxvks.map(WowDxvkSelector::identifier),
+            vkd3ds.map(WowVkd3dComponents::id), runtimes.map(WowDeveloperComponents::runtimeId)).toSet()
+        if (wanted.isEmpty()) return emptyList()
+        val removals = drivers.filter { it.id in wanted }.map { e -> Removal(e.id) { WowDeveloperComponents.delete(context, e) } } +
+            dxvks.filter { WowDxvkSelector.identifier(it) in wanted }.map { p ->
+                val id = WowDxvkSelector.identifier(p)
+                Removal(id) { WowDeveloperComponents.delete(context,
+                    WowDeveloperComponents.Entry(WowDeveloperComponents.Kind.DXVK, id, "", ContentsManager.getInstallDir(context, p))) }
+            } +
+            vkd3ds.filter { WowVkd3dComponents.id(it) in wanted }.map { p ->
+                val id = WowVkd3dComponents.id(p)
+                Removal(id) { WowVkd3dComponents.delete(context, id, isSessionActive) }
+            } +
+            runtimes.filter { WowDeveloperComponents.runtimeId(it) in wanted }.map { p ->
+                val id = WowDeveloperComponents.runtimeId(p)
+                Removal(id) { WowDeveloperComponents.delete(context,
+                    WowDeveloperComponents.Entry(WowDeveloperComponents.Kind.RUNTIME, id, "", ContentsManager.getInstallDir(context, p))) }
+            }
+        return runRemovals(removals, onStatus, isSessionActive)
     }
 
     fun ensureInstalled(

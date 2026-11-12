@@ -1,29 +1,23 @@
 package app.gamenative.ui.screen.wow
 
 import android.content.Context
+import app.gamenative.display.WowDisplayBackend
 import com.winlator.container.Container
 import com.winlator.core.envvars.EnvVars
 
-/** Launch-local API settings. Saved user variables always take precedence. */
+/** Launch-local API settings, including the game-side ceiling selected for Gamescope. */
 internal object WowRuntimeTuning {
     private val options = mapOf(
-        "latency" to ("VKD3D_SWAPCHAIN_LATENCY_FRAMES" to setOf("1", "2", "3")),
-        "images" to ("VKD3D_SWAPCHAIN_IMAGES" to setOf("2", "3", "4")),
         "present" to ("MESA_VK_WSI_PRESENT_MODE" to setOf("fifo", "mailbox")),
         "async" to ("DXVK_ASYNC" to setOf("0", "1", "2")),
-        // TurnRIP 1.0.6+: 1 keeps the KGSL PWR_MAX constraint (Performance), 0 lets DVFS decide (Balanced, default).
-        // TurnRIP 1.0.7+: fNN = DVFS with a floor of NN% of the max GPU clock (see gpuFloor).
-        "gpu" to ("TU_KGSL_PWR_MAX" to setOf("0", "1") + gpuFloors.map { "f$it" }),
+        // TurnRIP 1.0.6+: 1 keeps the KGSL PWR_MAX constraint (Performance: fixed maximum clock, ~1200 MHz on the A840),
+        // 0 = Balanced (default): the TurnRIP wait boost raises the clock only as far as the game needs.
+        // 1.1.5: the Regulated floors (f50/f65/f80) are gone; an old saved fNN runs as Balanced (see selected).
+        "gpu" to ("TU_KGSL_PWR_MAX" to setOf("0", "1")),
         // Proton r10+: 1 hands a signaled object directly to one waiter instead of waking all (default 0).
         "handoff" to ("NTSYNC_WAKE_HANDOFF" to setOf("0", "1")),
     )
-    /** Frequency floors offered for the regulated GPU mode, in percent of the max clock. */
-    val gpuFloors get() = listOf(50, 65, 80)
-
-    /** "f65" -> 65; null for Performance/Balanced/default. */
-    fun gpuFloor(choice: String): Int? = choice.removePrefix("f").takeIf { choice.startsWith("f") }?.toIntOrNull()?.takeIf { it in gpuFloors }
-
-    /** v1.3.4+: GPL is the default DX11 shader mode (fast linking, no skipped draws) until the player picks another; Hybrid compiles every pipeline in full on this GPU. */
+    /** 1.0.1 code1046+: Hybrid is the default DX11 shader mode (the user's measured best, with Hybrid keeping GPL on); GPL from v1.3.4. A DXVK without Hybrid falls back to the saved mode. */
     fun asyncIsDefault(context: Context): Boolean = !context.getSharedPreferences(WowLaunchPolicy.PREFS, 0).contains("async")
 
     /**
@@ -33,18 +27,21 @@ internal object WowRuntimeTuning {
     fun presentIsDefault(context: Context): Boolean = !context.getSharedPreferences(WowLaunchPolicy.PREFS, 0).contains("present")
 
     fun selected(context: Context, key: String): String =
-        if (key == "async" && asyncIsDefault(context)) "0"
+        if (key == "async" && asyncIsDefault(context)) "2"
         else if (key == "present" && presentIsDefault(context)) "fifo"
         else context.getSharedPreferences(WowLaunchPolicy.PREFS, 0).getString(key, "").orEmpty()
-            // v0.1.73+: Balanced is the GPU default, so an explicit "0" is the same choice as "".
-            .let { if (key == "gpu" && it == "0") "" else it }
+            // v0.1.73+: Balanced is the GPU default, so an explicit "0" is the same choice as "". 1.1.5: so is an old Regulated "fNN"
+            // (or anything else but Performance), which would otherwise leave PWR_MAX to TurnRIP's default: the maximum clock.
+            .let { if (key == "gpu" && it != "1") "" else it }
+            // 1.3.2: two limiters only. An old "timer" or "phase" (or the plain vsync-locked "") is the app's vsync-aligned pacer.
+            .let { if (key == "pacing" && it != "api") "" else it }
             // The old "container setting" DX11 choice ("") left the container's DXVK_ASYNC=1, i.e. Async: shown and applied as Async.
             .let { if (key == "async" && it == "") "1" else it }
             // One FIFO entry: an old explicit "Default (FIFO)" ("") reads and applies as FIFO; handoff "" was the same as Off (0).
             .let { if (key == "present" && it == "") "fifo" else if (key == "handoff" && it == "") "0" else it }
 
     /** Choices that map to app behaviour instead of a single env variable. */
-    private val appChoices = mapOf("pacing" to setOf("api", "timer", "phase"), "fifolatency" to setOf("low", "lowest"), "cpuprofile" to setOf("laptop", "off"), "gpuprofile" to setOf("laptop", "off"),
+    private val appChoices = mapOf("pacing" to setOf("api"), "fifolatency" to setOf("low", "lowest"), "cpuprofile" to setOf("laptop", "off"), "gpuprofile" to setOf("laptop", "off"),
         // The WoW game account (WoW1, WoW2 ...) preselected at login when the Battle.net account has several; "" = the last used one.
         GAME_ACCOUNT to setOf("1", "2"),
         // The game region the next launch connects to; "" = the install's own region (.build.info). The game data is the same.
@@ -116,16 +113,20 @@ internal object WowRuntimeTuning {
      * A limiter typed into the saved environment always selects the API path.
      */
     fun appPacing(context: Context, container: Container): Boolean =
-        selected(context, "pacing") != "api" && !hasUserApiLimiter(EnvVars(container.envVars), readsDxvkFrameRateAlias(container))
+        !WowDisplayBackend.isGamescope(container) && selected(context, "pacing") != "api" &&
+            !hasUserApiLimiter(EnvVars(container.envVars), readsDxvkFrameRateAlias(container))
 
     /**
-     * App pacing releases buffers on the display's vsync (v0.1.114+ default). "timer" = the
-     * free-running 1/limit timer of v0.1.63-v0.1.113, which drifts against the panel's real rate.
+     * App pacing releases buffers on the display's vsync (v0.1.114+ default). The free-running 1/limit "timer" of
+     * v0.1.63-v0.1.113 drifted against the panel's real rate and is gone since 1.3.2.
      */
-    fun vsyncPacing(context: Context): Boolean = selected(context, "pacing") != "timer"
+    fun vsyncPacing(context: Context): Boolean = true
 
-    /** Experimental (v1.3.33): vsync pacing whose releases follow the measured display phase (see PresentPhase). */
-    fun phaseAlign(context: Context): Boolean = selected(context, "pacing") == "phase"
+    /**
+     * Vsync pacing whose releases follow the measured display phase (see PresentPhase). Experimental from v1.3.33, the release
+     * default since 2026-11-07 (the user's measured best) and since 1.3.2 the app pacer's only mode.
+     */
+    fun phaseAlign(context: Context): Boolean = selected(context, "pacing") != "api"
 
     /**
      * FIFO latency drain (v1.3.39, three levels since v1.3.41): "" = smooth, the queue as it fills (about 60 ms at 60 Hz, never a
@@ -162,8 +163,36 @@ internal object WowRuntimeTuning {
         return "API limiter OFF (app Present limiter OFF)"
     }
 
+    /** Gamescope's refresh divisor can round up. Give the renderer the requested ceiling as well. */
+    private fun applyApiPacing(context: Context, container: Container, env: EnvVars, dx12: Boolean, target: Int, alias: Boolean): String {
+        if (gamescopeOwnsFifoPacing(context, container)) {
+            // Gamescope's vblank limiter (sent by GameNativeDrm.setFpsLimit) holds FIFO: no game-side timer on top.
+            val explicit = applyLimiter(env, dx12, 0, alias)
+            return if (apiLimitIn(env, dx12, alias) > 0) explicit else "Gamescope FIFO: vblank limiter ($target FPS)"
+        }
+        if (WowDisplayBackend.isGamescope(container) && target > 0) {
+            if (dx12) {
+                val current = env.get("VKD3D_FRAME_RATE").toDoubleOrNull()
+                if (current == null || current !in 1.0..target.toDouble()) env.put("VKD3D_FRAME_RATE", target)
+            } else {
+                val config = env.get("DXVK_CONFIG")
+                val configured = configFrameRate(config, alias)
+                val current = if (configured != null) configured.toIntOrNull()?.toDouble()
+                    else env.get("DXVK_FRAME_RATE").toDoubleOrNull()
+                if (current == null || current !in 1.0..target.toDouble()) {
+                    val key = if (alias) "dxvk.maxFrameRate" else "dxgi.maxFrameRate"
+                    val prefix = config.trimEnd().trimEnd(';')
+                    env.put("DXVK_CONFIG", (if (prefix.isEmpty()) "" else "$prefix;") + "$key=$target")
+                }
+            }
+        }
+        return applyLimiter(env, dx12, target, alias)
+    }
+
     /** WowLaunchPolicy switch: DX11 frame latency 1 (on by default since v0.1.113). */
     const val LOW_LATENCY = "lowlatency"
+    /** 1.1.7: DX12's own switch (VKD3D swapchain latency 1); until then LOW_LATENCY covered both APIs, so it starts from its value. */
+    const val LOW_LATENCY_DX12 = "lowlatency12"
 
     /**
      * What the game is told about the processor and GPU (Proton r22+ / Vegas r48+). Saved choice values:
@@ -233,8 +262,76 @@ internal object WowRuntimeTuning {
         }
     }
 
+    /**
+     * WowLaunchPolicy switch (on by default), XServer + DX12 only. The bundled Mesa wrapper's X11 WSI waits for a frame's GPU work
+     * before handing the buffer to the X server only in mailbox mode; in FIFO it relies on Linux implicit sync, which Android buffers
+     * do not have, so the compositor could read a buffer the GPU was still drawing and show its previous frame (the loading bar
+     * jumping back under DX12). The wrapper's own MESA_VK_WSI_DEBUG=forcesync makes vkQueuePresentKHR wait for that frame's fence
+     * (wsi_common.c), in FIFO, with no other change (1.1.0 switched the game to mailbox instead). "sw" already waits; a saved
+     * MESA_VK_WSI_DEBUG wins.
+     */
+    const val GAME_GPU_WAIT = "gpuwait"
+
+    fun applyGameGpuWait(env: EnvVars, saved: EnvVars, enabled: Boolean) {
+        if (!enabled || saved.has("MESA_VK_WSI_DEBUG")) return
+        val flags = env.get("MESA_VK_WSI_DEBUG").split(',').map(String::trim).filter(String::isNotEmpty)
+        if ("sw" in flags || "forcesync" in flags) return
+        env.put("MESA_VK_WSI_DEBUG", (flags + "forcesync").joinToString(","))
+    }
+
     /** WowLaunchPolicy switch: report the highest-clocked cores as performance cores (Proton r21+, off by default). */
     const val CPU_CLASSES = "cpuclasses"
+
+    /**
+     * WowLaunchPolicy switch (on by default): Proton r32's event reuse. WoW's Net Queue threads create and close thousands of
+     * unnamed events a second after login; reused events skip the wineserver, whose queue otherwise stalls the main thread.
+     * OFF sets WINE_EVENT_POOL=0 (exactly the r31 path); a saved WINE_EVENT_POOL wins.
+     */
+    const val EVENT_POOL = "eventpool"
+
+    /**
+     * TurnRIP 1.1.22: under Gamescope the present thread (gn-present) waits for the compositor, so it does not steer the GPU wait
+     * boost (1.1.21). DX12 needs it to: its VKD3D waits never steer, and on 1.0.3 DX12 under Gamescope sat at 506 MHz / 39.7 FPS.
+     * DX11 and XServer stay without it. A saved TU_KGSL_WAITBOOST_PRESENT_STEERS wins.
+     */
+    fun applyPresentSteer(env: EnvVars, saved: EnvVars, gamescopeDx12: Boolean) {
+        if (saved.has("TU_KGSL_WAITBOOST_PRESENT_STEERS")) return
+        if (gamescopeDx12) env.put("TU_KGSL_WAITBOOST_PRESENT_STEERS", "1") else env.remove("TU_KGSL_WAITBOOST_PRESENT_STEERS")
+    }
+
+    /**
+     * TurnRIP 1.1.24, XServer + DX12 with VKD3D swapchain latency 1: the game cannot prepare a frame ahead, so a VKD3D thread's GPU
+     * wait is on every frame's critical path; as a "helper" it never steered the wait boost and the GPU stayed at 500 MHz, 46 FPS
+     * (1.1.3 diag, steer_ms "none"). TU_KGSL_WAITBOOST_VKD3D_STEERS=1 lets those waits steer the adaptive boost (no fixed maximum).
+     * Only for latency 1; a saved value wins.
+     */
+    fun applyVkd3dSteer(env: EnvVars, saved: EnvVars, xserverDx12: Boolean) {
+        val on = xserverDx12 && env.get("VKD3D_SWAPCHAIN_LATENCY_FRAMES").trim() == "1"
+        // TurnRIP 1.1.25: with every frame's GPU wait on the critical path the wait share is high at any clock, so the share
+        // controller held ~1200 MHz (1.1.4 diag: boost_level 100 in ~90% of samples, 6.9 W vs 5.2 W DX11). FRAME_STEER=1 steers
+        // by frame time instead: +15 at once when a frame comes within 1.5 ms of the 60 FPS period, -5 per 250 ms of 3 ms slack.
+        for (name in listOf("TU_KGSL_WAITBOOST_VKD3D_STEERS", "TU_KGSL_WAITBOOST_FRAME_STEER")) {
+            if (saved.has(name)) continue
+            if (on) env.put(name, "1") else env.remove(name)
+        }
+    }
+
+    /**
+     * VKD3D r11, DX12 only: VKD3D_REPORT_DISCRETE=1 answers the game's D3D12 architecture query with UMA = false. WoW's DX12
+     * renderer caps the render scale at 100% on a UMA GPU (1.1.6 diag: DXGI says Discrete, VKD3D "UMA-like topology"); DX11 has no
+     * such query. Off by default (WoW may then upload through copies); a saved value wins.
+     */
+    const val REPORT_DISCRETE = "reportdiscrete"
+
+    fun applyReportDiscrete(env: EnvVars, saved: EnvVars, dx12: Boolean, enabled: Boolean) {
+        if (saved.has("VKD3D_REPORT_DISCRETE")) return
+        if (dx12 && enabled) env.put("VKD3D_REPORT_DISCRETE", "1") else env.remove("VKD3D_REPORT_DISCRETE")
+    }
+
+    fun applyEventPool(env: EnvVars, saved: EnvVars, enabled: Boolean) {
+        if (saved.has("WINE_EVENT_POOL")) return
+        if (enabled) env.remove("WINE_EVENT_POOL") else env.put("WINE_EVENT_POOL", "0")
+    }
 
     /** Saved WINE_CPU_EFFICIENCY wins; OFF removes an inherited value. */
     fun applyCpuClasses(env: EnvVars, saved: EnvVars, enabled: Boolean) {
@@ -274,7 +371,16 @@ internal object WowRuntimeTuning {
      * keeps one frame in flight. A maxFrameLatency in the saved DXVK_CONFIG always wins.
      */
     fun applyFrameLatency(env: EnvVars, dx12: Boolean, enabled: Boolean) {
-        if (dx12 || !enabled || configFrameLatency(env.get("DXVK_CONFIG")) != null) return
+        if (!enabled) return
+        if (dx12) {
+            // DX12 the same way (1.1.2): VKD3D's swapchain otherwise lets the game queue the driver default (up to three) frames
+            // ahead. A saved value wins. 1.1.7: the separate "DX12 maximum latency" choice is gone; its own switch covers it.
+            if (!env.has("VKD3D_SWAPCHAIN_LATENCY_FRAMES")) env.put("VKD3D_SWAPCHAIN_LATENCY_FRAMES", "1")
+            // 1.3.6 (user): the separate swapchain image count is gone; low latency asks for 2 images, off = VKD3D's default.
+            if (!env.has("VKD3D_SWAPCHAIN_IMAGES")) env.put("VKD3D_SWAPCHAIN_IMAGES", "2")
+            return
+        }
+        if (configFrameLatency(env.get("DXVK_CONFIG")) != null) return
         val current = env.get("DXVK_CONFIG").trimEnd().trimEnd(';')
         env.put("DXVK_CONFIG", (if (current.isEmpty()) "" else "$current;") + "dxgi.maxFrameLatency=1")
     }
@@ -284,33 +390,36 @@ internal object WowRuntimeTuning {
             // DXVK pipeline mode is DX11-only and VKD3D swapchain controls are DX12-only;
             // the game present mode and GPU power mode apply to both APIs.
             if (key == "async" && dx12) continue
-            if ((key == "latency" || key == "images") && !dx12) continue
             val value = choices[key].orEmpty()
             // The original managed DXVK_ASYNC=1 remains the creation default.
             // Choosing another mode explicitly supersedes that exact default.
             val managedAsync = key == "async" && saved.get(pair.first) == "1"
-            if (key == "gpu" && value.isEmpty()) {
-                // v0.1.73+: no choice = Balanced (PWR_MAX off; TurnRIP wait boost and ADPF regulate).
-                if (!saved.has(pair.first)) env.put(pair.first, "0")
-                continue
-            }
-            if (key == "gpu" && gpuFloor(value) != null) {
-                // The floor only acts with PWR_MAX off; saved variables still win.
-                if (!saved.has(pair.first)) env.put(pair.first, "0")
-                if (!saved.has("TU_KGSL_GPU_FLOOR")) env.put("TU_KGSL_GPU_FLOOR", gpuFloor(value)!!)
+            if (key == "gpu") {
+                // Performance ("1") = PWR_MAX; anything else is Balanced (PWR_MAX off; TurnRIP wait boost and ADPF regulate).
+                // Never left unset: TurnRIP's own default is PWR_MAX on. Saved variables (also a typed TU_KGSL_GPU_FLOOR) still win.
+                if (!saved.has(pair.first)) env.put(pair.first, if (value == "1") "1" else "0")
                 continue
             }
             if (value in pair.second && (!saved.has(pair.first) || managedAsync)) env.put(pair.first, value)
         }
     }
 
-    fun effectiveLimiter(container: Container, env: EnvVars): String {
+    fun effectiveLimiter(context: Context, container: Container, env: EnvVars): String {
         val saved = EnvVars(container.envVars)
         val dx12 = WowVkd3dComponents.api(container) == WowVkd3dComponents.DX12
         val alias = readsDxvkFrameRateAlias(container)
         val user = if (dx12) saved.has("VKD3D_FRAME_RATE") else configFrameRate(saved.get("DXVK_CONFIG"), alias) != null || saved.has("DXVK_FRAME_RATE")
         val value = if (dx12) env.get("VKD3D_FRAME_RATE") else configFrameRate(env.get("DXVK_CONFIG"), alias) ?: env.get("DXVK_FRAME_RATE")
-        return "${if (dx12) "VKD3D" else "DXVK"}: ${value.ifBlank { "OFF" }} (${if (user) "user" else "container"})"
+        if (gamescopeOwnsFifoPacing(context, container)) {
+            val target = target(container).takeIf { it > 0 }?.toString() ?: "OFF"
+            return "Gamescope FIFO: $target (vblank limiter); ${if (dx12) "VKD3D" else "DXVK"}: ${value.ifBlank { "OFF" }}"
+        }
+        val owner = when {
+            WowDisplayBackend.isGamescope(container) && target(container) > 0 -> "Gamescope launch cap"
+            user -> "user"
+            else -> "container"
+        }
+        return "${if (dx12) "VKD3D" else "DXVK"}: ${value.ifBlank { "OFF" }} ($owner)"
     }
     fun surfaceTarget(container: Container, requested: Int): Int {
         val saved = EnvVars(container.envVars)
@@ -348,6 +457,20 @@ internal object WowRuntimeTuning {
         return LiveLimit(if (lower) requested else 0, inForce, requested != inForce)
     }
 
+    /**
+     * 1.2.0: the frame rate the renderer (its latency windows and late-frame test, the FIFO drain) and the Android surface are
+     * told for a limit change in the running game: the one that really holds. It used to be [surfaceTarget]: the request itself,
+     * or the saved DXVK/VKD3D value; with DXVK/VKD3D owning pacing a higher request stayed at the launch limit while the renderer
+     * expected the request, and a lower one (the app limiter on top of a typed limit) ran slower than the renderer expected.
+     */
+    fun engineLimit(apiOwned: Boolean, requested: Int, apiLimit: Int = apiLimitAtLaunch): Int = live(apiOwned, requested, apiLimit).inForce
+
+    /**
+     * Gamescope: whether a limit change made in the running game waits for the next launch. Gamescope's limiter takes a lower limit
+     * at once; only a higher one, or off, stays under the game-side ceiling set at launch.
+     */
+    fun gamescopeLimitWaitsForRestart(limit: Int, apiLimit: Int): Boolean = apiLimit > 0 && (limit <= 0 || limit > apiLimit)
+
     fun liveNotice(context: Context, live: LiveLimit): String {
         val now = if (live.inForce > 0) "${live.inForce} FPS" else WowI18n.pick(context, "none", "nincs")
         return WowI18n.pick(context, "This limit applies from the next launch (now: $now)", "Ez a korlát a következő indításkor lép érvénybe (most: $now)")
@@ -362,8 +485,21 @@ internal object WowRuntimeTuning {
             ?.let { (build, code) -> build == code && build.toInt() >= 14 } ?: false
 
     fun presentMode(context: Context, container: Container): String =
-        WowLaunchEnvironment.resolvePresentMode(container.envVars, selected(context, "present"),
+        if (WowDisplayBackend.isGamescope(container))
+            WowLaunchEnvironment.resolvePresentMode(container.envVars, selected(context, "present"), "", "fifo")
+        else WowLaunchEnvironment.resolvePresentMode(container.envVars, selected(context, "present"),
             com.winlator.core.KeyValueSet(container.graphicsDriverConfig).get("presentMode"), container.rendererPresentMode)
+
+    /**
+     * FIFO under Gamescope: Gamescope's own limiter (debug_set_fps_limit) holds the cap, one commit per limited vblank, the
+     * vsync-locked pacing; no game-side DXVK/VKD3D timer then (gamenative-drm icd_shim gamescope_route_pacing: "any FIFO
+     * declaration: no gate; gamescope's limiter holds FIFO commits ... and is the cap", hence its "gate=off"). 1044 .. 1047 also
+     * dropped Gamescope's limiter (77.6 FPS for 60 on 1.0.2); 1.0.3 stacked the DXVK timer on it (judder). Mailbox/immediate keep the
+     * game-side ceiling.
+     */
+    internal fun gamescopeOwnsFifoPacing(context: Context, container: Container): Boolean =
+        WowDisplayBackend.isGamescope(container) && presentMode(context, container).equals("fifo", true) &&
+            !EnvVars(container.envVars).has("GN_VKSHIM_NO_PROXY")
     @JvmStatic
     fun apply(context: Context, container: Container, env: EnvVars): String = applyTo(context, container, env, launch = true)
 
@@ -378,24 +514,45 @@ internal object WowRuntimeTuning {
                 error("Hybrid needs the bundled DXVK. Apply it on the Components tab or choose Saved / default.")
         }
         applyChoices(env, EnvVars(container.envVars), dx12, choices)
-        applyAdpfTarget(env, EnvVars(container.envVars), target(container))
-        applyFrameLatency(env, dx12, WowLaunchPolicy.enabled(context, LOW_LATENCY))
+        applyFrameLatency(env, dx12, WowLaunchPolicy.enabled(context, if (dx12) LOW_LATENCY_DX12 else LOW_LATENCY))
+        applyVkd3dSteer(env, EnvVars(container.envVars), dx12 && !WowDisplayBackend.isGamescope(container))
+        // 1.3.6 (user): always report a dedicated GPU under DX12 (no setting); a typed VKD3D_REPORT_DISCRETE still wins.
+        applyReportDiscrete(env, EnvVars(container.envVars), dx12, true)
         applyVegasBindSkip(env, EnvVars(container.envVars), WowLaunchPolicy.enabled(context, VEGAS_BINDSKIP))
         applyHybridGpl(env, EnvVars(container.envVars), WowLaunchPolicy.enabled(context, HYBRID_GPL))
-        applyCpuIdentity(env, EnvVars(container.envVars), selected(context, CPU_PROFILE), android.os.Build.SOC_MODEL.orEmpty())
+        // 1.3.6 (user): the game always sees this phone's own Snapdragon and Adreno (the choices are gone; typed values still win).
+        applyCpuIdentity(env, EnvVars(container.envVars), "", android.os.Build.SOC_MODEL.orEmpty())
         applyCpuClasses(env, EnvVars(container.envVars), WowLaunchPolicy.enabled(context, CPU_CLASSES))
-        applyGpuIdentity(env, EnvVars(container.envVars), selected(context, GPU_PROFILE), kgslGpuModel())
+        applyEventPool(env, EnvVars(container.envVars), WowLaunchPolicy.enabled(context, EVENT_POOL))
+        applyPresentSteer(env, EnvVars(container.envVars), WowDisplayBackend.isGamescope(container) && dx12)
+        applyGpuIdentity(env, EnvVars(container.envVars), "", kgslGpuModel())
         // These probes are launch-local and share the existing diagnostic switch. OFF removes
         // inherited paths too, while the saved container environment remains untouched.
         applyDiagnosticStats(env, EnvVars(container.envVars), WowDiagnostics.enabled(context))
         val appOwns = appPacing(context, container)
         val alias = readsDxvkFrameRateAlias(container)
-        val notes = if (appOwns) applyAppPacing(env, target(container)) else applyLimiter(env, dx12, target(container), alias)
+        if (WowDisplayBackend.isGamescope(container)) env.put("MESA_VK_WSI_PRESENT_MODE", presentMode(context, container))
+        val notes = if (appOwns) applyAppPacing(env, target(container))
+            else applyApiPacing(context, container, env, dx12, target(container), alias)
         if (launch) apiLimitAtLaunch = if (appOwns) 0 else apiLimitIn(env, dx12, alias)
+        // 1.1.9: the driver's frame period is the limit the game really runs at. A DXVK/VKD3D limiter (typed into Environment
+        // Variables, or the "api" pacing) owns it then, not the app target: at a typed 30 FPS TurnRIP was told 60 and took every
+        // frame for a late one.
+        val apiLimit = if (appOwns || gamescopeOwnsFifoPacing(context, container)) 0 else apiLimitIn(env, dx12, alias)
+        // 1.2.3: never above the panel rate (a 144 chip on the 60 Hz panel told ADPF and TurnRIP 6.9 ms frames).
+        val hz = panelHz(context)
+        val running = driverFps(if (apiLimit > 0) apiLimit else target(container), hz)
+        applyAdpfTarget(env, EnvVars(container.envVars), running)
+        // TurnRIP 1.1.28+: the limit changed in the running game reaches the driver through this file (see writeFpsFile).
+        if (!EnvVars(container.envVars).has("TU_FPS_FILE")) {
+            val file = fpsFile(context)
+            env.put("TU_FPS_FILE", file.absolutePath)
+            if (launch) writeFpsFile(file, running, hz)
+        }
         return notes
     }
 
-    /** The GPU mode ("performance", "balanced", "floorNN") and the frame limit ("off" or FPS) the next launch requests. */
+    /** The GPU mode ("performance", "balanced", or "floorNN" for a TU_KGSL_GPU_FLOOR typed into Environment Variables) and the frame limit ("off" or FPS) the next launch requests. */
     data class LaunchPreview(val gpuMode: String, val fps: String)
 
     /**
@@ -415,7 +572,8 @@ internal object WowRuntimeTuning {
         val target = target(container)
         val limit = if (appPacing(context, container)) target else {
             val alias = readsDxvkFrameRateAlias(container)
-            EnvVars(container.envVars).let { applyLimiter(it, dx12, target, alias); apiLimitIn(it, dx12, alias) }
+            val api = EnvVars(container.envVars).let { applyApiPacing(context, container, it, dx12, target, alias); apiLimitIn(it, dx12, alias) }
+            if (gamescopeOwnsFifoPacing(context, container) && target > 0 && (api == 0 || api > target)) target else api
         }
         return LaunchPreview(gpuMode, if (limit > 0) "$limit" else "off")
     }
@@ -429,6 +587,34 @@ internal object WowRuntimeTuning {
             else env.put(key, if (saved.has(key)) saved.get(key) else path)
         }
     }
+
+    /** TurnRIP 1.1.28 reads the frame limit in force from this file at most once a second ("0" = no limit = 60). */
+    fun fpsFile(context: Context) = java.io.File(context.filesDir, "wow-fps-limit")
+
+    /**
+     * Written at launch and on every limit change in the running game; atomic, so the driver never reads half a number. TurnRIP
+     * 1.1.29 also takes the panel refresh ([hz], 0 = unknown) as a second number: with a limit that is no divisor of it (50 on
+     * 60 Hz) frames come on the vsync grid, and the long ones are not late.
+     */
+    fun writeFpsFile(file: java.io.File, fps: Int, hz: Int = 0) {
+        val text = "${fps.coerceIn(0, 1000)}" + (if (hz in 10..1000) " $hz" else "") + "\n"
+        runCatching {
+            file.parentFile?.mkdirs()
+            val temp = java.io.File(file.parentFile, file.name + ".tmp")
+            temp.writeText(text)
+            if (!temp.renameTo(file)) { file.writeText(text); temp.delete() }
+        }
+    }
+
+    /** The default display's current refresh rate in whole Hz, 0 when unknown. */
+    fun panelHz(context: Context): Int = runCatching {
+        val display = context.getSystemService(android.hardware.display.DisplayManager::class.java)
+            ?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
+        ((display?.refreshRate ?: 0f) + 0.5f).toInt()
+    }.getOrDefault(0)
+
+    /** The frame rate the driver is told: the limit, but never above the panel rate (0 = no limit stays 0). */
+    fun driverFps(limit: Int, hz: Int): Int = if (hz > 0 && limit > hz) hz else limit
 
     /** TurnRIP 1.1.2+: CPU frame-time target for the driver's ADPF session; 60 when unlimited. Saved values win. */
     fun applyAdpfTarget(env: EnvVars, saved: EnvVars, target: Int) {

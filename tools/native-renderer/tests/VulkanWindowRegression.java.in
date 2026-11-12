@@ -1,17 +1,50 @@
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 public class VulkanWindowRegression {
- static class Drawable {final int id;Drawable(int n){id=n;}}
+ static class Drawable {
+  final int id; final short width=1344,height=608; final Object renderLock=new Object();
+  Texture texture;
+  Drawable(int n){id=n;}
+  Texture getTexture(){return texture;}
+  java.nio.ByteBuffer getBuffer(){return null;}
+ }
+ static class Texture {}
+ static class GPUImage extends Texture {
+  long getHardwareBufferPtr(){return 1;}
+  java.nio.ByteBuffer getVirtualData(){return null;}
+  short getStride(){return 0;}
+  int unlock(){return -1;}
+  void lock(){}
+ }
  static class Attributes {boolean mapped=true,enabled=true;boolean isMapped(){return mapped;}boolean isEnabled(){return enabled;}}
- static class Window {final Attributes attributes=new Attributes();Drawable content;List<Window>children=new ArrayList<>();Window(Drawable d){content=d;}Drawable getContent(){return content;}List<Window>getChildren(){return children;}String getClassName(){return "WoW";}int getX(){return 0;}int getY(){return 0;}void disableAllDescendants(){}}
+ static class Window {final int id=3;final Attributes attributes=new Attributes();Drawable content;List<Window>children=new ArrayList<>();Window(Drawable d){content=d;}Drawable getContent(){return content;}List<Window>getChildren(){return children;}String getClassName(){return "WoW";}int getX(){return 0;}int getY(){return 0;}int getRootX(){return 0;}int getRootY(){return 0;}Window getParent(){return null;}void disableAllDescendants(){}}
  static class RenderableWindow {final Drawable content;final int rootX,rootY;RenderableWindow(Drawable c,int x,int y){content=c;rootX=x;rootY=y;}}
- static class XServer {final WindowManager windowManager=new WindowManager();static class WindowManager{Window rootWindow=new Window(new Drawable(0));}}
+ static class XServer {final WindowManager windowManager=new WindowManager();static class WindowManager{Window rootWindow=new Window(new Drawable(0));}final Screen screenInfo=new Screen();static class Screen{int width=1344,height=608;}}
  static class View {void queueEvent(Runnable r){r.run();}}
+ static class android {static class os {static class SystemClock {static long elapsedRealtimeNanos(){return 0;}}}}
+ static class ScanoutStats {static void scanoutFrame(){} static void compositorFrame(){}}
+ static class Hud {void update(){}}
+ static class HudFilter {boolean shouldCount(boolean tracked,boolean inside,long timestamp){return false;}}
+ static class IdleHolds {long hold(Runnable runnable){return 0;} void release(long token){}}
+ // 1.2.1: the scanout buffer's hold (production ScanoutIdleHand).
+ static class ScanoutIdleHand {long current; synchronized long replace(long t){long p=current;current=t;return p;} synchronized long take(){long p=current;current=0;return p;}}
  final XServer xServer=new XServer();final View xServerView=new View();final Object lock=new Object(),nativeLifetimeLock=new Object();
  boolean disposed=false,flatPresentationEnabled=true;long nativeHandle=1;String[]unviewableWMClasses=null;
  private static final AtomicLong ID_GEN=new AtomicLong(1);
  private final Map<Drawable,Long>drawableIds=new IdentityHashMap<>();Set<Long>textures=new HashSet<>();List<Long>removed=new ArrayList<>();int sceneRequests=0;
- void queueSceneUpdate(){sceneRequests++;}void nativeRemoveWindow(long h,long id){removed.add(id);textures.remove(id);}
+ final AtomicBoolean scenePending=new AtomicBoolean();
+ void updateScene(){sceneRequests++;}
+ void nativeRemoveWindow(long h,long id){removed.add(id);textures.remove(id);}
+ boolean nativeMode, delivered, presentIdleTracking, initComplete;
+ Drawable scanoutCandidate;
+ Hud hudRef;int hudWindowId=-1;HudFilter hudFilter=new HudFilter();IdleHolds idleHolds=new IdleHolds();ScanoutIdleHand scanoutIdle=new ScanoutIdleHand();
+ int gameBuffers;
+ boolean nativeIsScanoutActive(long h){return nativeMode;}
+ boolean nativeIsGameFrameDelivered(long h){return delivered;}
+ void nativeScanoutSetBuffer(long h,long ptr,int x,int y,int w,int height,int fd){gameBuffers++;delivered=true;}
+ void nativeUpdateWindowContentAHB(long h,long id,long ptr,int width,int height,int x,int y,int ww,int wh,long token){}
+ void nativeUpdateWindowContent(long h,long id,java.nio.ByteBuffer buf,int width,int height,int s,int x,int y,int ww,int wh){}
  /* PRODUCTION */
  static void check(boolean b,String m){if(!b)throw new AssertionError(m);}
  public static void main(String[]args){int n=Integer.parseInt(args[0]);var r=new VulkanWindowRegression();var w=new Window(new Drawable(3));
@@ -22,6 +55,17 @@ public class VulkanWindowRegression {
   if(n==4){var list=new ArrayList<RenderableWindow>();r.collectWindows(list,w,5,6);check(list.size()==1&&list.get(0).rootX==5&&list.get(0).rootY==6,"mapped drawable and coordinates retained");}
   if(n==5){w.attributes.mapped=false;var list=new ArrayList<RenderableWindow>();r.collectWindows(list,w,0,0);check(list.isEmpty(),"unmapped windows remain excluded");}
   if(n==6){r.unviewableWMClasses=new String[]{"WoW"};var list=new ArrayList<RenderableWindow>();r.collectWindows(list,w,0,0);check(list.isEmpty(),"class filtering retained");}
+  if(n==7){
+   r.nativeMode=true;r.scanoutCandidate=w.content;
+   var pixmap=new Drawable(4);pixmap.texture=new GPUImage();
+   for(int i=0;i<120;i++)r.onUpdateWindowContentDirect(w,pixmap,(short)0,(short)0,null);
+   check(r.gameBuffers==120,"all direct game frames submitted");
+   System.out.println("120 scanout submissions, "+r.sceneRequests+" queued scene rebuilds");
+   check(r.sceneRequests==1,"only first successful scanout submission changes scene membership");
+   r.delivered=false;
+   r.onUpdateWindowContentDirect(w,pixmap,(short)0,(short)0,null);
+   check(r.sceneRequests==2,"new scanout lifetime needs first scene rebuild again");
+  }
   System.out.println("PASS window lifecycle "+n);
  }
 }

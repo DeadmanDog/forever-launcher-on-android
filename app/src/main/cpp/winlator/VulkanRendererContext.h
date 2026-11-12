@@ -327,6 +327,11 @@ private:
     void*  scanoutCursorBuf   = nullptr;
     int32_t scanoutCursorBufW = 0;
     int32_t scanoutCursorBufH = 0;
+    // The other cursor buffer: a new image is written here and then the two swap, so the CPU never writes the buffer the
+    // display is showing (that tore or flashed the cursor on every image change).
+    void*  scanoutCursorSpare   = nullptr;
+    int32_t scanoutCursorSpareW = 0;
+    int32_t scanoutCursorSpareH = 0;
 
     void*  scanoutTx          = nullptr;
     void*  scanoutGameTx      = nullptr;
@@ -487,6 +492,13 @@ private:
     int64_t latencyBeforeDrainNs = 0;
     bool drainOne = false;
     bool latencyWindowDirty = false;
+    // 1.1.8: a late shown game frame whose content had come on time: the compositor missed, not the game (only such a miss
+    // counts as a refill of the emptier queue). The game's own late frames do not.
+    bool latencyWindowAppLate = false;
+    // The lowest window median since the last skip (hitch windows included): what the skip reached before a hitch refilled it.
+    int64_t drainReachedNs = 0;
+    // Content time of the previous shown game frame (to tell a late game frame from a late present).
+    int64_t lastShownContentNs = 0;
     int64_t latencyWindowStartNs = 0;
     // After a hitch or a slow (loading) stretch, this many clean windows pass before the floor or a skip is decided.
     static constexpr int kSettleWindows = 2;
