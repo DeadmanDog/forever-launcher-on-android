@@ -30,8 +30,12 @@ class WowSessionServiceTest {
         WowSessionService.sessionChanged(context, true)
         val started = Shadows.shadowOf(context).nextStartedService
         assertEquals(WowSessionService::class.java.name, started.component!!.className)
+        // Review 2026-11-13: the stop is sent only to a service that is in the foreground (see WowSessionServiceStopTest).
+        val controller = Robolectric.buildService(WowSessionService::class.java).create().startCommand(0, 1)
         WowSessionService.sessionChanged(context, false)
         assertEquals(WowSessionService::class.java.name, Shadows.shadowOf(context).nextStoppedService.component!!.className)
+        controller.destroy()
+        WowSessionService.sessionChanged(context, true) // clears the stop flag for the other tests
     }
 
     @Test fun theServiceRunsInTheForegroundWithANotification() {

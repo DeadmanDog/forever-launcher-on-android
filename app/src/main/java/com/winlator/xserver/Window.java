@@ -102,6 +102,13 @@ public class Window extends XResource {
         return properties.get(id);
     }
 
+    /** The names of all properties on the window (ListProperties). */
+    public int[] getPropertyAtoms() {
+        int[] atoms = new int[properties.size()];
+        for (int i = 0; i < atoms.length; i++) atoms[i] = properties.keyAt(i);
+        return atoms;
+    }
+
     public void addProperty(Property property) {
         properties.put(property.name, property);
     }
@@ -119,10 +126,9 @@ public class Window extends XResource {
             modified = true;
         }
         else if (mode == Property.Mode.REPLACE) {
-            if (property.format == format) {
-                property.replace(data);
-            }
-            else properties.put(atom, new Property(atom, type, format, data));
+            // Replace takes the new type and format as well (Property.type is final): always a new property object, and the
+            // listeners are given that new one (they used to get the old one when the format changed).
+            properties.put(atom, (property = new Property(atom, type, format, data)));
             modified = true;
         }
         else if (property.format == format && property.type == type) {
@@ -243,6 +249,13 @@ public class Window extends XResource {
         return false;
     }
 
+    public boolean hasEventListenerFor(int eventId, XClient client) {
+        for (EventListener eventListener : eventListeners) {
+            if (eventListener.client == client && eventListener.isInterestedIn(eventId)) return true;
+        }
+        return false;
+    }
+
     public void sendEvent(int eventId, Event event) {
         for (EventListener eventListener : eventListeners) {
             if (eventListener.isInterestedIn(eventId)) {
@@ -279,9 +292,14 @@ public class Window extends XResource {
         for (EventListener eventListener : eventListeners) eventListener.sendEvent(event);
     }
 
+    /** Same arithmetic as rootPointToLocal without its array: it runs for every window visited on each pointer move (2026-11-12 review). */
     public boolean containsPoint(short rootX, short rootY) {
-        short[] localPoint = rootPointToLocal(rootX, rootY);
-        return localPoint[0] >= 0 && localPoint[1] >= 0 && localPoint[0] < width && localPoint[1] < height;
+        short x = rootX, y = rootY;
+        for (Window window = this; window != null; window = window.parent) {
+            x -= window.x;
+            y -= window.y;
+        }
+        return x >= 0 && y >= 0 && x < width && y < height;
     }
 
     public short[] rootPointToLocal(short x, short y) {

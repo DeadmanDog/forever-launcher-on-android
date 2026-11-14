@@ -1,6 +1,7 @@
 package com.winlator.xserver;
 
 import com.winlator.xconnector.XInputStream;
+import com.winlator.xserver.errors.BadValue;
 
 public class WindowAttributes {
     public static final int FLAG_BACKGROUND_PIXMAP = 1<<0;
@@ -18,6 +19,7 @@ public class WindowAttributes {
     public static final int FLAG_DO_NOT_PROPAGATE_MASK = 1<<12;
     public static final int FLAG_COLORMAP = 1<<13;
     public static final int FLAG_CURSOR = 1<<14;
+    private static final int KNOWN_FLAGS = (FLAG_CURSOR << 1) - 1;
     public enum BackingStore {NOT_USEFUL, WHEN_MAPPED, ALWAYS}
     public enum WindowClass {COPY_FROM_PARENT, INPUT_OUTPUT, INPUT_ONLY}
     public enum BitGravity {FORGET, NORTH_WEST, NORTH, NORTH_EAST, WEST, CENTER, EAST, SOUTH_WEST, SOUTH, SOUTH_EAST, STATIC}
@@ -106,51 +108,78 @@ public class WindowAttributes {
         this.enabled = enabled;
     }
 
-    public void update(Bitmask valueMask, XInputStream inputStream, XClient client) {
+    public void update(Bitmask valueMask, XInputStream inputStream, XClient client) throws BadValue {
+        // Read and check every value first, then apply them: a bad value (BadValue) leaves the window unchanged. An enum value
+        // out of range used to throw ArrayIndexOutOfBounds and drop the client's connection.
+        int count = 0;
+        for (int index : valueMask) if ((index & KNOWN_FLAGS) != 0) count++;
+        int[] flags = new int[count];
+        int[] values = new int[count];
+        int n = 0;
         for (int index : valueMask) {
-            switch (index) {
+            if ((index & KNOWN_FLAGS) == 0) continue; // as before: no value is read for an unknown bit
+            flags[n] = index;
+            values[n] = inputStream.readInt();
+            n++;
+        }
+        for (int i = 0; i < count; i++) {
+            switch (flags[i]) {
+                case FLAG_BIT_GRAVITY: checkRange(values[i], BitGravity.values().length); break;
+                case FLAG_WIN_GRAVITY: checkRange(values[i], WinGravity.values().length); break;
+                case FLAG_BACKING_STORE: checkRange(values[i], BackingStore.values().length); break;
+            }
+        }
+
+        for (int i = 0; i < count; i++) {
+            int value = values[i];
+            switch (flags[i]) {
                 case FLAG_BACKGROUND_PIXEL:
-                    window.getContent().fillColor(inputStream.readInt());
+                    // An InputOnly window has no content to fill (X11 says BadMatch; ignored, it changes nothing visible).
+                    Drawable content = window.getContent();
+                    if (content != null) content.fillColor(value);
                     break;
                 case FLAG_BACKING_PIXEL:
-                    backingPixel = inputStream.readInt();
+                    backingPixel = value;
                     break;
                 case FLAG_BACKING_PLANES:
-                    backingPlanes = inputStream.readInt();
+                    backingPlanes = value;
                     break;
                 case FLAG_BIT_GRAVITY:
-                    bitGravity = BitGravity.values()[inputStream.readInt()];
+                    bitGravity = BitGravity.values()[value];
                     break;
                 case FLAG_WIN_GRAVITY:
-                    winGravity = WinGravity.values()[inputStream.readInt()];
+                    winGravity = WinGravity.values()[value];
                     break;
                 case FLAG_BACKING_STORE:
-                    backingStore = BackingStore.values()[inputStream.readInt()];
+                    backingStore = BackingStore.values()[value];
                     break;
                 case FLAG_SAVE_UNDER:
-                    saveUnder = inputStream.readInt() == 1;
+                    saveUnder = value == 1;
                     break;
                 case FLAG_OVERRIDE_REDIRECT:
-                    overrideRedirect = inputStream.readInt() == 1;
+                    overrideRedirect = value == 1;
                     break;
                 case FLAG_EVENT_MASK:
-                    eventMask = new Bitmask(inputStream.readInt());
+                    eventMask = new Bitmask(value);
                     break;
                 case FLAG_DO_NOT_PROPAGATE_MASK:
-                    doNotPropagateMask = new Bitmask(inputStream.readInt());
+                    doNotPropagateMask = new Bitmask(value);
                     break;
                 case FLAG_CURSOR:
-                    cursor = client.xServer.cursorManager.getCursor(inputStream.readInt());
+                    cursor = client.xServer.cursorManager.getCursor(value);
                     break;
                 case FLAG_BACKGROUND_PIXMAP:
                 case FLAG_BORDER_PIXMAP:
                 case FLAG_BORDER_PIXEL:
                 case FLAG_COLORMAP:
-                    inputStream.skip(4);
                     break;
             }
         }
 
         client.xServer.windowManager.triggerOnUpdateWindowAttributes(window, valueMask);
+    }
+
+    private static void checkRange(int value, int size) throws BadValue {
+        if (value < 0 || value >= size) throw new BadValue(value);
     }
 }

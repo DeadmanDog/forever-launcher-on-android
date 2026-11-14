@@ -1,0 +1,30 @@
+// Appended by run_native_fix_regressions.py to the stub part of RenderIdlePollTest.cpp.in and the production
+// hasIdleTokensInFlight/pollIdleTokens: hand-back tokens retired after the last frame's snapshot (deleteQueue/pendingRetirements)
+// must be seen and freed once every submitted frame is done (under scanout no frame comes to take them).
+static int doneQ[3]={0,0,0};
+static VkResult statusQ(VkDevice,VkFence f){return doneQ[f]?VK_SUCCESS:VK_NOT_READY;}
+static void checkQ(bool b,const char*m){if(!b){fprintf(stderr,"FAIL %s\n",m);exit(2);}}
+static VulkanRendererContext::WinTex tokQ(int64_t t){VulkanRendererContext::WinTex w;w.idleToken=t;return w;}
+int main(){
+ {VulkanRendererContext c;c.vk_.GetFenceStatus=statusQ;
+  c.deleteQueue.push_back(tokQ(4));
+  checkQ(c.hasIdleTokensInFlight(),"a token retired after the last snapshot counts as in flight");
+  c.deleteQueue.clear();c.pendingRetirements.push_back(tokQ(5));
+  checkQ(c.hasIdleTokensInFlight(),"so does one captured by a frame that was not submitted");
+  c.pendingRetirements.clear();c.deleteQueue.push_back(VulkanRendererContext::WinTex{});
+  checkQ(!c.hasIdleTokensInFlight(),"ordinary retired resources are not tokens");}
+ {VulkanRendererContext c;c.vk_.GetFenceStatus=statusQ;doneQ[1]=1;doneQ[2]=0;
+  VulkanRendererContext::WinTex res;res.img=9;
+  c.deleteQueue={tokQ(1),res};c.pendingRetirements={tokQ(2)};
+  c.pollIdleTokens();
+  checkQ(c.idleReleased.empty(),"not while a submitted frame may still read the buffers");
+  doneQ[2]=1;c.pollIdleTokens();
+  checkQ(c.idleReleased==std::vector<int64_t>({1,2}),"handed back once every frame is done");
+  checkQ(c.deleteQueue.size()==2&&c.deleteQueue[1].img==9&&c.deleteQueue[0].idleToken==0,"GPU resources keep their normal turn");
+  c.pollIdleTokens();
+  checkQ(c.idleReleased.size()==2,"each token only once");}
+ {VulkanRendererContext c;c.vk_.GetFenceStatus=statusQ;doneQ[1]=doneQ[2]=1;c.inFlightFences[1]=VK_NULL_HANDLE;c.deleteQueue={tokQ(3)};
+  c.pollIdleTokens();
+  checkQ(c.idleReleased.empty(),"a missing fence never releases a buffer");}
+ puts("PASS idle queue");
+}

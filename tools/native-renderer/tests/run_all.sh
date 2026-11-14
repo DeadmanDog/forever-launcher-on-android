@@ -8,6 +8,7 @@ cd "$T"
 run() { n=$1; shift; timeout 900 python3 -B "$@" > "$O/$n.log" 2>&1; echo "$n rc=$?"; }
 run cursor_gpu run_cursor_gpu_regressions.py --report "$O/cursor_gpu.json"
 run idle_poll run_idle_poll_regressions.py
+run idle_pace run_idle_pace_regressions.py
 run ownership run_ownership_regressions.py
 run retirement run_retirement_regressions.py
 run scanout run_scanout_regressions.py
@@ -22,3 +23,6 @@ run window run_window_regressions.py --out "$O/window"
 run present run_present_regressions.py
 run occluded run_occluded_regressions.py "$O/occluded"
 run fsr_gpu run_fsr_gpu_regressions.py
+run scanout_waiter run_scanout_waiter_regressions.py
+run scanout_release run_scanout_release_regressions.py
+run native_fix run_native_fix_regressions.py

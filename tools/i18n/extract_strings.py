@@ -84,7 +84,7 @@ def remap(en, hu):
 
 def pairs_in(text: str):
     found = []
-    for m in re.finditer(r'(?<![A-Za-z0-9_])(tx|t)\(', text):
+    for m in re.finditer(r'(?<![A-Za-z0-9_])(tx|t|tr|AddonLimitException)\(', text):
         i = skip_ws(text, m.end())
         if i >= len(text) or text[i] != '"':
             continue

@@ -373,9 +373,15 @@ char *realpath(const char *path, char *resolved)
     return real_realpath(path, resolved);
 }
 
-/* True when no mapping overlapping [start, end) is shared: only private pages may be replaced by anonymous copies. */
-static bool all_private(uintptr_t start, uintptr_t end)
+/* The protection each mapping overlapping the fallback range had before it was touched: restored when the fallback fails. */
+struct prot_span { uintptr_t lo, hi; int prot; };
+#define MAX_PROT_SPANS 32
+
+/* True when no mapping overlapping [start, end) is shared: only private pages may be replaced by anonymous copies. The same pass
+ * records each overlapping mapping's protection in spans (clipped to the range); more than MAX_PROT_SPANS counts as "no". */
+static bool all_private(uintptr_t start, uintptr_t end, struct prot_span *spans, int *nspans)
 {
+    *nspans = 0;
     int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
     if (fd < 0) return false;
     char buf[8192];
@@ -391,7 +397,15 @@ static bool all_private(uintptr_t start, uintptr_t end)
             char *p;
             uintptr_t lo = strtoull(line, &p, 16), hi = *p == '-' ? strtoull(p + 1, &p, 16) : 0;
             while (*p == ' ') p++;
-            if (lo < end && hi > start && strlen(p) >= 4 && p[3] != 'p') shared = true;
+            if (lo < end && hi > start && strlen(p) >= 4) {
+                if (p[3] != 'p') shared = true;
+                else if (*nspans >= MAX_PROT_SPANS) shared = true;   /* cannot restore what was not recorded: do not touch it */
+                else {
+                    struct prot_span *sp = &spans[(*nspans)++];
+                    sp->lo = lo > start ? lo : start; sp->hi = hi < end ? hi : end;
+                    sp->prot = (p[0] == 'r' ? PROT_READ : 0) | (p[1] == 'w' ? PROT_WRITE : 0) | (p[2] == 'x' ? PROT_EXEC : 0);
+                }
+            }
             if (!eol) { line = buf + have; break; }
             line = eol + 1;
         }
@@ -406,6 +420,12 @@ static bool all_private(uintptr_t start, uintptr_t end)
 
 static int remap_count;
 
+static void restore_spans(mprotect_t real, const struct prot_span *spans, int n)
+{
+    for (int i = 0; i < n; i++)
+        if (spans[i].hi > spans[i].lo) real((void *)spans[i].lo, spans[i].hi - spans[i].lo, spans[i].prot);
+}
+
 int mprotect(void *addr, size_t len, int prot)
 {
     REAL(mprotect_t, mprotect);
@@ -416,16 +436,34 @@ int mprotect(void *addr, size_t len, int prot)
     uintptr_t page = (uintptr_t)sysconf(_SC_PAGESIZE);
     uintptr_t start = (uintptr_t)addr & ~(page - 1), end = ((uintptr_t)addr + len + page - 1) & ~(page - 1);
     size_t span = end - start;
-    if (!all_private(start, end) || real_mprotect((void *)start, span, PROT_READ)) { errno = EACCES; return -1; }
+    struct prot_span spans[MAX_PROT_SPANS];
+    int nspans = 0;
+    if (!all_private(start, end, spans, &nspans)) { errno = EACCES; return -1; }
+    /* From here every failure puts the pages back as they were (the caller sees the original EACCES and the pages still work as
+     * before): a half-done fallback used to leave them read-only, and the next write to them crashed. */
+    if (real_mprotect((void *)start, span, PROT_READ)) { restore_spans(real_mprotect, spans, nspans); errno = EACCES; return -1; }
     void *copy = mmap(NULL, span, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (copy == MAP_FAILED) { errno = EACCES; return -1; }
+    if (copy == MAP_FAILED) { restore_spans(real_mprotect, spans, nspans); errno = EACCES; return -1; }
     memcpy(copy, (void *)start, span);
     void *fresh = mmap((void *)start, span, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
-    if (fresh == MAP_FAILED) { LOG("remap %p+%zx failed: %d", (void *)start, span, errno); munmap(copy, span); errno = EACCES; return -1; }
+    if (fresh == MAP_FAILED) {
+        LOG("remap %p+%zx failed: %d", (void *)start, span, errno);
+        munmap(copy, span);
+        restore_spans(real_mprotect, spans, nspans);
+        errno = EACCES;
+        return -1;
+    }
     memcpy(fresh, copy, span);
     munmap(copy, span);
     if (remap_count++ < 16) LOG("execmod: %p+%zx moved to anonymous memory", (void *)start, span);
-    return real_mprotect((void *)start, span, prot);
+    int done = real_mprotect((void *)start, span, prot);
+    if (done) {
+        /* The bytes are the same, now in anonymous memory: give them their old protection back. */
+        int saved = errno;
+        restore_spans(real_mprotect, spans, nspans);
+        errno = saved;
+    }
+    return done;
 }
 
 /* An executable mapping of a file the policy will not map executable: read the bytes into anonymous memory instead. */

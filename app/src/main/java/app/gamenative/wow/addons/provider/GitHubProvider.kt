@@ -38,6 +38,8 @@ class GitHubProvider(
     private val catalogLock = Mutex()
     private var catalog: List<RemoteAddon>? = null
     private var catalogAt = 0L
+    /** When the catalog and the fallback last both failed: retried only after [FAILURE_RETRY_MS], not on every lookup. */
+    private var failedAt: Long? = null
 
     override suspend fun search(query: String, page: Int): List<RemoteAddon> {
         if (page > 0) return emptyList()
@@ -59,17 +61,19 @@ class GitHubProvider(
     private suspend fun catalog(): List<RemoteAddon> = catalogLock.withLock {
         val now = clock()
         catalog?.takeIf { now - catalogAt < CATALOG_TTL_MS }?.let { return@withLock it }
+        if (catalog == null && failedAt?.let { now - it < FAILURE_RETRY_MS } == true) return@withLock emptyList()
         val parsed = runCatching { http.fetchText(catalogUrl)?.let { ProviderJson.decodeFromString<Catalog>(it) } }.getOrNull()
         if (parsed == null) {
             // Our own list keeps the source working if the shared catalog ever disappears; cached like the catalog.
             catalog?.let { return@withLock it }
             return@withLock fallbackRepos.mapNotNull { repo -> runCatching { fromApi(repo) }.getOrNull() }
                 .filter { it.latest.isNotEmpty() }
-                .also { if (it.isNotEmpty()) { catalog = it; catalogAt = now } }
+                .also { if (it.isNotEmpty()) { catalog = it; catalogAt = now; failedAt = null } else failedAt = now }
         }
         parsed.addons.map { it.toRemote() }.also {
             catalog = it
             catalogAt = now
+            failedAt = null
         }
     }
 
@@ -200,6 +204,7 @@ class GitHubProvider(
     companion object {
         const val CATALOG_URL = "https://raw.githubusercontent.com/YoruDev-Ryland/WoWForeverywhere/addon-catalog/catalog.json"
         private const val CATALOG_TTL_MS = 6 * 60 * 60 * 1000L
+        private const val FAILURE_RETRY_MS = 5 * 60 * 1000L
         /** WoW Forever addons released on GitHub (the shared catalog's sources, 2026-10-23). */
         val FALLBACK_REPOS = listOf(
             "Questie/Questie", "RestedXP/RXPGuides", "DeadlyBossMods/DeadlyBossMods", "DeadlyBossMods/DBM-Dungeons",

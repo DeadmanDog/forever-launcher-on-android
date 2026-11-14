@@ -92,6 +92,12 @@
    "WowEnvironmentEditorDialog.kt"
   ]
  },
+ "Added after the launcher's own entries at launch.": {
+  "hu": "Indításkor az indító saját bejegyzései után kerül.",
+  "files": [
+   "WowEnvironmentEditorDialog.kt"
+  ]
+ },
  "Addons": {
   "hu": "Addonok",
   "files": [
@@ -225,10 +231,34 @@
    "WowAddonsPage.kt"
   ]
  },
+ "Balanced": {
+  "hu": "Balanced",
+  "files": [
+   "WoWForeverScreen.kt"
+  ]
+ },
  "Balanced (default)": {
   "hu": "Balanced (alapértelmezett)",
   "files": [
    "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "Battle.net auto-login…": {
+  "hu": "Battle.net automatikus belépés…",
+  "files": [
+   "BattleNetSignIn.kt"
+  ]
+ },
+ "Battle.net login": {
+  "hu": "Battle.net belépés",
+  "files": [
+   "BattleNetSignIn.kt"
+  ]
+ },
+ "Battle.net login filled in: tap Log In.": {
+  "hu": "Battle.net belépés kitöltve: koppints a Belépés gombra.",
+  "files": [
+   "BattleNetSignIn.kt"
   ]
  },
  "Blue": {
@@ -265,6 +295,18 @@
   "hu": "Build: {0} ({1} frissítés elérhető)",
   "files": [
    "WoWForeverScreen.kt"
+  ]
+ },
+ "Bundled component installation failed": {
+  "hu": "A beépített komponensek telepítése nem sikerült",
+  "files": [
+   "WowBundledStartup.kt"
+  ]
+ },
+ "Bundled components cannot be installed during an active game session.": {
+  "hu": "A beépített komponensek nem telepíthetők futó játék közben.",
+  "files": [
+   "WowBundledComponents.kt"
   ]
  },
  "By default the app paces frames to the display (see \"FPS limit pacing\" below). Turn off WoW's own Max Foreground FPS.": {
@@ -318,6 +360,7 @@
  "Cancel": {
   "hu": "Mégse",
   "files": [
+   "BattleNetSignIn.kt",
    "WoWForeverScreen.kt",
    "WowAddonsPage.kt",
    "WowCacheSettingsDialog.kt",
@@ -327,6 +370,12 @@
    "WowManagedComponents.kt",
    "WowVkd3dSection.kt",
    "WowVoiceChatSection.kt"
+  ]
+ },
+ "Cannot record the move.": {
+  "hu": "Nem sikerült rögzíteni az áthelyezést.",
+  "files": [
+   "WoWForeverScreen.kt"
   ]
  },
  "Change": {
@@ -356,6 +405,12 @@
  },
  "Checking for game updates...": {
   "hu": "Játékfrissítés ellenőrzése...",
+  "files": [
+   "WoWForeverScreen.kt"
+  ]
+ },
+ "Checking the game program...": {
+  "hu": "A játékprogram ellenőrzése...",
   "files": [
    "WoWForeverScreen.kt"
   ]
@@ -464,6 +519,12 @@
   "hu": "A Gamescope-effektek mentése sikertelen.",
   "files": [
    "ScreenEffectsPanel.kt"
+  ]
+ },
+ "Couldn't download the game program (Wow-ARM64.exe): ": {
+  "hu": "Nem sikerült letölteni a játékprogramot (Wow-ARM64.exe): ",
+  "files": [
+   "WoWForeverScreen.kt"
   ]
  },
  "Couldn't reach the addon sites. Check your connection.": {
@@ -821,6 +882,12 @@
    "WowEnvironmentEditorDialog.kt"
   ]
  },
+ "Email": {
+  "hu": "E-mail",
+  "files": [
+   "BattleNetSignIn.kt"
+  ]
+ },
  "Environment (sensitive values redacted):": {
   "hu": "Környezet (érzékeny értékek elrejtve):",
   "files": [
@@ -870,8 +937,8 @@
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "FIFO (default): every frame reaches the screen in order; with the vsync-locked pacing this measured smoothest. Mailbox: a newer frame replaces one still waiting, a little less latency, but now and then a frame is dropped (a small jerk).": {
-  "hu": "FIFO (alapértelmezett): minden kocka sorban kerül a képre; a vsync-hez kötött ütemezéssel ez mérhetően a legsimább. Mailbox: az újabb kocka lecseréli a még várakozót, kicsit kisebb a késleltetés, de időnként kiesik egy kocka (apró rándulás).",
+ "FIFO (default): every frame reaches the screen in order; with the app's vsync-aligned pacing this measured smoothest. Mailbox: a newer frame replaces one still waiting, a little less latency, but now and then a frame is dropped (a small jerk).": {
+  "hu": "FIFO (alapértelmezett): minden kocka sorban kerül a képre; az app vsync-hez igazított ütemezésével ez mérhetően a legsimább. Mailbox: az újabb kocka lecseréli a még várakozót, kicsit kisebb a késleltetés, de időnként kiesik egy kocka (apró rándulás).",
   "files": [
    "WowLaunchExperimentsSection.kt"
   ]
@@ -1110,6 +1177,12 @@
    "WowCacheSettingsDialog.kt"
   ]
  },
+ "Game files changed": {
+  "hu": "Megváltozott játékfájlok",
+  "files": [
+   "WoWForeverScreen.kt"
+  ]
+ },
  "Game image output": {
   "hu": "A játék képének megjelenítése",
   "files": [
@@ -1242,6 +1315,12 @@
    "WowAppUpdater.kt"
   ]
  },
+ "Ignored at launch: the launcher sets this variable itself.": {
+  "hu": "Indításkor figyelmen kívül marad: ezt a változót az indító állítja be.",
+  "files": [
+   "WowEnvironmentEditorDialog.kt"
+  ]
+ },
  "Import DXVK WCP": {
   "hu": "DXVK WCP importálása",
   "files": [
@@ -1324,6 +1403,30 @@
   "hu": "Telepítettek",
   "files": [
    "WowAddonsPage.kt"
+  ]
+ },
+ "Installing DXVK...": {
+  "hu": "A DXVK telepítése...",
+  "files": [
+   "WowBundledComponents.kt"
+  ]
+ },
+ "Installing Proton...": {
+  "hu": "A Proton telepítése...",
+  "files": [
+   "WowBundledComponents.kt"
+  ]
+ },
+ "Installing VKD3D...": {
+  "hu": "A VKD3D telepítése...",
+  "files": [
+   "WowBundledComponents.kt"
+  ]
+ },
+ "Installing driver...": {
+  "hu": "A driver telepítése...",
+  "files": [
+   "WowBundledComponents.kt"
   ]
  },
  "Installing from link": {
@@ -1545,6 +1648,12 @@
    "WowAddonsPage.kt"
   ]
  },
+ "No client build available for {0}. Check your connection or try again later.": {
+  "hu": "Nincs elérhető kliens build a(z) {0} régióhoz. Ellenőrizd a kapcsolatot, vagy próbáld újra később.",
+  "files": [
+   "WowClientDownloader.kt"
+  ]
+ },
  "No command runs until Run is pressed. Timeout: 30 seconds.": {
   "hu": "Semmi nem fut, amíg nem nyomod meg a Futtatást. Időkorlát: 30 mp.",
   "files": [
@@ -1573,6 +1682,12 @@
   "hu": "Alapból a megjelenítő szerver vár, amíg egy program nem olvassa a válaszait vagy eseményeit, és ez a várakozás egy pillanatra mindenki mást megállíthat. Bekapcsolva az el nem olvasott kimenet sorba kerül, és akkor megy ki, amikor a program újra olvas (a soha nem olvasó programot 64 MB után eldobja). Alapból ki van kapcsolva: a protokoll kimeneti útját érinti, ezért ha bármi hibásan működik, kapcsold ki.",
   "files": [
    "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "Not a CurseForge page: opened in your browser.": {
+  "hu": "Nem CurseForge-oldal: a böngésződben nyílt meg.",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Not enough free space: {0} GB needed, {1} GB free.": {
@@ -1707,10 +1822,35 @@
    "WowAddonsPage.kt"
   ]
  },
+ "Page: ": {
+  "hu": "Oldal: ",
+  "files": [
+   "WowAddonsPage.kt"
+  ]
+ },
+ "Password": {
+  "hu": "Jelszó",
+  "files": [
+   "BattleNetSignIn.kt"
+  ]
+ },
  "Path: ": {
   "hu": "Útvonal: ",
   "files": [
    "WoWForeverScreen.kt"
+  ]
+ },
+ "Paused: Android allows 6 hours of background download a day. Tap Download again later to continue.": {
+  "hu": "Szünetel: az Android naponta 6 óra háttérletöltést enged. Később koppints újra a Letöltésre a folytatáshoz.",
+  "files": [
+   "WowDataDownloadService.kt"
+  ]
+ },
+ "Performance": {
+  "hu": "Performance",
+  "files": [
+   "WoWForeverScreen.kt",
+   "WowLaunchExperimentsSection.kt"
   ]
  },
  "Permission denied. Microphone capture remains unchanged. Enable permission in Android app settings to try again.": {
@@ -1804,6 +1944,12 @@
    "WowLaunchExperimentsSection.kt"
   ]
  },
+ "REPAIR": {
+  "hu": "JAVÍTÁS",
+  "files": [
+   "WoWForeverScreen.kt"
+  ]
+ },
  "RESTART": {
   "hu": "ÚJRAINDÍTÁS",
   "files": [
@@ -1894,6 +2040,12 @@
    "WowGameDataCard.kt"
   ]
  },
+ "Removing the old {0}...": {
+  "hu": "A régi {0} eltávolítása...",
+  "files": [
+   "WowBundledComponents.kt"
+  ]
+ },
  "Removing {0}": {
   "hu": "{0} eltávolítása",
   "files": [
@@ -1912,6 +2064,12 @@
    "WowVoiceChatSection.kt"
   ]
  },
+ "Repair failed: ": {
+  "hu": "A javítás nem sikerült: ",
+  "files": [
+   "WoWForeverScreen.kt"
+  ]
+ },
  "Repair voice files?": {
   "hu": "Javítod a voice fájlokat?",
   "files": [
@@ -1922,6 +2080,12 @@
   "hu": "Voice segédfájlok javítása",
   "files": [
    "WowVoiceChatSection.kt"
+  ]
+ },
+ "Repairing {0}...": {
+  "hu": "{0} javítása...",
+  "files": [
+   "WowBundledComponents.kt"
   ]
  },
  "Report big/little CPU cores (experimental)": {
@@ -2003,10 +2167,22 @@
    "WowEnvironmentEditorDialog.kt"
   ]
  },
+ "Save & sign in": {
+  "hu": "Mentés és belépés",
+  "files": [
+   "BattleNetSignIn.kt"
+  ]
+ },
  "Saved TU_DEBUG overrides this selector. Remove TU_DEBUG in Environment Variables to use it.": {
   "hu": "A mentett TU_DEBUG felülírja ezt. A használatához töröld a TU_DEBUG-ot a környezeti változók közül.",
   "files": [
    "WowLaunchExperimentsSection.kt"
+  ]
+ },
+ "Saved encrypted on this device only. Select WoW's email field before signing in.": {
+  "hu": "Titkosítva, csak ezen az eszközön tárolódik. Belépés előtt válaszd ki a WoW e-mail mezőjét.",
+  "files": [
+   "BattleNetSignIn.kt"
   ]
  },
  "Saved user overrides take priority over automatic WoW/cache settings. Changes take effect on the next launch.": {
@@ -2296,6 +2472,12 @@
    "WoWForeverScreen.kt"
   ]
  },
+ "The game program does not match Blizzard's original: ": {
+  "hu": "A játékprogram nem egyezik a Blizzard eredetijével: ",
+  "files": [
+   "WoWForeverScreen.kt"
+  ]
+ },
  "The game region the next launch connects to. The game data is the same for every region, so you can switch any time.": {
   "hu": "A játékrégió, amelyhez a következő indítás csatlakozik. A játékfájlok minden régióban ugyanazok, így bármikor válthatsz.",
   "files": [
@@ -2323,13 +2505,20 @@
  "The previous game session is still closing. Try again in a moment.": {
   "hu": "Az előző játékmenet még záródik. Próbáld újra egy pillanat múlva.",
   "files": [
-   "WoWForeverScreen.kt"
+   "WoWForeverScreen.kt",
+   "XServerScreen.kt"
   ]
  },
  "The size WoW renders at. Lower = more FPS but a softer image. Saved for this container; apply while the game is stopped. WoW's own resolution is aligned on launch; its render scale stays as you set it in the game (kept separately for DX11 and DX12).": {
   "hu": "Ekkora képet renderel a WoW. Kisebb = több FPS, de kevésbé éles kép. A konténerhez mentődik; leállított játék mellett alkalmazd. A WoW saját felbontása indításkor igazodik; a render scale úgy marad, ahogy a játékban beállítod (DX11-hez és DX12-höz külön megjegyezve).",
   "files": [
    "WowDisplaySettingsSection.kt"
+  ]
+ },
+ "These game files do not match Blizzard's original: {0}. Another app may have changed them, so the game was not started. Repair downloads the original files again.": {
+  "hu": "Ezek a játékfájlok nem egyeznek a Blizzard eredetijével: {0}. Lehet, hogy egy másik app módosította őket, ezért a játék nem indult el. A Javítás újra letölti az eredeti fájlokat.",
+  "files": [
+   "WoWForeverScreen.kt"
   ]
  },
  "This limit applies from the next launch (now: {0})": {
@@ -2446,6 +2635,24 @@
    "WoWForeverScreen.kt"
   ]
  },
+ "Updating DXVK to r{0}...": {
+  "hu": "A DXVK frissítése: r{0}...",
+  "files": [
+   "WowBundledComponents.kt"
+  ]
+ },
+ "Updating Proton to r{0} (once, about a minute)...": {
+  "hu": "A Proton frissítése: r{0} (egyszer, kb. egy perc)...",
+  "files": [
+   "WowBundledComponents.kt"
+  ]
+ },
+ "Updating VKD3D to r{0}...": {
+  "hu": "A VKD3D frissítése: r{0}...",
+  "files": [
+   "WowBundledComponents.kt"
+  ]
+ },
  "Updating all addons": {
   "hu": "Minden addon frissítése",
   "files": [
@@ -2456,6 +2663,12 @@
   "hu": "Buildinformáció frissítése...",
   "files": [
    "WowClientDownloader.kt"
+  ]
+ },
+ "Updating the driver to {0}...": {
+  "hu": "A driver frissítése: {0}...",
+  "files": [
+   "WowBundledComponents.kt"
   ]
  },
  "Updating {0}": {
@@ -2639,6 +2852,24 @@
   "hu": "megvan",
   "files": [
    "WowVoiceChatSection.kt"
+  ]
+ },
+ "the archive holds more than {0} files": {
+  "hu": "az archívumban több mint {0} fájl van",
+  "files": [
+   "AddonArchive.kt"
+  ]
+ },
+ "the archive unpacks to more than {0} MB": {
+  "hu": "az archívum kicsomagolva több mint {0} MB",
+  "files": [
+   "AddonArchive.kt"
+  ]
+ },
+ "the download is larger than {0} MB": {
+  "hu": "a letöltés nagyobb {0} MB-nál",
+  "files": [
+   "AddonArchive.kt"
   ]
  },
  "{0} GB left. Downloading now is much faster than while playing, when the game fetches only what it needs. Wi-Fi recommended.": {

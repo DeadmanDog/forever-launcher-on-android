@@ -36,7 +36,7 @@ internal object WowGameDataDownloader {
         val cdn = WowClientDownloader.Cdn(row.getValue("CDN Hosts").split(" ").filter { it.isNotBlank() }, row.getValue("CDN Path"), row["Branch"])
         val buildConfig = WowClientDownloader.parseConfig(String(cdn.requireConfig(row.getValue("Build Key"))))
         val cdnConfig = WowClientDownloader.parseConfig(String(cdn.requireConfig(row.getValue("CDN Key"))))
-        val locale = runCatching { WowGameConfig.current(gameRoot).locale }.getOrDefault("enUS")
+        val locale = WowGameData.locale(context, gameRoot)
         val counter = WowClientDownloader.DownloadManifestCounter(
             setOf("Windows", "arm64", locale, row["Branch"].orEmpty().uppercase(java.util.Locale.ROOT), "speech", "text"), keep = true)
         WowClientDownloader.blteDecode(cdn.require("data", buildConfig.getValue("download")[1]), counter)
@@ -65,10 +65,12 @@ internal object WowGameDataDownloader {
             archives.mapIndexed { ai, archive ->
                 locator.submit {
                     val local = File(indices, "$archive.index")
-                    val data = if (local.isFile) local.readBytes() else (cdn.fetch("data", "$archive.index") ?: return@submit).also { local.writeBytes(it) }
+                    val cached = if (local.isFile) local.readBytes().takeIf { wholeIndex(it.size) } else null
+                    val data = cached ?: (cdn.fetch("data", "$archive.index") ?: return@submit).also { writeAtomically(local, it) }
                     val bb = ByteBuffer.wrap(data)
                     var block = 0
-                    while (block + 4096 <= data.size - 28) {
+                    val dataEnd = indexBlocks(data.size) * 4096
+                    while (block + 4096 <= dataEnd) {
                         var p = block
                         while (p <= block + 4096 - 24) {
                             val pre = bb.getLong(p)
@@ -158,6 +160,23 @@ internal object WowGameDataDownloader {
         }
         failure.get()?.let { throw it }
         onProgress(Progress(done, total, 0.0, false))
+    }
+
+    /**
+     * A CDN archive index is N 4096-byte blocks of 24-byte entries, then a table of contents (each block's last key, 16 bytes,
+     * and its 8-byte hash) and a 28-byte footer. Only the blocks hold entries: the table repeats real keys, so reading it as
+     * entries gave a file a wrong size and offset.
+     */
+    internal fun indexBlocks(size: Int): Int = if (size < 28) 0 else (size - 28) / (4096 + 24)
+
+    /** True when the size is exactly whole blocks plus their table and footer (a half-written copy is not). */
+    internal fun wholeIndex(size: Int): Boolean = size >= 28 && (size - 28) % (4096 + 24) == 0
+
+    /** Writes through a temp file and renames it, so a crash never leaves a half-written index that later loads as valid. */
+    internal fun writeAtomically(target: File, data: ByteArray) {
+        val temp = File(target.parentFile, ".${target.name}.${Thread.currentThread().id}.tmp")
+        temp.writeBytes(data)
+        if (!temp.renameTo(target)) { temp.delete(); error("Could not save ${target.name}") }
     }
 
     private fun hexKey(keys: ByteArray, i: Int) = (0 until 16).joinToString("") { "%02x".format(keys[i * 16 + it]) }

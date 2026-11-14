@@ -22,7 +22,7 @@ public class VulkanWindowRegression {
  static class RenderableWindow {final Drawable content;final int rootX,rootY;RenderableWindow(Drawable c,int x,int y){content=c;rootX=x;rootY=y;}}
  static class XServer {final WindowManager windowManager=new WindowManager();static class WindowManager{Window rootWindow=new Window(new Drawable(0));}final Screen screenInfo=new Screen();static class Screen{int width=1344,height=608;}}
  static class View {void queueEvent(Runnable r){r.run();}}
- static class android {static class os {static class SystemClock {static long elapsedRealtimeNanos(){return 0;}}}}
+ static class android {static class os {static class SystemClock {static long elapsedRealtimeNanos(){return 0;} static long uptimeMillis(){return 0;}}}}
  static class ScanoutStats {static void scanoutFrame(){} static void compositorFrame(){}}
  static class Hud {void update(){}}
  static class HudFilter {boolean shouldCount(boolean tracked,boolean inside,long timestamp){return false;}}
@@ -42,7 +42,11 @@ public class VulkanWindowRegression {
  int gameBuffers;
  boolean nativeIsScanoutActive(long h){return nativeMode;}
  boolean nativeIsGameFrameDelivered(long h){return delivered;}
- void nativeScanoutSetBuffer(long h,long ptr,int x,int y,int w,int height,int fd){gameBuffers++;delivered=true;}
+ boolean nativeScanoutSetBuffer(long h,long ptr,int x,int y,int w,int height,int fd,long token){gameBuffers++;delivered=true;return false;}
+ void nativeScanoutDropShownToken(long h){}
+ boolean nativeIsAlive(long h){return true;}
+ long lastAliveCheckMs;
+ void recoverDeadRenderer(){}
  void nativeUpdateWindowContentAHB(long h,long id,long ptr,int width,int height,int x,int y,int ww,int wh,long token){}
  void nativeUpdateWindowContent(long h,long id,java.nio.ByteBuffer buf,int width,int height,int s,int x,int y,int ww,int wh){}
  /* PRODUCTION */

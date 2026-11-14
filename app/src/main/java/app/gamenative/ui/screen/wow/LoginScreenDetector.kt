@@ -65,10 +65,10 @@ object LoginScreenDetector {
 
     /**
      * What one look at a frame found, from a single pass over the six areas. [kinds] = the colours are of the right KINDS (the test
-     * 1.3.19 used); [shape] = the frame also has the shape of the form (only computed when the kinds match).
+     * 1.3.19 used); [shape] = the frame also has the shape of the form (only computed when the exact values or the kinds match).
      */
     class Look(val score: Int, val exact: Boolean, val kinds: Boolean, val shape: Boolean) {
-        /** Colours of the right kinds AND the form's shape: the quick path of the auto sign-in. */
+        /** Colours of the right kinds AND the form's shape (not the exact values): the quicker kind-based path of the auto sign-in. */
         val formLike: Boolean get() = !exact && kinds && shape
         /** Not the exact values but the kinds match, with or without the shape: the slower, cautious path. */
         val kindOfLogin: Boolean get() = !exact && kinds
@@ -83,7 +83,7 @@ object LoginScreenDetector {
         val score = scoreOf(c)
         val exact = score == regions.size
         val kinds = !exact && kindsMatch(c)
-        return Look(score, exact, kinds, kinds && hasFormStructure(frame))
+        return Look(score, exact, kinds, (exact || kinds) && hasFormStructure(frame))
     }
 
     /** The numbers behind [hasFormStructure], for the diagnostics log: calibrates the limits on a real device. */

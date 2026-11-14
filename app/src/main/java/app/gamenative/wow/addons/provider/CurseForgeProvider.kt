@@ -1,6 +1,7 @@
 package app.gamenative.wow.addons.provider
 
 import android.content.Context
+import app.gamenative.SecretStore
 import app.gamenative.utils.Net
 import app.gamenative.wow.addons.AddonCategory
 import app.gamenative.wow.addons.AddonFlavor
@@ -16,18 +17,21 @@ import okhttp3.OkHttpClient
  */
 object CurseForgeKey {
     private const val PREFS = "wow_addons"
+    /** Where older versions kept the key unsealed; read once for the migration, then removed (see [SecretStore]). */
     private const val KEY = "curseforge_api_key"
+    private const val KEY_SEALED = "curseforge_api_key_sealed"
     @Volatile var value: String = ""
         private set
 
+    /** Reads the key (sealed with the Android KeyStore; an unsealed key of an older version is sealed on this first read). */
     fun load(context: Context): String {
-        value = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, "").orEmpty()
+        value = SecretStore.get(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE), KEY_SEALED, KEY).orEmpty()
         return value
     }
 
     fun save(context: Context, key: String) {
         val clean = key.trim()
-        check(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, clean).commit())
+        check(SecretStore.put(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE), KEY_SEALED, KEY, clean))
         value = clean
     }
 }
@@ -57,14 +61,15 @@ class CurseForgeProvider(
 
     @Volatile var sort: Sort = Sort.POPULAR
     /** The category Browse and search are narrowed to; null = all. */
-    @Volatile var category: AddonCategory? = null
     @Volatile private var categoryIds: Map<AddonCategory, List<Long>>? = null
 
-    override suspend fun search(query: String, page: Int): List<RemoteAddon> = list(page, query.trim(), category)
+    // Search is never narrowed here: the manager filters search results by category itself, and relinking hand-copied addons
+    // must find them whatever category Browse shows.
+    override suspend fun search(query: String, page: Int): List<RemoteAddon> = list(page, query.trim(), null)
 
-    override suspend fun popular(page: Int): List<RemoteAddon> = list(page, "", category)
+    override suspend fun popular(page: Int): List<RemoteAddon> = list(page, "", null)
 
-    override suspend fun popular(page: Int, category: AddonCategory?): List<RemoteAddon> = list(page, "", category ?: this.category)
+    override suspend fun popular(page: Int, category: AddonCategory?): List<RemoteAddon> = list(page, "", category)
 
     /** CurseForge's own WoW addon categories, grouped under ours by name (fetched once). */
     private suspend fun categoryIds(): Map<AddonCategory, List<Long>> {
@@ -96,21 +101,22 @@ class CurseForgeProvider(
         if (!enabled || projectId.toLongOrNull() == null) return null
         val body = http.fetchText("$base/mods/$projectId", headers()) ?: return null
         val mod = ProviderJson.decodeFromString<ModOne>(body).data ?: return null
-        val listed = toRemote(mod) ?: return null
-        // A flavor known only from the index has no link yet: fetch that one file.
-        val resolved = listed.latest.mapValues { (_, file) ->
-            if (file.installable || mod.latestFiles.any { it.id.toString() == file.fileId }) file
-            else http.fetchText("$base/mods/$projectId/files/${file.fileId}", headers())
-                ?.let { ProviderJson.decodeFromString<FileOne>(it).data }?.let(::toFile) ?: file
-        }
-        return listed.copy(latest = resolved)
+        return resolveIndexOnly(mod, toRemote(mod) ?: return null)
     }
+
+    /** A flavor known only from the index has no link yet: fetch that one file (one request per such flavor). */
+    private suspend fun resolveIndexOnly(mod: Mod, listed: RemoteAddon): RemoteAddon = listed.copy(latest = listed.latest.mapValues { (_, file) ->
+        if (file.installable || mod.latestFiles.any { it.id.toString() == file.fileId }) file
+        else http.fetchText("$base/mods/${mod.id}/files/${file.fileId}", headers())
+            ?.let { ProviderJson.decodeFromString<FileOne>(it).data }?.let(::toFile) ?: file
+    })
 
     override suspend fun getMany(ids: List<String>): List<RemoteAddon> {
         val wanted = ids.mapNotNull { it.toLongOrNull() }.distinct()
         if (!enabled || wanted.isEmpty()) return emptyList()
         val body = http.fetchText("$base/mods", headers(), postJson = "{\"modIds\":[${wanted.joinToString(",")}]}") ?: return emptyList()
-        return ProviderJson.decodeFromString<ModList>(body).data.mapNotNull(::toRemote)
+        // Installed addons: their update state needs the real file of an index-only flavor (else the Classic file looked newest).
+        return ProviderJson.decodeFromString<ModList>(body).data.mapNotNull { mod -> toRemote(mod)?.let { resolveIndexOnly(mod, it) } }
     }
 
     override suspend fun description(projectId: String): String? {

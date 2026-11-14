@@ -65,16 +65,14 @@ class Review6LatencyTest {
         assertNull(switchNeeds("lowlatency12", dx12 = true, gamescope = true))
     }
 
-    // VKD3D r11: WoW's DX12 caps render scale at 100% on a UMA GPU; the switch reports a dedicated GPU, DX12 only, off by default.
+    // VKD3D r11: WoW's DX12 caps render scale at 100% on a UMA GPU; since 1.3.6 DX12 always reports a dedicated GPU (no switch).
     @Test fun dedicatedGpuReportIsDx12OnlyOffByDefaultAndSavedWins() {
-        assertFalse(WowLaunchPolicy.enabled(context, WowRuntimeTuning.REPORT_DISCRETE))
-        val on = EnvVars(); WowRuntimeTuning.applyReportDiscrete(on, EnvVars(), dx12 = true, enabled = true)
+        val on = EnvVars(); WowRuntimeTuning.applyReportDiscrete(on, EnvVars(), dx12 = true)
         assertEquals("1", on.get("VKD3D_REPORT_DISCRETE"))
-        val dx11 = EnvVars("VKD3D_REPORT_DISCRETE=1"); WowRuntimeTuning.applyReportDiscrete(dx11, EnvVars(), dx12 = false, enabled = true)
+        val dx11 = EnvVars("VKD3D_REPORT_DISCRETE=1"); WowRuntimeTuning.applyReportDiscrete(dx11, EnvVars(), dx12 = false)
         assertFalse(dx11.has("VKD3D_REPORT_DISCRETE"))
         val saved = EnvVars("VKD3D_REPORT_DISCRETE=0"); val typed = EnvVars(saved.toString())
-        WowRuntimeTuning.applyReportDiscrete(typed, saved, dx12 = true, enabled = true)
+        WowRuntimeTuning.applyReportDiscrete(typed, saved, dx12 = true)
         assertEquals("0", typed.get("VKD3D_REPORT_DISCRETE"))
-        assertEquals(SwitchNeeds.DX12, switchNeeds(WowRuntimeTuning.REPORT_DISCRETE, dx12 = false, gamescope = false))
     }
 }

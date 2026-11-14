@@ -17,25 +17,22 @@ class WowIdentityProfilesTest {
     }
 
     @Test fun cpuProfiles() {
-        val laptop = EnvVars().also { WowRuntimeTuning.applyCpuIdentity(it, EnvVars(), "laptop", "SM8850") }
-        assertEquals("Snapdragon(R) X Plus Oryon(TM) CPU", laptop.get("WINE_CPU_NAME"))
-        assertEquals("1", laptop.get("WINE_CPU_PEAK_MHZ"))
-        val real = EnvVars().also { WowRuntimeTuning.applyCpuIdentity(it, EnvVars(), "", "SM8850") }
+        val real = EnvVars().also { WowRuntimeTuning.applyCpuIdentity(it, EnvVars(), "SM8850") }
         assertEquals("Snapdragon(R) 8 Elite Gen 5 Oryon(TM) CPU", real.get("WINE_CPU_NAME"))
-        val off = EnvVars().also { it.put("WINE_CPU_NAME", "inherited"); WowRuntimeTuning.applyCpuIdentity(it, EnvVars(), "off", "SM8850") }
-        assertFalse(off.has("WINE_CPU_NAME")); assertFalse(off.has("WINE_CPU_PEAK_MHZ"))
-        val saved = EnvVars().also { WowRuntimeTuning.applyCpuIdentity(it, EnvVars("WINE_CPU_NAME=mine"), "", "SM8850") }
+        assertEquals("1", real.get("WINE_CPU_PEAK_MHZ"))
+        val unknown = EnvVars().also { WowRuntimeTuning.applyCpuIdentity(it, EnvVars(), "SM9999") }
+        assertEquals("Snapdragon(R) SM9999 CPU", unknown.get("WINE_CPU_NAME"))
+        val saved = EnvVars().also { WowRuntimeTuning.applyCpuIdentity(it, EnvVars("WINE_CPU_NAME=mine"), "SM8850") }
         assertFalse("a saved variable is never overwritten", saved.has("WINE_CPU_NAME"))
     }
 
     @Test fun gpuProfiles() {
-        val laptop = EnvVars().also { WowRuntimeTuning.applyGpuIdentity(it, EnvVars(), "laptop", "Adreno (TM) 840") }
-        assertEquals("qualcomm", laptop.get("DXVK_VEGAS_PERSONA")); assertFalse(laptop.has("DXVK_VEGAS_GPU_NAME"))
-        val real = EnvVars().also { WowRuntimeTuning.applyGpuIdentity(it, EnvVars(), "", "Adreno (TM) 840") }
+        val real = EnvVars().also { WowRuntimeTuning.applyGpuIdentity(it, EnvVars(), "Adreno (TM) 840") }
         assertEquals("qualcomm", real.get("DXVK_VEGAS_PERSONA"))
         assertEquals("Qualcomm(R) Adreno(TM) 840 GPU", real.get("DXVK_VEGAS_GPU_NAME"))
         assertEquals("44050a31", real.get("DXVK_VEGAS_GPU_DEVICE"))
-        val off = EnvVars().also { it.put("DXVK_VEGAS_PERSONA", "qualcomm"); WowRuntimeTuning.applyGpuIdentity(it, EnvVars(), "off", "Adreno (TM) 840") }
-        assertFalse(off.has("DXVK_VEGAS_PERSONA"))
+        // An Adreno without a known device id keeps the vendor and name but drops an inherited id it cannot vouch for.
+        val unknown = EnvVars().also { it.put("DXVK_VEGAS_GPU_DEVICE", "inherited"); WowRuntimeTuning.applyGpuIdentity(it, EnvVars(), "Adreno (TM) 999") }
+        assertEquals("qualcomm", unknown.get("DXVK_VEGAS_PERSONA")); assertFalse(unknown.has("DXVK_VEGAS_GPU_DEVICE"))
     }
 }

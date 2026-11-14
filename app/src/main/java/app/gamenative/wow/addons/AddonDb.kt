@@ -13,14 +13,19 @@ class AddonDb(val file: File) {
     @Synchronized
     fun load(): List<InstalledAddon> {
         if (!file.isFile) return emptyList()
-        return runCatching { json.decodeFromString(serializer, file.readText()) }.getOrElse { emptyList() }
+        return runCatching { json.decodeFromString(serializer, file.readText()) }.getOrElse {
+            // Keep the unreadable file (sources, file ids) next to it instead of letting the next save overwrite it.
+            runCatching { file.copyTo(File(file.parentFile, "${file.name}.unreadable-${System.currentTimeMillis()}"), overwrite = false) }
+            emptyList()
+        }
     }
 
     /** Writes atomically (temp file + rename) so a crash never leaves a truncated database. */
     @Synchronized
     fun save(list: List<InstalledAddon>) {
         file.parentFile?.mkdirs()
-        val tmp = File(file.parentFile, "${file.name}.tmp")
+        // A unique temp name: two page instances (each with its own AddonDb) never write the same temp file.
+        val tmp = File(file.parentFile, "${file.name}.${System.nanoTime()}-${Thread.currentThread().id}.tmp")
         tmp.writeText(json.encodeToString(serializer, list))
         if (!tmp.renameTo(file)) {
             file.delete()

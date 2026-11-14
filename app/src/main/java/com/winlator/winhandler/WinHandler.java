@@ -27,7 +27,6 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
@@ -48,6 +47,14 @@ public class WinHandler {
     private MappedByteBuffer gamepadBuffer;
     private static final short SERVER_PORT = 7947;
     private static final short CLIENT_PORT = 7946;
+    /**
+     * The UDP bridge (port 7947) to Winlator's Windows helper winhandler.exe (process list, affinity, its own gamepad requests).
+     * Since 1.4.9 the helper is neither shipped nor kept in the prefix (WowLegacyFiles) and nothing else in the bundled runtime
+     * talks to that port: game controllers reach Wine through the shared gamepad files and libevshim, which [start] still sets
+     * up. So the socket is not opened unless this is switched on, and then only on the loopback address.
+     */
+    public static volatile boolean udpBridgeEnabled = false;
+    private volatile boolean udpBridge;
     private final ArrayDeque<Runnable> actions;
     private volatile ExternalController currentController; // also cleared from the datagram thread
     private volatile int currentControllerId;
@@ -299,12 +306,13 @@ public class WinHandler {
     private boolean sendPacket(int port) {
         try {
             int size = this.sendData.position();
-            if (size == 0) {
+            DatagramSocket datagramSocket = this.socket;
+            if (size == 0 || datagramSocket == null) {
                 return false;
             }
             this.sendPacket.setAddress(this.localhost);
             this.sendPacket.setPort(port);
-            this.socket.send(this.sendPacket);
+            datagramSocket.send(this.sendPacket);
             return true;
         } catch (IOException e) {
             return false;
@@ -312,6 +320,12 @@ public class WinHandler {
     }
 
     public void listProcesses() {
+        if (!this.udpBridge) {
+            // No helper to ask: answer "no list" at once, as a failed send does.
+            OnGetProcessInfoListener listener = this.onGetProcessInfoListener;
+            if (listener != null) listener.onGetProcessInfo(0, 0, null);
+            return;
+        }
         addAction(() -> {
             OnGetProcessInfoListener onGetProcessInfoListener;
             this.sendData.rewind();
@@ -379,6 +393,8 @@ public class WinHandler {
     }
 
     private void addAction(Runnable action) {
+        // Every queued action is a datagram to the helper: without the bridge nothing could ever send it, so do not queue it.
+        if (!this.udpBridge) return;
         synchronized (this.actions) {
             this.actions.add(action);
             this.actions.notify();
@@ -417,12 +433,9 @@ public class WinHandler {
         });
     }
 
-    /** True for loopback and for any address that belongs to one of this device's own interfaces. */
+    /** Only a sender on the loopback address (a program on this phone) is answered. */
     private static boolean isLocalSender(InetAddress address) {
-        if (address == null) return false;
-        if (address.isLoopbackAddress() || address.isAnyLocalAddress()) return true;
-        try { return java.net.NetworkInterface.getByInetAddress(address) != null; }
-        catch (java.net.SocketException e) { return false; }
+        return address != null && address.isLoopbackAddress();
     }
 
     public void stop() {
@@ -674,7 +687,8 @@ public class WinHandler {
     public void start() {
         synchronized (lifecycleLock) { if (stopRequested) return; }
         try {
-            this.localhost = InetAddress.getLocalHost();
+            // The helper (when the bridge is on) runs on this phone: talk to it over loopback only.
+            this.localhost = InetAddress.getLoopbackAddress();
             Context context = activity.getApplicationContext();
             File gamepadShmDir = new File(
                     context.getFilesDir(),
@@ -695,10 +709,7 @@ public class WinHandler {
                 if (!openAndPublish(extra_mem_path, (raf, buffer) -> { extraGamepadRafs[slot] = raf; extraGamepadBuffers[slot] = buffer; })) return;
             }
         } catch (IOException e) {
-            try {
-                this.localhost = InetAddress.getByName("127.0.0.1");
-            } catch (UnknownHostException e2) {
-            }
+            this.localhost = InetAddress.getLoopbackAddress();
         }
         refreshControllerMappings();
         synchronized (lifecycleLock) {
@@ -708,20 +719,29 @@ public class WinHandler {
                 return;
             }
             this.running = true;
+            this.udpBridge = udpBridgeEnabled;
             activeInstance = this;
         }
-        startSendThread();
+        if (this.udpBridge) {
+            startSendThread();
+            startUdpBridge();
+        }
+        startRumblePoller();
+    }
+
+    /** The UDP server for winhandler.exe: bound to the loopback address only (see [udpBridgeEnabled]). */
+    private void startUdpBridge() {
         com.winlator.core.OneShotTasks.execute(() -> {
             try {
                 DatagramSocket datagramSocket = new DatagramSocket((SocketAddress) null);
                 this.socket = datagramSocket;
                 datagramSocket.setReuseAddress(true);
-                this.socket.bind(new InetSocketAddress((InetAddress) null, SERVER_PORT));
+                this.socket.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), SERVER_PORT));
                 while (this.running) {
                     // receive() shrinks the packet to the last datagram's size; restore it or a longer one is truncated.
                     this.receivePacket.setLength(this.receiveData.capacity());
                     this.socket.receive(this.receivePacket);
-                    // The server is bound to every interface but only Wine on this phone talks to it.
+                    // Bound to loopback, so only programs on this phone can reach it; checked again all the same.
                     if (!isLocalSender(this.receivePacket.getAddress())) continue;
                     try {
                         synchronized (this.actions) {
@@ -739,7 +759,6 @@ public class WinHandler {
                 if (opened != null) opened.close(); // stop() may have run before the bind
             }
         });
-        startRumblePoller();
     }
 
     private void startRumblePoller() {

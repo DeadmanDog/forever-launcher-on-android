@@ -5,13 +5,14 @@ No Android NDK is used for the Windows DLLs. See docs/DX12_REPORT.md for the
 pinned source/submodules/tool versions. Output must be a NEW directory.
 """
 from pathlib import Path
-import argparse, hashlib, json, shutil, subprocess, tarfile
+import argparse, hashlib, json, os, shutil, subprocess, tarfile
 
 root = Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser()
 p.add_argument('--output', type=Path, required=True)
 p.add_argument('--build-dir', type=Path, default=root/'docs/dx12/build-vkd3d-arm64')
-p.add_argument('--llvm-mingw', type=Path, default=Path('/home/fsos-x/WoW-Proton/vegas-pipeline-diagnostic/llvm-mingw-20250709-ucrt-ubuntu-22.04-x86_64'))
+p.add_argument('--llvm-mingw', type=Path, default=Path(os.environ.get('FRONTMAGE_LLVM_MINGW',
+    str(Path.home()/'WoW-Proton/vegas-pipeline-diagnostic/llvm-mingw-20250709-ucrt-ubuntu-22.04-x86_64'))))
 p.add_argument('--wine-tools', type=Path, default=root/'docs/dx12/toolchains/wine-tools')
 p.add_argument('--skip-build', action='store_true')
 a = p.parse_args(); out = a.output.resolve(); out.mkdir(parents=True, exist_ok=False)

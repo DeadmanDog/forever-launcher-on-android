@@ -101,6 +101,8 @@ object WowClientDownloader {
      * language through WowI18n (assets/i18n, Hungarian included), which matches these templates.
      */
     internal object Text {
+        fun noBuild(region: String) = "No client build available for $region. Check your connection or try again later." to
+            "Nincs elérhető kliens build a(z) $region régióhoz. Ellenőrizd a kapcsolatot, vagy próbáld újra később."
         fun checking() = "Checking the latest World of Warcraft build..." to "A legfrissebb World of Warcraft build ellenőrzése..."
         fun manifest(version: String) = "Fetching build $version manifest..." to "A(z) $version build jegyzékének letöltése..."
         fun reading(version: String) = "Reading build $version manifest..." to "A(z) $version build jegyzékének olvasása..."
@@ -282,7 +284,7 @@ object WowClientDownloader {
         require(region in REGIONS) { "Unknown region: $region" }
         onStatus(Text.checking().first)
         val target = fetchRemote(fast = false, localRow = null, region = region)
-            ?: throw IOException("No client build available for ${region.uppercase(Locale.ROOT)}. Check your connection or try again later.")
+            ?: throw IOException(Text.noBuild(region.uppercase(Locale.ROOT)).first)
         check(target.remoteBuildConfig.isNotBlank()) { "Blizzard's version server returned no build." }
         listOf("Data/data", "Data/indices", "Data/config").forEach { File(gameRoot, it).mkdirs() }
         // The Battle.net app records which shared archives a product uses in Data/<product>/; the beta's record fits the release.
@@ -427,6 +429,8 @@ object WowClientDownloader {
         val install = parseInstall(blteDecode(cdn.require("data", buildConfig.getValue("install")[1])))
         val files = install.filter { it.isClientBinary() }
         check(files.isNotEmpty()) { "No Windows ARM64 client files in this build" }
+        // The launch-time check of the program and its DLLs (WowClientIntegrity) uses these keys from Blizzard's manifest.
+        if (blizzardHostsOnly(cdn.hosts)) WowClientIntegrity.remember(target.remoteBuildConfig, files.map { it.relativePath to it.ckey })
 
         val clientDir = File(gameRoot, FLAVOR_DIR)
         files.forEach { destination(clientDir, it.relativePath) }
@@ -539,6 +543,7 @@ object WowClientDownloader {
             val install = parseInstall(blteDecode(cdn.require("data", buildConfig.getValue("install")[1])))
             val files = install.filter { it.isClientBinary() }
             check(files.isNotEmpty()) { "No Windows ARM64 client files in this build" }
+            if (blizzardHostsOnly(cdn.hosts)) WowClientIntegrity.remember(row.getValue("Build Key"), files.map { it.relativePath to it.ckey })
 
             val clientDir = File(gameRoot, FLAVOR_DIR)
             files.forEach { destination(clientDir, it.relativePath) }
@@ -551,6 +556,33 @@ object WowClientDownloader {
             val ekeys = EncodingLookup(cdn, buildConfig.getValue("encoding")[1]).find(pending.map { it.ckey }.toSet())
             downloadClientFiles(cdn, clientDir, pending, ekeys, ArchiveLocator(cdn, gameRoot, cdnConfig.getValue("archives")), onStatus)
         }
+    }
+
+    /**
+     * Keys read through hosts that came from .build.info (shared storage) are only as trustworthy as that file: they are kept for the
+     * integrity check only when every host is Blizzard's own.
+     */
+    internal fun blizzardHostsOnly(hosts: List<String>): Boolean = hosts.isNotEmpty() && hosts.all {
+        val name = it.substringBefore(':').lowercase(Locale.ROOT)
+        name.endsWith(".blizzard.com") && HOST_PATTERN.matches(it)
+    }
+
+    /** Blizzard's own CDN hosts: the launch-time integrity check never takes its keys from hosts written in .build.info. */
+    private val OFFICIAL_CDN_HOSTS = listOf("level3.blizzard.com", "us.cdn.blizzard.com", "eu.cdn.blizzard.com")
+
+    /**
+     * The client files' content keys (path to MD5) of [buildKey], read from Blizzard's own CDN for the launch-time check
+     * ([WowClientIntegrity]). The build config must match its MD5 name and the install manifest the content key the config gives
+     * it; anything else throws. Call on IO.
+     */
+    internal fun officialClientKeys(buildKey: String, region: String?): List<Pair<String, String>> {
+        val cdn = Cdn(OFFICIAL_CDN_HOSTS, "tpr/wow", region)
+        val buildConfig = parseConfig(String(cdn.requireConfig(requireKey(buildKey))))
+        val install = buildConfig.getValue("install")
+        val manifest = blteDecode(cdn.require("data", requireKey(install[1])))
+        val actual = hex(MessageDigest.getInstance("MD5").digest(manifest), 0, 16)
+        if (!actual.equals(install[0], ignoreCase = true)) throw IOException("Install manifest checksum mismatch")
+        return parseInstall(manifest).filter { it.isClientBinary() }.map { it.relativePath to it.ckey }
     }
 
     /** Downloads [pending] client files (loose CDN files or archive members) in parallel ranges, with size and speed in the status. */

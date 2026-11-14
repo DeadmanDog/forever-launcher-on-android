@@ -26,8 +26,9 @@ internal class DeveloperShell {
     fun prepareRun() = execution.reserve()
     fun finishRun(ticket: ShellExecution.Ticket) = execution.complete(ticket)
 
+    // The saved variables come in through mergeUserOverrides at the end (launcher-owned names kept, search lists appended).
     fun androidRequest(container: Container, command: String): Request {
-        val env = EnvVars(container.envVars)
+        val env = EnvVars()
         env.put("HOME", container.rootDir.path)
         env.put("WINEPREFIX", File(container.rootDir, ".wine").path)
         WowLaunchEnvironment.mergeUserOverrides(container, env)
@@ -39,7 +40,7 @@ internal class DeveloperShell {
             ?: error("Selected ARM64EC/Bionic runtime is unavailable. No fallback was applied.")
         val runtime = ContentsManager.getInstallDir(context, p)
         val image = ImageFs.find(context)
-        val env = EnvVars(container.envVars)
+        val env = EnvVars()
         env.put("HOME", container.rootDir.path)
         env.put("WINEPREFIX", File(container.rootDir, ".wine").path)
         env.put("PATH", "${runtime.path}/bin:${image.rootDir.path}/usr/bin:/system/bin")

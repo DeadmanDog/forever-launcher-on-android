@@ -20,9 +20,18 @@ public class GrabManager implements WindowManager.OnWindowModificationListener {
 
     @Override
     public void onUnmapWindow(Window window) {
-        if (window != null && window.getMapState() != Window.MapState.VIEWABLE) {
+        // X11: the grab ends when its grab window or confine-to window (or an ancestor of them) stops being viewable, not when
+        // just any window is unmapped.
+        if (this.window == null) return;
+        if (this.window.getMapState() != Window.MapState.VIEWABLE
+                || (confineToWindow != null && confineToWindow.getMapState() != Window.MapState.VIEWABLE)) {
             deactivatePointerGrab();
         }
+    }
+
+    @Override
+    public void onDestroyWindow(Window window) {
+        if (this.window != null && (window == this.window || window == confineToWindow)) deactivatePointerGrab();
     }
 
     public Window getWindow() {

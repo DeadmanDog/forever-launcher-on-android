@@ -2,6 +2,7 @@ package com.winlator.xserver.extensions;
 
 import static com.winlator.xserver.XClientRequestHandler.RESPONSE_CODE_SUCCESS;
 
+import com.winlator.xconnector.XConnectorEpoll;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xconnector.XOutputStream;
 import com.winlator.xconnector.XStreamLock;
@@ -27,6 +28,8 @@ public class MITSHMExtension implements Extension {
     public static final byte MAJOR_OPCODE = -101;
     private byte firstEventId = 0;
     private byte firstErrorId = 0;
+
+    private static final int ATTACH_FD = 6;
 
     private static abstract class ClientOpcodes {
         private static final byte QUERY_VERSION = 0;
@@ -114,11 +117,11 @@ public class MITSHMExtension implements Extension {
         if (graphicsContext == null) throw new BadGraphicsContext(gcId);
 
         ByteBuffer data = client.xServer.getSHMSegmentManager().getData(shmseg);
-        if (data == null) throw new BadSHMSegment(shmseg);
+        if (data == null) throw new BadSHMSegment(firstErrorId, shmseg);
 
-        if (graphicsContext.getFunction() != GraphicsContext.Function.COPY) {
-            throw new UnsupportedOperationException("GC Function other than COPY is not supported.");
-        }
+        // Only GXcopy is drawn. Any other function used to throw a RuntimeException and drop the whole connection; now the
+        // blit is skipped, and a requested completion event is still sent (the client may wait for it before reusing memory).
+        boolean draw = graphicsContext.getFunction() == GraphicsContext.Function.COPY;
 
         // The renderer accepts packed ZPixmap and one-bit bitmap input only.
         if (format != 0 && format != 2) throw new BadValue(format);
@@ -136,8 +139,9 @@ public class MITSHMExtension implements Extension {
         ByteBuffer image = data.duplicate().order(data.order());
         image.clear().position((int)offset).limit((int)(offset + imageBytes));
         image = image.slice().order(data.order());
-        drawable.drawImage(srcX, srcY, dstX, dstY, srcWidth, srcHeight, depth, image, totalWidth, totalHeight);
+        if (draw) drawable.drawImage(srcX, srcY, dstX, dstY, srcWidth, srcHeight, depth, image, totalWidth, totalHeight);
         if (sendEvent) client.sendEvent(new ShmCompletionNotify(firstEventId, drawableId, shmseg, (int)offset));
+        if (!draw) return;
 
         // Only a blit whose clipped destination covers >=80% of the drawable
         // counts as a presented frame.
@@ -176,6 +180,9 @@ public class MITSHMExtension implements Extension {
                 }
                 break;
             default:
+                // AttachFd (MIT-SHM 1.2, opcode 6) carries one descriptor: it must leave the per-socket queue (and be closed),
+                // or the next descriptor-carrying request is handed this one. CreateSegment (7) carries none in its request.
+                if (opcode == ATTACH_FD) XConnectorEpoll.closeFd(inputStream.getAncillaryFd());
                 throw new BadImplementation();
         }
     }

@@ -45,7 +45,7 @@ class Review8SettingsTest {
     }
 
     @Test fun dx12AlwaysReportsADedicatedGpuEvenWithTheOldSwitchOff() {
-        WowLaunchPolicy.save(context, WowRuntimeTuning.REPORT_DISCRETE, false)
+        WowLaunchPolicy.save(context, "reportdiscrete", false)
         val env = EnvVars(); WowRuntimeTuning.apply(context, dx12(), env)
         assertEquals("1", env.get("VKD3D_REPORT_DISCRETE"))
         val typed = EnvVars("VKD3D_REPORT_DISCRETE=0"); WowRuntimeTuning.apply(context, dx12("VKD3D_REPORT_DISCRETE=0"), typed)
@@ -54,7 +54,7 @@ class Review8SettingsTest {
 
     @Test fun theGameAlwaysSeesThePhonesOwnCpuAndGpuWhateverWasSavedBefore() {
         val real = EnvVars(); WowRuntimeTuning.apply(context, dx12(), real)
-        check(prefs.edit().putString(WowRuntimeTuning.CPU_PROFILE, "laptop").putString(WowRuntimeTuning.GPU_PROFILE, "off").commit())
+        check(prefs.edit().putString("cpuprofile", "laptop").putString("gpuprofile", "off").commit())
         val old = EnvVars(); WowRuntimeTuning.apply(context, dx12(), old)
         for (key in listOf("WINE_CPU_NAME", "WINE_CPU_VENDOR", "DXVK_VEGAS_PERSONA")) assertEquals(key, real.get(key), old.get(key))
         assertEquals("qualcomm", old.get("DXVK_VEGAS_PERSONA"))

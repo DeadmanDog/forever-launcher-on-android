@@ -57,6 +57,7 @@ struct VulkanRendererContext {
  VkPhysicalDeviceMemoryProperties memProperties{};bool swapRB=false;std::mutex renderMutex;std::shared_mutex frameMutex;RenderWakeSignal renderWake;
  std::atomic<bool>needsRender{false};std::atomic<uint64_t>sceneGen{1},contentGen{0};void markSceneDirty(){sceneGen.fetch_add(1);needsRender.store(true);}std::atomic<int64_t>lastContentNs{0};std::atomic<int>contentUpdatesSincePresent{0};int currentFrame=0;float sceneOffsetX=0,sceneOffsetY=0,sceneScaleX=1,sceneScaleY=1;
  std::unordered_map<int64_t,WinTex>texMap;std::unordered_map<AHardwareBuffer*,WinTex>ahbImportCache;
+ std::unordered_map<int64_t,std::vector<AHardwareBuffer*>> windowAhbs;void releaseAhbOwnership(AHardwareBuffer*){}
  std::vector<int64_t> idleReleased;std::unordered_map<int64_t,std::vector<int64_t>> windowIdleTokens;void retireIdleTokens(std::vector<int64_t>&t){t.clear();}
  struct RetirementQueue:std::vector<WinTex>{bool failPush=false;void push_back(const WinTex& t){if(failPush)throw std::bad_alloc();std::vector<WinTex>::push_back(t);}}deleteQueue;std::vector<RenderEntry>renderList;std::atomic<bool> scanoutActive{false};std::vector<DrawEntry>frameDraws;
  VulkanRendererContext(){memProperties.memoryTypeCount=1;memProperties.memoryTypes[0].propertyFlags=VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT|VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;}

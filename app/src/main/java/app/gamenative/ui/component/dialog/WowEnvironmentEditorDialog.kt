@@ -61,6 +61,7 @@ internal fun WowEnvironmentEditorDialog(onClose: () -> Unit, onSaved: () -> Unit
                         Text(entry.name, style = MaterialTheme.typography.labelLarge)
                         Text(if (DeveloperShell.isSensitiveName(entry.name)) "<redacted>" else entry.value.ifEmpty { tx("(empty)", "(üres)") },
                             style = MaterialTheme.typography.bodySmall)
+                        EnvironmentHandlingNote(entry.name)
                         Row {
                             TextButton(enabled = enabled, onClick = {
                                 editing = entry.name; name = entry.name; value = entry.value; reveal = false; message = null
@@ -74,6 +75,7 @@ internal fun WowEnvironmentEditorDialog(onClose: () -> Unit, onSaved: () -> Unit
                 }
                 Text(if (editing == null) tx("Add variable", "Új változó") else tx("Edit variable", "Változó szerkesztése"), style = MaterialTheme.typography.titleSmall)
                 OutlinedTextField(name, { name = it }, label = { Text(tx("Name", "Név")) }, singleLine = true, enabled = enabled)
+                EnvironmentHandlingNote(name.trim())
                 OutlinedTextField(value, { value = it }, label = { Text(tx("Value", "Érték")) }, enabled = enabled,
                     visualTransformation = if (DeveloperShell.isSensitiveName(name) && !reveal) PasswordVisualTransformation() else VisualTransformation.None)
                 if (DeveloperShell.isSensitiveName(name)) TextButton(enabled = enabled, onClick = { reveal = !reveal }) {
@@ -107,4 +109,20 @@ internal fun WowEnvironmentEditorDialog(onClose: () -> Unit, onSaved: () -> Unit
         }) { Text(tx("Save", "Mentés")) } },
         dismissButton = { TextButton(enabled = !saving, onClick = onClose) { Text(tx("Close", "Bezárás")) } },
     )
+}
+
+/** Says when a saved variable does not simply replace the launcher's value (see WowLaunchEnvironment.mergeUserOverrides). */
+@Composable
+private fun EnvironmentHandlingNote(name: String) {
+    when (WowEnvironmentEditor.handling(name)) {
+        WowEnvironmentEditor.Handling.IGNORED -> Text(
+            tx("Ignored at launch: the launcher sets this variable itself.",
+                "Indításkor figyelmen kívül marad: ezt a változót az indító állítja be."),
+            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        WowEnvironmentEditor.Handling.APPENDED -> Text(
+            tx("Added after the launcher's own entries at launch.",
+                "Indításkor az indító saját bejegyzései után kerül."),
+            style = MaterialTheme.typography.bodySmall)
+        WowEnvironmentEditor.Handling.OVERRIDE -> Unit
+    }
 }

@@ -8,7 +8,7 @@ def method(marker):
  while depth:depth+=(s[i]=='{')-(s[i]=='}');i+=1
  return s[start:i]
 cpp=a.out/'settings.cpp';cpp.write_text(Path(__file__).with_name('RenderSettingsRegression.cpp.in').read_text().replace('/* PRODUCTION */','\n'.join(method(m) for m in ['void VulkanRendererContext::setFilterMode(', 'void VulkanRendererContext::setEffect(', 'void VulkanRendererContext::setSwapRB(', 'void VulkanRendererContext::setPresentMode('])));exe=a.out/'settings'
-root=Path(__file__).resolve().parents[3];inc=Path(os.environ.get('ANDROID_HOME','/home/fsos-x/.local/share/wow-build-tools/sdk'))/'ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include'
+root=Path(__file__).resolve().parents[3];inc=Path(os.environ.get('ANDROID_HOME',str(Path.home()/'.local/share/wow-build-tools/sdk')))/'ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include'
 subprocess.run(['g++','-std=c++17','-O1','-g','-pthread','-fsanitize=address,undefined','-idirafter',str(inc),'-I'+str(root/'app/src/main/cpp/winlator'),str(cpp),'-o',str(exe)],check=True)
 results=[]
 for n in range(5):

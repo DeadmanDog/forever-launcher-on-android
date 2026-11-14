@@ -39,6 +39,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.flow.first
 import app.gamenative.ui.component.dialog.WowSettingsDialog
 import androidx.compose.runtime.CompositionLocalProvider
 import app.gamenative.utils.StorageUtils
@@ -58,7 +60,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 object WoWLauncherState {
-    var shouldAutoLaunch = true
+    /** Set for each new activity in MainActivity.onCreate ([startupAutoLaunch]); a launch consumes it. */
+    @Volatile var shouldAutoLaunch = true
+    /** A new activity starts the game by itself when the player chose that and no game session is still around. */
+    fun startupAutoLaunch(enabled: Boolean, sessionAlive: Boolean): Boolean = enabled && !sessionAlive
     private const val PREFS = "wow_forever"
     private const val KEY_AUTO_LAUNCH = "auto_launch"
     /** Settings > Quick "When the app opens": start the game at once (default) or show the home page. */
@@ -109,6 +114,7 @@ private fun WoWForeverScreenContent(
     var isPreparingBundledComponents by remember { mutableStateOf(true) }
     var isLaunching by remember { mutableStateOf(false) }
     var launchJob by remember { mutableStateOf<Job?>(null) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     var hasSavedLogin by remember { mutableStateOf(BattleNetSignIn.load(context) != null) }
     var statusText by remember { mutableStateOf(t("Ready to launch", "Indításra kész")) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -136,6 +142,8 @@ private fun WoWForeverScreenContent(
     // A Classic beta install (its .build.info has no full-release row yet): Play waits for the in-place upgrade.
     var isUpgradableBeta by remember { mutableStateOf(false) }
     var showInstallDialog by remember { mutableStateOf(false) }
+    // Client files that failed the launch-time integrity check (WowClientIntegrity): the repair dialog is up while set.
+    var changedClientFiles by remember { mutableStateOf<List<String>?>(null) }
     var showSettings by remember { mutableStateOf(false) }
     var nextLaunch by remember { mutableStateOf<WowQuickSettings.Status?>(null) }
     // What the next Play will use; refreshed when the launcher opens and whenever Settings closes.
@@ -190,19 +198,34 @@ private fun WoWForeverScreenContent(
             checkFiles()
             if (versionStatus == null && !WoWLauncherState.shouldAutoLaunch) checkVersionStatus()
         }
-        isLaunching = false
-        statusText = t("Ready to launch", "Indításra kész")
+        // Review 2026-11-12: leaving the app during Play used to cancel the launch silently (and a blocking client download kept
+        // running, so a second Play started a second download of the same files). The launch now carries on and waits for the app
+        // to be in front again before it opens the game; leaving the screen still cancels it with the screen's scope.
+        if (launchJob?.isActive != true) {
+            isLaunching = false
+            statusText = t("Ready to launch", "Indításra kész")
+        }
         onPauseOrDispose {
             statusJob.cancel()
-            launchJob?.cancel()
-            launchJob = null
+        }
+    }
+
+    // Play turns the screen to landscape at the tap; a launch that ends on the launcher (failure, cancel, abort) gives the launcher
+    // its position back the way the return from the game does (PluviaMain): portrait first, then free again.
+    fun releaseOrientation() {
+        scope.launch(Dispatchers.Main) {
+            PluviaApp.events.emit(AndroidEvent.SetAllowedOrientation(java.util.EnumSet.of(app.gamenative.ui.enums.Orientation.PORTRAIT)))
+            kotlinx.coroutines.delay(400)
+            PluviaApp.events.emit(AndroidEvent.SetAllowedOrientation(java.util.EnumSet.of(app.gamenative.ui.enums.Orientation.UNSPECIFIED)))
         }
     }
 
     DisposableEffect(Unit) {
+        // Also the answer to a launch that failed after the launcher handed it off (PluviaMain.preLaunchApp emits ForceCloseApp).
         val reset: (Any) -> Unit = {
             launchJob?.cancel()
             launchJob = null
+            if (isLaunching) releaseOrientation()
             isLaunching = false
             statusText = t("Ready to launch", "Indításra kész")
         }
@@ -305,7 +328,9 @@ private fun WoWForeverScreenContent(
     // Moves the game into the other storage, then makes it the active one. A journal (exact folders + direction) is written first,
     // so a killed or cancelled move is finished from the same folders on the next start. [resume] is that journal.
     fun switchStorage(toPrivate: Boolean, resume: WowGameStorage.PendingMove? = null) {
-        if (storageBusy || isLaunching || isUpdating || isPreparingBundledComponents || PluviaApp.keepAlive) return
+        // The game-data download writes into Data/ and an addon job into Interface/AddOns of the folder being moved.
+        if (storageBusy || isLaunching || isUpdating || isPreparingBundledComponents || PluviaApp.keepAlive ||
+            WowDataDownloadState.running || WowAddonJobs.running > 0) return
         val from = resume?.from ?: File(gamePath)
         val to = resume?.to ?: if (toPrivate) WowGameStorage.privateRoot(context) else WowGameStorage.sharedPath(context)
         storageBusy = true
@@ -317,12 +342,12 @@ private fun WoWForeverScreenContent(
                 if (resume == null) {
                     if (toPrivate) WowGameStorage.rememberShared(context, from)
                     // Without a journal nothing may move: an interrupted run could not be finished.
-                    check(WowGameStorage.beginMove(context, toPrivate, from, to)) { "Cannot record the move." }
+                    check(WowGameStorage.beginMove(context, toPrivate, from, to)) { t("Cannot record the move.", "Nem sikerült rögzíteni az áthelyezést.") }
                 }
                 WowGameStorage.move(from, to, onChanged = {
                     // The journal must say "started" on disk before the first file changes: otherwise a kill could leave a half-moved game
                     // that an interrupted-move check no longer recognises. A failed write stops the move before it touches anything.
-                    check(WowGameStorage.markMoveStarted(context)) { "Cannot record the move." }
+                    check(WowGameStorage.markMoveStarted(context)) { t("Cannot record the move.", "Nem sikerült rögzíteni az áthelyezést.") }
                 }) { p ->
                     storageProgress = if (p.totalBytes > 0) p.copiedBytes.toFloat() / p.totalBytes else 1f
                     storageMessage = t("Moving game files: ", "Játékfájlok áthelyezése: ") + "${gigabytes(p.copiedBytes)} / ${gigabytes(p.totalBytes)} GB"
@@ -349,7 +374,7 @@ private fun WoWForeverScreenContent(
                 errorMessage = if (noSpace)
                     t("Not enough free space: ${gigabytes(parts[1].toLong())} GB needed, ${gigabytes(parts[2].toLong())} GB free.",
                         "Nincs elég szabad hely: ${gigabytes(parts[1].toLong())} GB kell, ${gigabytes(parts[2].toLong())} GB szabad.")
-                else t("Storage switch interrupted: ", "A tárhely váltása megszakadt: ") + message + t(" The app finishes it on the next start.", " A következő indításkor az app befejezi.")
+                else t("Storage switch interrupted: ", "A tárhely váltása megszakadt: ") + WowI18n.localize(context, message) + t(" The app finishes it on the next start.", " A következő indításkor az app befejezi.")
                 storageMessage = null
             } finally {
                 storageBusy = false
@@ -360,6 +385,8 @@ private fun WoWForeverScreenContent(
     val filesMissing = !(dataExists && buildInfoExists)
 
     fun launchGame() {
+        // Review 2026-11-13: one launch at a time, whatever cleared isLaunching meanwhile (a resume, a reset event).
+        if (launchJob?.isActive == true) return
         // An addon install/update/remove still writing to AddOns finishes first (the button is disabled meanwhile).
         if (isPreparingBundledComponents || isLaunching || isWrongGame || isUpgradableBeta || storageBusy || WowAddonJobs.running > 0) return
         // Play during the full game-data download: the download stops (keeping what it has, the storage closed and saved) and the
@@ -368,8 +395,11 @@ private fun WoWForeverScreenContent(
             WowDataDownloadState.cancel = true
             isLaunching = true
             statusText = t("Stopping the game data download...", "A játékadatok letöltésének leállítása...")
-            scope.launch {
+            // The wait is the launch job: a resume or a reset sees a launch in progress (a second Play cannot start another one) and
+            // a reset cancels the wait.
+            launchJob = scope.launch {
                 while (WowDataDownloadState.running) kotlinx.coroutines.delay(200)
+                launchJob = null
                 isLaunching = false
                 launchGame()
             }
@@ -393,7 +423,11 @@ private fun WoWForeverScreenContent(
             var handedOff = false
             try {
                 // Exit does not wait for the last session's wineserver any more: it saves its registry in the background first.
-                check(PluviaApp.awaitTeardown(30_000)) {
+                // Review 2026-11-13: also a setup that is still extracting the prefix for a session that was left during start-up, so
+                // two setups never write the same prefix (both waits share the 30 s).
+                val waitUntil = System.currentTimeMillis() + 30_000
+                check(PluviaApp.awaitGameSetup(30_000) &&
+                    PluviaApp.awaitTeardown((waitUntil - System.currentTimeMillis()).coerceAtLeast(0))) {
                     t("The previous game session is still closing. Try again in a moment.", "Az előző játékmenet még záródik. Próbáld újra egy pillanat múlva.")
                 }
                 WowDiagnostics.lifecycle(context,"launcher.prepare")
@@ -421,11 +455,20 @@ private fun WoWForeverScreenContent(
                         }
                     } catch (e: Exception) {
                         if (!arm64Exe.exists()) {
-                            throw IllegalStateException("Couldn't download Wow-ARM64.exe: ${e.message}", e)
+                            throw IllegalStateException(t("Couldn't download the game program (Wow-ARM64.exe): ", "Nem sikerült letölteni a játékprogramot (Wow-ARM64.exe): ") +
+                                WowI18n.localize(context, e.message.orEmpty()), e)
                         }
 
                     }
                 }
+
+                // Review 2026-11-13 (security): the game folder is shared storage; the program and its DLLs must be Blizzard's.
+                scope.launch(Dispatchers.Main) { statusText = t("Checking the game program...", "A játékprogram ellenőrzése...") }
+                val integrity = WowClientIntegrity.verify(File(gamePath)) { buildKey ->
+                    WowClientIntegrity.fetchOfficialKeys(context, File(gamePath), buildKey)
+                }
+                WowDiagnostics.lifecycle(context, "launcher.integrity ${integrity.javaClass.simpleName}")
+                if (integrity is WowClientIntegrity.Result.Mismatch) throw WowClientIntegrity.MismatchException(integrity.files)
 
                 val isAdreno8xx = isAdreno8xxDevice(context)
                 val gpuLabel = if (isAdreno8xx) "Adreno 8xx" else "Adreno 740"
@@ -462,6 +505,7 @@ private fun WoWForeverScreenContent(
                     if (e.message?.contains("EPERM") == true || e.message?.contains("Operation not permitted") == true) {
                         scope.launch(Dispatchers.Main) {
                             hasStorageAccess = false
+                            if (isLaunching) releaseOrientation()
                             isLaunching = false
                             statusText = t("Ready to launch", "Indításra kész")
                             showStoragePermissionDialog = true
@@ -473,6 +517,8 @@ private fun WoWForeverScreenContent(
 
 
                 if (!isActive) return@launch
+                // Open the game only with the app in front (its surface must exist), however long the player was away.
+                withContext(Dispatchers.Main) { lifecycle.currentStateFlow.first { it.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) } }
                 WowDiagnostics.lifecycle(context,"launcher.navigate_xserver")
                 withContext(Dispatchers.Main) {
                     statusText = t("Loading...", "Betöltés...")
@@ -484,8 +530,13 @@ private fun WoWForeverScreenContent(
 
                 WowDiagnostics.lifecycle(context,"launcher.failed",e)
                 scope.launch(Dispatchers.Main) {
-                    errorMessage = e.message ?: t("Launch failed", "Az indítás nem sikerült")
+                    if (e is WowClientIntegrity.MismatchException) {
+                        changedClientFiles = e.files
+                        errorMessage = t("The game program does not match Blizzard's original: ", "A játékprogram nem egyezik a Blizzard eredetijével: ") +
+                            e.files.joinToString(", ")
+                    } else errorMessage = e.message ?: t("Launch failed", "Az indítás nem sikerült")
                     statusText = t("Launch failed", "Az indítás nem sikerült")
+                    if (isLaunching) releaseOrientation()
                     isLaunching = false
                 }
             }
@@ -494,7 +545,8 @@ private fun WoWForeverScreenContent(
 
     /** A new install without a PC, or the in-place upgrade of a Classic beta install, for [region]. */
     fun performInstall(region: String) {
-        if (isPreparingBundledComponents || isUpdating || isLaunching || storageBusy) return
+        // The game-data download works from the current build's keys: never rewrite .build.info/indices underneath it.
+        if (isPreparingBundledComponents || isUpdating || isLaunching || storageBusy || WowDataDownloadState.running) return
         if (!hasStorageAccess) {
             showStoragePermissionDialog = true
             return
@@ -518,7 +570,39 @@ private fun WoWForeverScreenContent(
                         hasStorageAccess = false
                         showStoragePermissionDialog = true
                     }
-                    errorMessage = t("Installation failed: ", "A telepítés nem sikerült: ") + e.message
+                    errorMessage = t("Installation failed: ", "A telepítés nem sikerült: ") + WowI18n.localize(context, e.message.orEmpty())
+                    isUpdating = false
+                }
+            }
+        }
+    }
+
+    /** Downloads Blizzard's original program files again (the client download repairs every file whose MD5 differs), then plays. */
+    fun performClientRepair() {
+        if (isPreparingBundledComponents || isUpdating || isLaunching || storageBusy || WowDataDownloadState.running) return
+        if (!hasStorageAccess) {
+            showStoragePermissionDialog = true
+            return
+        }
+        isUpdating = true
+        updateStatusText = t("Connecting to Blizzard CDN...", "Csatlakozás a Blizzard CDN-hez...")
+        errorMessage = null
+        scope.launch(Dispatchers.IO) {
+            try {
+                WowClientDownloader.download(File(gamePath)) { msg ->
+                    scope.launch(Dispatchers.Main) { updateStatusText = msg }
+                }
+                withContext(Dispatchers.Main) {
+                    checkFiles()
+                    versionStatus = null
+                    isUpdating = false
+                    launchGame()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                scope.launch(Dispatchers.Main) {
+                    errorMessage = t("Repair failed: ", "A javítás nem sikerült: ") + WowI18n.localize(context, e.message.orEmpty())
                     isUpdating = false
                 }
             }
@@ -527,7 +611,7 @@ private fun WoWForeverScreenContent(
 
     fun performUpdate() {
         val target = versionStatus ?: return
-        if (isPreparingBundledComponents || isUpdating || isLaunching || storageBusy) return
+        if (isPreparingBundledComponents || isUpdating || isLaunching || storageBusy || WowDataDownloadState.running) return
         if (!hasStorageAccess) {
             showStoragePermissionDialog = true
             return
@@ -553,7 +637,7 @@ private fun WoWForeverScreenContent(
                         hasStorageAccess = false
                         showStoragePermissionDialog = true
                     }
-                    errorMessage = t("Update failed: ", "A frissítés nem sikerült: ") + e.message
+                    errorMessage = t("Update failed: ", "A frissítés nem sikerült: ") + WowI18n.localize(context, e.message.orEmpty())
                     isUpdating = false
                 }
             }
@@ -777,7 +861,7 @@ private fun WoWForeverScreenContent(
                     if (errorMessage != null) {
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = tx("Error: ", "Hiba: ") + errorMessage,
+                            text = tx("Error: ", "Hiba: ") + localizedStatus(errorMessage.orEmpty()),
                             fontSize = 12.sp,
                             color = Color(0xFFFC8181),
                             fontWeight = FontWeight.Medium
@@ -892,7 +976,8 @@ private fun WoWForeverScreenContent(
                     if (versionStatus?.isOutdated == true) {
                         Button(
                             onClick = { performUpdate() },
-                            enabled = !isPreparingBundledComponents && !isLaunching && !isUpdating && !storageBusy && !filesMissing && !isWrongGame && !isUpgradableBeta && WowAddonJobs.running == 0,
+                            enabled = !isPreparingBundledComponents && !isLaunching && !isUpdating && !storageBusy && !filesMissing && !isWrongGame && !isUpgradableBeta && WowAddonJobs.running == 0 &&
+                                !WowDataDownloadState.running,
                             modifier = Modifier
                                 .fillMaxWidth(0.85f)
                                 .height(46.dp),
@@ -979,7 +1064,7 @@ private fun WoWForeverScreenContent(
 
                     OutlinedButton(
                         onClick = onOpenAddons,
-                        enabled = !isPreparingBundledComponents && !isLaunching && !isUpdating,
+                        enabled = !isPreparingBundledComponents && !isLaunching && !isUpdating && !storageBusy,
                         modifier = Modifier.fillMaxWidth(0.85f).height(42.dp),
                         shape = RoundedCornerShape(14.dp),
                     ) {
@@ -1011,6 +1096,8 @@ private fun WoWForeverScreenContent(
                         fun SmallAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
                             TextButton(
                                 onClick = onClick,
+                                // A storage move or the game-data download works on the current folder: no folder change meanwhile.
+                                enabled = !storageBusy && !WowDataDownloadState.running,
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
                             ) {
@@ -1051,8 +1138,8 @@ private fun WoWForeverScreenContent(
                             }
                             Text(
                                 text = tx("GPU: ", "GPU: ") + when {
-                                    st.gpuMode == "performance" -> "Performance"
-                                    st.gpuMode == "balanced" -> "Balanced"
+                                    st.gpuMode == "performance" -> tx("Performance", "Performance")
+                                    st.gpuMode == "balanced" -> tx("Balanced", "Balanced")
                                     st.gpuMode.startsWith("floor") -> tx("Regulated ", "Szabályozott ") + st.gpuMode.removePrefix("floor") + "%"
                                     else -> tx("default", "alapértelmezett")
                                 },
@@ -1087,7 +1174,8 @@ private fun WoWForeverScreenContent(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        if (showDataCard) { dataBlock(); Spacer(modifier = Modifier.height(12.dp)) }
+                        // The app-update card is in dataBlock too: shown also when the game data is complete.
+                        if (showDataCard || appUpdate != null) { dataBlock(); Spacer(modifier = Modifier.height(12.dp)) }
                         actionBlock()
                     }
                 }
@@ -1101,7 +1189,7 @@ private fun WoWForeverScreenContent(
                     headerBlock()
                     Spacer(modifier = Modifier.height(12.dp))
                     infoBlock()
-                    if (showDataCard) { Spacer(modifier = Modifier.height(12.dp)); dataBlock() }
+                    if (showDataCard || appUpdate != null) { Spacer(modifier = Modifier.height(12.dp)); dataBlock() }
                     Spacer(modifier = Modifier.height(16.dp))
                     actionBlock()
                 }
@@ -1133,7 +1221,8 @@ private fun WoWForeverScreenContent(
                     // The same 80 % switch as every other settings row, level with the title's first line.
                     app.gamenative.ui.component.dialog.WowSwitch(
                         checked = onPrivateStorage,
-                        enabled = !storageBusy && !isLaunching && !isUpdating && !isPreparingBundledComponents,
+                        enabled = !storageBusy && !isLaunching && !isUpdating && !isPreparingBundledComponents &&
+                            !WowDataDownloadState.running && WowAddonJobs.running == 0,
                         onCheckedChange = { switchStorage(it) },
                     )
                 }
@@ -1188,6 +1277,27 @@ private fun WoWForeverScreenContent(
             dismissButton = {
                 TextButton(onClick = { showInstallDialog = false; installTarget = null }) { Text(tx("CANCEL", "MÉGSE"), color = WowTheme.palette.mutedLight) }
             },
+            containerColor = Color(0xFF1B2838),
+            shape = RoundedCornerShape(16.dp),
+        )
+    }
+
+    changedClientFiles?.let { files ->
+        AlertDialog(
+            onDismissRequest = { changedClientFiles = null },
+            title = { Text(tx("Game files changed", "Megváltozott játékfájlok"), fontWeight = FontWeight.Bold, fontSize = 17.sp, color = WowTheme.palette.accent) },
+            text = {
+                Text(tx("These game files do not match Blizzard's original: ${files.joinToString(", ")}. Another app may have changed them, so the game was not started. Repair downloads the original files again.",
+                    "Ezek a játékfájlok nem egyeznek a Blizzard eredetijével: ${files.joinToString(", ")}. Lehet, hogy egy másik app módosította őket, ezért a játék nem indult el. A Javítás újra letölti az eredeti fájlokat."),
+                    fontSize = 13.sp, color = WowTheme.palette.text, lineHeight = 18.sp)
+            },
+            confirmButton = {
+                Button(onClick = { changedClientFiles = null; performClientRepair() },
+                    colors = ButtonDefaults.buttonColors(containerColor = WowTheme.palette.accentFill, contentColor = Color.White), shape = RoundedCornerShape(10.dp)) {
+                    Text(tx("REPAIR", "JAVÍTÁS"), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { changedClientFiles = null }) { Text(tx("CANCEL", "MÉGSE"), color = WowTheme.palette.mutedLight) } },
             containerColor = Color(0xFF1B2838),
             shape = RoundedCornerShape(16.dp),
         )
@@ -1324,6 +1434,17 @@ object GamePath {
         return exe.exists() &&
             (dataDir.exists() && dataDir.listFiles()?.isNotEmpty() == true) &&
             buildInfo.isFile &&
+            WowClientDownloader.readBuildInfo(buildInfo)?.get("Product") == WowClientDownloader.TARGET_PRODUCT &&
+            StorageUtils.hasStoragePermission(context, path)
+    }
+
+    /** The game's data and .build.info are there (the ARM64 exe may still be missing: it downloads on the first Play). */
+    fun hasGameData(context: Context, path: String = load(context)): Boolean {
+        if (path.isEmpty()) return false
+        val root = File(path)
+        val dataDir = File(root, "Data")
+        val buildInfo = File(root, ".build.info")
+        return dataDir.listFiles()?.isNotEmpty() == true && buildInfo.isFile &&
             WowClientDownloader.readBuildInfo(buildInfo)?.get("Product") == WowClientDownloader.TARGET_PRODUCT &&
             StorageUtils.hasStoragePermission(context, path)
     }

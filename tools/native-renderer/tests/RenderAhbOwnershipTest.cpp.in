@@ -49,6 +49,8 @@ struct VulkanRendererContext{
  bool importAHBToWinTex(WinTex&wt,AHardwareBuffer*b){if(failImport)return false;++importsCreated;wt.img=wt.view=wt.ds=b->id;wt.mem=b->id;wt.w=wt.h=32;wt.isAHB=true;wt.needsTransition=true;return true;}
  void destroyWinTex(WinTex&wt);
  void updateWindowContentAHB(int64_t,AHardwareBuffer*,short,short,int,int,int=0,int=0,int64_t=0);
+ void updateWindowContentAHBLocked(int64_t,AHardwareBuffer*,short,short,int,int,int,int,int64_t,bool&);
+ void handBackIdleToken(int64_t);void handBackIdleTokenLocked(int64_t);
  void setRenderList(const int64_t*,const int*,const int*,int);
  void retireIdleTokens(std::vector<int64_t>&);
  void removeWindow(int64_t);

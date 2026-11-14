@@ -219,15 +219,21 @@ Java_com_winlator_xconnector_XConnectorEpollNative_doEpollIndefinitely(JNIEnv *e
                 }
             }
             (*env)->CallVoidMethod(env, connector, handleNewConnection, clientFd);
+            /* A Java exception (an Error the handlers do not catch) is pending: no further JNI call may be made with it. Stop
+             * here and let it reach the Java loop, which shuts the connector down. */
+            if ((*env)->ExceptionCheck(env)) return JNI_FALSE;
         } else if ((events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) != 0) {
             (*env)->CallVoidMethod(env, connector, handleConnectionClosed, events[i].data.fd);
+            if ((*env)->ExceptionCheck(env)) return JNI_FALSE;
         } else {
             if ((events[i].events & EPOLLIN) != 0) {
                 (*env)->CallVoidMethod(env, connector, handleExistingConnection, events[i].data.fd);
+                if ((*env)->ExceptionCheck(env)) return JNI_FALSE;
             }
             // Only clients with queued output ever ask for EPOLLOUT (non-blocking output mode).
             if ((events[i].events & EPOLLOUT) != 0) {
                 (*env)->CallVoidMethod(env, connector, handleWritable, events[i].data.fd);
+                if ((*env)->ExceptionCheck(env)) return JNI_FALSE;
             }
         }
     }

@@ -11,6 +11,7 @@ import com.winlator.xserver.XClient;
 import com.winlator.xserver.errors.BadDrawable;
 import com.winlator.xserver.errors.BadGraphicsContext;
 import com.winlator.xserver.errors.BadMatch;
+import com.winlator.xserver.errors.BadValue;
 import com.winlator.xserver.errors.XRequestError;
 
 import java.io.IOException;
@@ -20,8 +21,13 @@ public abstract class DrawRequests {
     public enum Format {BITMAP, XY_PIXMAP, Z_PIXMAP}
     private enum CoordinateMode {ORIGIN, PREVIOUS}
 
+    private static <T extends Enum<T>> T enumValue(T[] values, int value) throws BadValue {
+        if (value < 0 || value >= values.length) throw new BadValue(value);
+        return values[value];
+    }
+
     public static void putImage(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError {
-        Format format = Format.values()[client.getRequestData()];
+        Format format = enumValue(Format.values(), client.getRequestData());
         int drawableId = inputStream.readInt();
         int gcId = inputStream.readInt();
         short width = inputStream.readShort();
@@ -40,13 +46,13 @@ public abstract class DrawRequests {
         GraphicsContext graphicsContext = client.xServer.graphicsContextManager.getGraphicsContext(gcId);
         if (graphicsContext == null) throw new BadGraphicsContext(gcId);
 
-        if (!(graphicsContext.getFunction() == GraphicsContext.Function.COPY || format == Format.Z_PIXMAP)) {
-            throw new UnsupportedOperationException("GC Function other than COPY is not supported.");
-        }
+        // What the renderer cannot draw (a bitmap/XY image with a GC function other than copy, a bitmap with a left pad) is
+        // skipped: it used to throw a RuntimeException, which dropped the whole connection.
+        if (!(graphicsContext.getFunction() == GraphicsContext.Function.COPY || format == Format.Z_PIXMAP)) return;
 
         switch (format) {
             case BITMAP:
-                if (leftPad != 0) throw new UnsupportedOperationException("PutImage.leftPad cannot be != 0.");
+                if (leftPad != 0) return;
                 if (depth == 1) {
                     drawable.drawImage((short)0, (short)0, dstX, dstY, width, height, (byte)1, data, width, height);
                 }
@@ -65,7 +71,10 @@ public abstract class DrawRequests {
     }
 
     public static void getImage(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
-        Format format = Format.values()[client.getRequestData()];
+        int formatValue = client.getRequestData();
+        // GetImage formats are 1 (XYPixmap) and 2 (ZPixmap).
+        if (formatValue != 1 && formatValue != 2) throw new BadValue(formatValue);
+        Format format = Format.values()[formatValue];
         int drawableId = inputStream.readInt();
         short x = inputStream.readShort();
         short y = inputStream.readShort();
@@ -73,7 +82,8 @@ public abstract class DrawRequests {
         short height = inputStream.readShort();
         inputStream.skip(4);
 
-        if (format != Format.Z_PIXMAP) throw new UnsupportedOperationException("Only Z_PIXMAP is supported.");
+        // Only ZPixmap can be read back: XYPixmap is BadMatch (an X error the client sees) instead of a dropped connection.
+        if (format != Format.Z_PIXMAP) throw new BadMatch();
 
         Drawable drawable =  client.xServer.drawableManager.getDrawable(drawableId);
         if (drawable == null) throw new BadDrawable(drawableId);
@@ -119,7 +129,7 @@ public abstract class DrawRequests {
     }
 
     public static void polyLine(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError {
-        CoordinateMode coordinateMode = CoordinateMode.values()[client.getRequestData()];
+        CoordinateMode coordinateMode = enumValue(CoordinateMode.values(), client.getRequestData());
         int drawableId = inputStream.readInt();
         int gcId = inputStream.readInt();
 
@@ -129,6 +139,8 @@ public abstract class DrawRequests {
         if (graphicsContext == null) throw new BadGraphicsContext(gcId);
         int length = client.getRemainingRequestLength();
 
+        // Whole points only: an odd tail never makes the loop run past the request (the rest is skipped after it).
+        length &= ~3;
         short[] points = new short[length / 2];
         int i = 0;
         while (length != 0) {
@@ -150,7 +162,7 @@ public abstract class DrawRequests {
         if (drawable == null) throw new BadDrawable(drawableId);
         GraphicsContext graphicsContext = client.xServer.graphicsContextManager.getGraphicsContext(gcId);
         if (graphicsContext == null) throw new BadGraphicsContext(gcId);
-        int length = client.getRemainingRequestLength();
+        int length = client.getRemainingRequestLength() & ~7;
 
         // One notification for the whole request: every rectangle used to make the renderer copy the whole window again.
         drawable.beginBatch();

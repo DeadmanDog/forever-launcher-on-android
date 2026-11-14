@@ -6,6 +6,7 @@ import com.winlator.xserver.Drawable;
 import com.winlator.xserver.Pixmap;
 import com.winlator.xserver.XClient;
 import com.winlator.xserver.errors.BadDrawable;
+import com.winlator.xserver.errors.BadValue;
 import com.winlator.xserver.errors.BadIdChoice;
 import com.winlator.xserver.errors.XRequestError;
 
@@ -21,6 +22,10 @@ public abstract class PixmapRequests {
 
         Drawable drawable = client.xServer.drawableManager.getDrawable(drawableId);
         if (drawable == null) throw new BadDrawable(drawableId);
+        // A depth without a visual (e.g. 24: the screen's depths are 32 and 1) is BadValue; it used to create a pixmap with a
+        // null visual that crashed the first request using it.
+        if (client.xServer.pixmapManager.getVisualForDepth(depth) == null) throw new BadValue(depth);
+        if (width <= 0 || height <= 0) throw new BadValue(width <= 0 ? width : height);
 
         Drawable backingStore = client.xServer.drawableManager.createDrawable(pixmapId, width, height, depth);
         if (backingStore == null) throw new BadIdChoice(pixmapId);

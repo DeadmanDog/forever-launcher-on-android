@@ -8,6 +8,14 @@ import org.json.JSONObject
 /** Draft mutations are in memory; only explicit Save persists the envVars field. */
 internal object WowEnvironmentEditor {
     data class Entry(val name: String, val value: String)
+
+    /** How the launcher treats a saved variable: taken as it is, ignored (the launcher owns it), or appended to the launcher's list. */
+    enum class Handling { OVERRIDE, IGNORED, APPENDED }
+    fun handling(name: String): Handling = when (name) {
+        in WowLaunchEnvironment.LAUNCHER_OWNED -> Handling.IGNORED
+        in WowLaunchEnvironment.APPENDED_LISTS -> Handling.APPENDED
+        else -> Handling.OVERRIDE
+    }
     fun load(saved: String): List<Entry> = EnvVars(saved).let { env -> env.map { Entry(it, env.get(it)) } }
     fun validate(entry: Entry) {
         require(Regex("[A-Za-z_][A-Za-z0-9_]*").matches(entry.name)) { "Invalid environment variable name." }

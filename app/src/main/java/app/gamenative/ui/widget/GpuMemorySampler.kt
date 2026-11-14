@@ -18,15 +18,25 @@ internal fun readOwnGraphicsBytes(): Long? = runCatching {
  */
 internal class GpuMemorySampler(
     private val kgslDirectory: File = File("/sys/class/kgsl/kgsl"),
+    private val clock: () -> Long = { System.nanoTime() / 1_000_000L },
     private val appGraphicsBytes: () -> Long? = { null },
 ) {
+    // The fallback parses /proc/self/smaps (several ms, and it holds the mmap lock the render threads need): at most every 10 s.
+    private var fallbackAt = Long.MIN_VALUE
+    private var fallback: Long? = null
+
     private fun readBytes(name: String): Long? =
         runCatching { File(kgslDirectory, name).readText().trim().toLongOrNull() }.getOrNull()?.takeIf { it >= 0 }
 
     fun bytes(): Long? {
         val pages = readBytes("page_alloc")
         if (pages != null) return pages + (readBytes("coherent") ?: 0L)
-        return appGraphicsBytes()?.takeIf { it > 0 }
+        val now = clock()
+        if (fallbackAt == Long.MIN_VALUE || now - fallbackAt >= FALLBACK_INTERVAL_MS) {
+            fallback = appGraphicsBytes()?.takeIf { it > 0 }
+            fallbackAt = now
+        }
+        return fallback
     }
 
     fun text(): String {
@@ -34,4 +44,6 @@ internal class GpuMemorySampler(
         val gb = used / (1024.0 * 1024.0 * 1024.0)
         return if (gb >= 1.0) String.format(Locale.US, "%.1fGB", gb) else "${used / (1024L * 1024L)}MB"
     }
+
+    private companion object { const val FALLBACK_INTERVAL_MS = 10_000L }
 }

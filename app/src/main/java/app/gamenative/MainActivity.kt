@@ -79,6 +79,18 @@ class MainActivity : ComponentActivity() {
             PluviaApp.shutdownEnvironment()
         }
 
+        // Review 2026-11-13: the start-up auto launch is per app start, not per process. A process that outlived its activity (Back
+        // out of the launcher, then the icon again) kept "already launched" and never started the game by itself again. A fresh
+        // activity takes the "When the app opens" choice again (a launch waits for a session that is still closing); a recreated one keeps its state, so coming
+        // back from the game still does not start it again. A live session is never launched over.
+        if (savedInstanceState == null) {
+            app.gamenative.ui.screen.wow.WoWLauncherState.shouldAutoLaunch =
+                app.gamenative.ui.screen.wow.WoWLauncherState.startupAutoLaunch(
+                    enabled = app.gamenative.ui.screen.wow.WoWLauncherState.autoLaunchEnabled(this),
+                    sessionAlive = PluviaApp.xEnvironment != null,
+                )
+        }
+
         // Apply immersive mode based on user preference
         applyImmersiveMode()
 

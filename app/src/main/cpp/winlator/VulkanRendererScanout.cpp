@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
+#include <new>
 #include <dlfcn.h>
 #include <unistd.h>
 #include <android/api-level.h>
@@ -40,6 +42,12 @@ bool VulkanRendererContext::loadScanoutApi() {
     fnSTSetZOrder     = dlsym(lib, "ASurfaceTransaction_setZOrder");
     fnSTSetVisibility = dlsym(lib, "ASurfaceTransaction_setVisibility");
     fnSTSetGeometry   = dlsym(lib, "ASurfaceTransaction_setGeometry");
+    // Optional (all API 29): without them the layers are only hidden on teardown and a replaced buffer is handed back at once.
+    fnSTReparent          = dlsym(lib, "ASurfaceTransaction_reparent");
+    fnSTSetOnComplete     = dlsym(lib, "ASurfaceTransaction_setOnComplete");
+    fnStatsGetControls    = dlsym(lib, "ASurfaceTransactionStats_getASurfaceControls");
+    fnStatsReleaseControls= dlsym(lib, "ASurfaceTransactionStats_releaseASurfaceControls");
+    fnStatsGetPrevFence   = dlsym(lib, "ASurfaceTransactionStats_getPreviousReleaseFenceFd");
 
     bool coreOk = fnSCCreateFromWin && fnSCRelease &&
                   fnSTCreate && fnSTDelete && fnSTApply &&
@@ -48,6 +56,7 @@ bool VulkanRendererContext::loadScanoutApi() {
         SCANOUT_LOG("loadScanoutApi: core symbols missing");
         fnSCCreateFromWin = fnSCRelease = fnSTCreate = fnSTDelete = fnSTApply =
         fnSTSetBuffer = fnSTSetZOrder = fnSTSetVisibility = fnSTSetGeometry = nullptr;
+        fnSTReparent = fnSTSetOnComplete = fnStatsGetControls = fnStatsReleaseControls = fnStatsGetPrevFence = nullptr;
         return false;
     }
     SCANOUT_LOG("loadScanoutApi: OK");
@@ -66,6 +75,88 @@ bool VulkanRendererContext::loadScanoutApi() {
 
 static inline bool arectEq(const ARect& a, const ARect& b) {
     return a.left==b.left && a.top==b.top && a.right==b.right && a.bottom==b.bottom;
+}
+
+typedef void  (*pfn_STReparent)(void*, void*, void*);
+typedef void  (*pfn_STOnComplete)(void* context, void* stats);
+typedef void  (*pfn_STSetOnComplete)(void*, void*, pfn_STOnComplete);
+typedef void  (*pfn_StatsGetControls)(void*, void***, size_t*);
+typedef void  (*pfn_StatsReleaseControls)(void**);
+typedef int   (*pfn_StatsGetPrevFence)(void*, void*);
+
+namespace {
+// X cursor pixels are BGRA in memory (0xAARRGGBB) with straight alpha (CursorManager un-premultiplies RENDER cursors); the AHB is
+// R8G8B8A8 (0xAABBGGRR) and SurfaceFlinger blends it as premultiplied. Red and blue swap places and the colour is multiplied by alpha.
+inline uint32_t scanoutCursorPixel(uint32_t argb) {
+    const uint32_t a = argb >> 24;
+    const uint32_t r = (argb >> 16) & 0xff, g = (argb >> 8) & 0xff, b = argb & 0xff;
+    const uint32_t pr = (r * a + 127) / 255, pg = (g * a + 127) / 255, pb = (b * a + 127) / 255;
+    return (a << 24) | (pb << 16) | (pg << 8) | pr;
+}
+
+// One transaction's completion: everything the callback needs, copied, so it may arrive after the scanout (or the whole
+// renderer) is gone. The SurfaceControl pointer is only compared with the ones the stats list (they hold their own references).
+struct ScanoutCompletion {
+    std::shared_ptr<ScanoutReleaseWaiter> waiter;
+    uint64_t id;
+    void* sc;
+    void* getControls;
+    void* releaseControls;
+    void* getPrevFence;
+};
+
+void onScanoutComplete(void* context, void* stats) {
+    auto* c = static_cast<ScanoutCompletion*>(context);
+    if (!c) return;
+    int fence = -1;
+    if (stats && c->sc && c->getControls && c->releaseControls && c->getPrevFence) {
+        void** controls = nullptr; size_t count = 0;
+        ((pfn_StatsGetControls)c->getControls)(stats, &controls, &count);
+        bool listed = false;
+        for (size_t i = 0; controls && i < count; ++i) if (controls[i] == c->sc) { listed = true; break; }
+        if (controls) ((pfn_StatsReleaseControls)c->releaseControls)(controls);
+        // Asked only for a listed layer: the platform aborts the process for one that is not in the stats.
+        if (listed) fence = ((pfn_StatsGetPrevFence)c->getPrevFence)(stats, c->sc);
+    }
+    c->waiter->complete(c->id, fence);
+    delete c;
+}
+}
+
+void VulkanRendererContext::deliverIdleTokenNow(int64_t token) {
+    if (token == 0) return;
+    std::function<void(const std::vector<int64_t>&)> sink;
+    { std::lock_guard<std::mutex> lk(idleSinkMutex); sink = idleSink; }
+    if (!sink) return;   // the hand-back is off: the Java side released every hold itself
+    try { sink(std::vector<int64_t>{token}); } catch (...) {}
+}
+
+bool VulkanRendererContext::scanoutReleaseUsable() {
+    if (!fnSTSetOnComplete || !fnStatsGetControls || !fnStatsReleaseControls || !fnStatsGetPrevFence) return false;
+    if (!scanoutReleaser) {
+        if (scanoutReleaseFailed) return false;
+        try {
+            scanoutReleaser = std::make_shared<ScanoutReleaseWaiter>(
+                [this](int64_t token) { deliverIdleTokenNow(token); }, kScanoutCallbackTimeoutNs, kScanoutFenceTimeoutNs);
+        } catch (...) { scanoutReleaseFailed = true; return false; }
+    }
+    // Completions that never come (a platform that does not send them): give up on them for this renderer, so the game is not
+    // held back by the deadlines frame after frame. The Java side then hands each replaced buffer back at once, as before.
+    if (scanoutReleaser->consecutiveCallbackTimeouts() >= kScanoutCallbackTimeoutLimit) {
+        if (!scanoutReleaseFailed) SCANOUT_LOG("scanout release: no transaction completions; buffers are handed back at once");
+        scanoutReleaseFailed = true;
+        return false;
+    }
+    return !scanoutReleaseFailed;
+}
+
+void VulkanRendererContext::releaseScanoutTokenAfter(void* t, void* sc, int64_t token) {
+    if (token == 0) return;
+    uint64_t id = (t && sc && scanoutReleaseUsable()) ? scanoutReleaser->expect(token) : 0;
+    if (!id) { deliverIdleTokenNow(token); return; }
+    auto* c = new (std::nothrow) ScanoutCompletion{scanoutReleaser, id, sc, fnStatsGetControls, fnStatsReleaseControls, fnStatsGetPrevFence};
+    if (!c) { scanoutReleaser->complete(id, -1); return; }
+    ((pfn_STSetOnComplete)fnSTSetOnComplete)(t, c, &onScanoutComplete);
 }
 
 void VulkanRendererContext::initScanout() {
@@ -102,6 +193,9 @@ void VulkanRendererContext::initScanout() {
       cursorImageDirty = false;
       cursorPosDirty   = false; }
     gameScVisible   = false;
+    scanoutCursorWanted = true;
+    scanoutCursorGeoValid = true;
+    scanoutShownToken = 0;
     gameFrameDelivered.store(false);
     scanoutActive.store(true);
     SCANOUT_LOG("initScanout: OK");
@@ -142,6 +236,9 @@ void VulkanRendererContext::initScanoutFromWindows(ANativeWindow* gameWin, ANati
       cursorImageDirty = false;
       cursorPosDirty   = false; }
     gameScVisible   = false;
+    scanoutCursorWanted = true;
+    scanoutCursorGeoValid = true;
+    scanoutShownToken = 0;
     gameFrameDelivered.store(false);
     scanoutActive.store(true);
     SCANOUT_LOG("initScanoutFromWindows: OK (sibling path)");
@@ -152,12 +249,24 @@ void VulkanRendererContext::destroyScanout() {
     if (!scanoutActive.load()) return;
     scanoutActive.store(false);
 
+    const int64_t shownToken = scanoutShownToken;
+    scanoutShownToken = 0;
     if (scanoutGameSC || scanoutCursorSC) {
         void* t = ST_CREATE();
         if (scanoutGameSC)   ST_SETVIS(t, scanoutGameSC,   0);
         if (scanoutCursorSC) ST_SETVIS(t, scanoutCursorSC, 0);
+        // Out of the layer tree before the handles are released: a released handle alone left the layer attached to its parent,
+        // one more each time scanout went on and off.
+        if (fnSTReparent) {
+            if (scanoutGameSC)   ((pfn_STReparent)fnSTReparent)(t, scanoutGameSC,   nullptr);
+            if (scanoutCursorSC) ((pfn_STReparent)fnSTReparent)(t, scanoutCursorSC, nullptr);
+        }
+        // The buffer shown last is free once this transaction (the layer gone) is on screen, not before.
+        releaseScanoutTokenAfter(t, scanoutGameSC, shownToken);
         ST_APPLY(t);
         ST_DELETE(t);
+    } else {
+        deliverIdleTokenNow(shownToken);
     }
 
     if (scanoutGameTx) { ST_DELETE(scanoutGameTx); scanoutGameTx = nullptr; }
@@ -183,15 +292,18 @@ void VulkanRendererContext::destroyScanout() {
       cursorImageDirty  = false;
       cursorPosDirty    = false; }
     gameScVisible = false;
+    scanoutCursorWanted = true;
+    scanoutCursorGeoValid = true;
     gameFrameDelivered.store(false);
 }
 
-void VulkanRendererContext::scanoutSetBuffer(AHardwareBuffer* ahb, int x, int y, int w, int h, int fenceFd) {
+bool VulkanRendererContext::scanoutSetBuffer(AHardwareBuffer* ahb, int x, int y, int w, int h, int fenceFd, int64_t idleToken) {
     std::lock_guard<std::recursive_mutex> life(scanoutLifeMutex);
     if (!scanoutActive.load() || !scanoutGameSC || !ahb || !scanoutGameTx) {
         RLOG("scanoutSetBuffer: SKIPPED active=%d sc=%p ahb=%p tx=%p",
             (int)scanoutActive.load(), scanoutGameSC, (void*)ahb, scanoutGameTx);
-        return;
+        if (fenceFd >= 0) close(fenceFd);   // setBuffer would have taken it
+        return false;
     }
 
     AHardwareBuffer_acquire(ahb);
@@ -203,6 +315,18 @@ void VulkanRendererContext::scanoutSetBuffer(AHardwareBuffer* ahb, int x, int y,
     ARect src{0, 0, cw, ch};
 
     ST_SETBUF(t, scanoutGameSC, ahb, fenceFd);
+
+    // The buffer this one replaces stays on screen until the transaction is presented and its release fence signals: only then
+    // may the game draw into it again. [managed]: this renderer hands the tokens back (else the Java side does, at once).
+    const int64_t replaced = scanoutShownToken;
+    const bool managed = scanoutReleaseUsable();
+    if (managed) {
+        scanoutShownToken = idleToken;
+        releaseScanoutTokenAfter(t, scanoutGameSC, replaced);
+    } else {
+        scanoutShownToken = 0;
+        deliverIdleTokenNow(replaced);   // left over from before the completions were given up
+    }
 
     { std::lock_guard<std::mutex> lk(scanoutMutex);
       ARect dst = (scanoutDstW > 0)
@@ -224,6 +348,7 @@ void VulkanRendererContext::scanoutSetBuffer(AHardwareBuffer* ahb, int x, int y,
 
     gameFrameDelivered.store(true, std::memory_order_release);
     AHardwareBuffer_release(ahb);
+    return managed;
 }
 
 void VulkanRendererContext::applyScanoutBuffer() {
@@ -251,10 +376,6 @@ void VulkanRendererContext::applyScanoutBuffer() {
     if (hasImage && scanoutCursorSC && curBuf) {
         touched = true;
         ST_SETBUF(t, scanoutCursorSC, curBuf, -1);
-        if (!gameScVisible) {
-            ST_SETVIS(t, scanoutCursorSC, 1);
-            gameScVisible = true;
-        }
     }
 
     if (hasPos && scanoutCursorSC && scanoutCursorBufW > 0) {
@@ -286,11 +407,47 @@ void VulkanRendererContext::applyScanoutBuffer() {
             src.top = cut; dst.top = py + (int32_t)std::lround(cut * scaleH);
             if (dst.top < 0) dst.top = 0;
         }
-        touched = true;
-        ST_SETGEO(t, scanoutCursorSC, &src, &dst, 0);
+        // An empty or inverted rectangle aborts the process inside setGeometry (a hotspot outside the image, a pointer far past an
+        // edge): such a cursor is simply not on screen.
+        scanoutCursorGeoValid = src.right > src.left && src.bottom > src.top && dst.right > dst.left && dst.bottom > dst.top;
+        if (scanoutCursorGeoValid) {
+            touched = true;
+            ST_SETGEO(t, scanoutCursorSC, &src, &dst, 0);
+        }
+    }
+
+    // Shown when there is an image, the X cursor is visible and its rectangle is on screen.
+    if (scanoutCursorSC) {
+        const bool show = scanoutCursorWanted && scanoutCursorBuf && scanoutCursorGeoValid;
+        if (show != gameScVisible) {
+            ST_SETVIS(t, scanoutCursorSC, show ? 1 : 0);
+            gameScVisible = show;
+            touched = true;
+        }
     }
 
     if (touched) ST_APPLY(t);
+}
+
+void VulkanRendererContext::scanoutDropShownToken() {
+    int64_t token;
+    {
+        std::lock_guard<std::recursive_mutex> life(scanoutLifeMutex);
+        token = scanoutShownToken;
+        scanoutShownToken = 0;
+    }
+    deliverIdleTokenNow(token);
+}
+
+void VulkanRendererContext::scanoutSetCursorVisible(bool visible) {
+    std::lock_guard<std::recursive_mutex> life(scanoutLifeMutex);
+    scanoutCursorWanted = visible;
+    if (!scanoutActive.load() || !scanoutCursorSC || !scanoutTx) return;
+    const bool show = visible && scanoutCursorBuf && scanoutCursorGeoValid;
+    if (show == gameScVisible) return;
+    ST_SETVIS(scanoutTx, scanoutCursorSC, show ? 1 : 0);
+    gameScVisible = show;
+    ST_APPLY(scanoutTx);
 }
 
 void VulkanRendererContext::scanoutSetDst(int x, int y, int w, int h) {
@@ -332,10 +489,11 @@ void VulkanRendererContext::scanoutSetCursorImage(void* pixels, short w, short h
             -1, nullptr, &dst) != 0) return;
     const uint32_t* src = reinterpret_cast<const uint32_t*>(pixels);
     auto* dstPx = reinterpret_cast<uint32_t*>(dst);
-    for (int row = 0; row < h; ++row)
-        memcpy(dstPx + (size_t)row * dstStride,
-               src   + (size_t)row * (uint32_t)stride,
-               (size_t)w * 4);
+    for (int row = 0; row < h; ++row) {
+        const uint32_t* in = src + (size_t)row * (uint32_t)stride;
+        uint32_t* out = dstPx + (size_t)row * dstStride;
+        for (int col = 0; col < w; ++col) out[col] = scanoutCursorPixel(in[col]);
+    }
     AHardwareBuffer_unlock(*curBuf, nullptr);
     // The written buffer becomes the one to show (applyScanoutBuffer runs under the same scanoutLifeMutex).
     std::swap(scanoutCursorBuf, scanoutCursorSpare);
@@ -352,6 +510,11 @@ void VulkanRendererContext::scanoutSetCursorPos(short x, short y, short hotX, sh
     std::lock_guard<std::recursive_mutex> life(scanoutLifeMutex);
     if (!scanoutActive.load() || !scanoutCursorSC) return;
     if (scanoutCursorBufW <= 0 || scanoutCursorBufH <= 0) return;
+    // The game can place the pointer anywhere (WinHandler feedback is not clamped): the X screen is where it can be seen.
+    const int32_t cw = containerWidth  > 0 ? containerWidth  : surfaceWidth;
+    const int32_t ch = containerHeight > 0 ? containerHeight : surfaceHeight;
+    if (cw > 0) x = (short)std::max<int32_t>(0, std::min<int32_t>(x, cw - 1));
+    if (ch > 0) y = (short)std::max<int32_t>(0, std::min<int32_t>(y, ch - 1));
     { std::lock_guard<std::mutex> lk(scanoutMutex);
       pendingCursorX=x; pendingCursorY=y; pendingCursorHotX=hotX; pendingCursorHotY=hotY;
       cursorPosDirty=true; }

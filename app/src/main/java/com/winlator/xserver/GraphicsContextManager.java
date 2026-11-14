@@ -3,6 +3,7 @@ package com.winlator.xserver;
 import android.util.SparseArray;
 
 import com.winlator.xconnector.XInputStream;
+import com.winlator.xserver.errors.BadValue;
 
 public class GraphicsContextManager extends XResourceManager {
     private final SparseArray<GraphicsContext> graphicsContexts = new SparseArray<>();
@@ -71,11 +72,13 @@ public class GraphicsContextManager extends XResourceManager {
         }
     }
 
-    public void updateGraphicsContext(GraphicsContext graphicsContext, Bitmask valueMask, XInputStream inputStream) {
+    public void updateGraphicsContext(GraphicsContext graphicsContext, Bitmask valueMask, XInputStream inputStream) throws BadValue {
         for (int index : valueMask) {
             switch (index) {
                 case GraphicsContext.FLAG_FUNCTION:
-                    graphicsContext.setFunction(GraphicsContext.Function.values()[inputStream.readInt()]);
+                    int function = inputStream.readInt();
+                    if (function < 0 || function >= GraphicsContext.Function.values().length) throw new BadValue(function);
+                    graphicsContext.setFunction(GraphicsContext.Function.values()[function]);
                     break;
                 case GraphicsContext.FLAG_PLANE_MASK:
                     graphicsContext.setPlaneMask(inputStream.readInt());
@@ -90,7 +93,9 @@ public class GraphicsContextManager extends XResourceManager {
                     graphicsContext.setLineWidth(inputStream.readInt());
                     break;
                 case GraphicsContext.FLAG_SUBWINDOW_MODE:
-                    graphicsContext.setSubwindowMode(GraphicsContext.SubwindowMode.values()[inputStream.readInt()]);
+                    int subwindowMode = inputStream.readInt();
+                    if (subwindowMode < 0 || subwindowMode >= GraphicsContext.SubwindowMode.values().length) throw new BadValue(subwindowMode);
+                    graphicsContext.setSubwindowMode(GraphicsContext.SubwindowMode.values()[subwindowMode]);
                     break;
                 case GraphicsContext.FLAG_LINE_STYLE:
                 case GraphicsContext.FLAG_CAP_STYLE:

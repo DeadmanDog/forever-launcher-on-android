@@ -68,6 +68,11 @@ public class XClient implements XResourceManager.OnResourceLifecycleListener {
         return eventListener != null && eventListener.isInterestedIn(eventId);
     }
 
+    /** False once the connector has closed this client's connection (its output is dropped from then on). */
+    public boolean isConnected() {
+        return outputStream == null || !outputStream.isClosed();
+    }
+
     public boolean isAuthenticated() {
         return authenticated;
     }
@@ -87,6 +92,15 @@ public class XClient implements XResourceManager.OnResourceLifecycleListener {
             com.winlator.xserver.extensions.RenderExtension.MAJOR_OPCODE);
         if (render != null) render.onClientDisconnected(this);
         try (XLock lock = xServer.lockAll()) {
+            // A pointer grab (explicit, or the implicit one of a held button) and a server grab die with their client: otherwise
+            // the grab keeps routing every pointer event to a listener whose connection is gone, and nobody else gets them.
+            if (xServer.grabManager.getClient() == this) xServer.grabManager.deactivatePointerGrab();
+            if (xServer.isGrabbedBy(this)) xServer.setGrabbed(false, null);
+            // XI2 selections are made under the window-manager lock (lockAll holds it): removed under it too.
+            XInput2Extension xi2 = xServer.getExtension(XInput2Extension.MAJOR_OPCODE);
+            if (xi2 != null) xi2.onClientDisconnected(this);
+            xServer.selectionManager.onClientDisconnected(this);
+
             while (!resources.isEmpty()) {
                 XResource resource = resources.remove(resources.size()-1);
                 if (resource instanceof Window) {
@@ -115,10 +129,6 @@ public class XClient implements XResourceManager.OnResourceLifecycleListener {
             if (xServer.getSHMSegmentManager() != null) xServer.getSHMSegmentManager().detachOwned(this);
             xServer.resourceIDs.free(resourceIDBase);
         }
-
-        XInput2Extension xi2 = xServer.getExtension(XInput2Extension.MAJOR_OPCODE);
-        if (xi2 != null)
-            xi2.onClientDisconnected(this);
     }
 
     public void generateSequenceNumber() {

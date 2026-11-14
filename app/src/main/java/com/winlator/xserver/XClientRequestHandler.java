@@ -6,8 +6,14 @@ import com.winlator.xconnector.XInputStream;
 import com.winlator.xconnector.XOutputStream;
 import com.winlator.xconnector.XStreamLock;
 import com.winlator.xserver.errors.XRequestError;
+import com.winlator.xserver.errors.BadAlloc;
+import com.winlator.xserver.errors.BadFont;
+import com.winlator.xserver.errors.BadImplementation;
+import com.winlator.xserver.errors.BadName;
+import com.winlator.xserver.extensions.BigReqExtension;
 import com.winlator.xserver.extensions.Extension;
 import com.winlator.xserver.requests.AtomRequests;
+import com.winlator.xserver.requests.CoreFallbackRequests;
 import com.winlator.xserver.requests.CursorRequests;
 import com.winlator.xserver.requests.DrawRequests;
 import com.winlator.xserver.requests.ExtensionRequests;
@@ -23,6 +29,10 @@ import java.io.IOException;
 import java.nio.ByteOrder;
 
 public class XClientRequestHandler implements RequestHandler {
+    /** X replies and events never carry a descriptor here, so a round's replies share one write (BufferedRequestDispatcher). */
+    @Override
+    public boolean batchesReplies() { return true; }
+
     public static final byte RESPONSE_CODE_ERROR = 0;
     public static final byte RESPONSE_CODE_SUCCESS = 1;
     public static final int MAX_REQUEST_LENGTH = 65535;
@@ -164,7 +174,8 @@ public class XClientRequestHandler implements RequestHandler {
         else {
             long units = inputStream.readUnsignedInt();
             long bytes = units * 4L - 8L;
-            if (units < 2 || bytes > Integer.MAX_VALUE)
+            // Above the maximum BIG-REQUESTS advertised the client is broken or hostile: drop it rather than buffer gigabytes.
+            if (units < 2 || units > BigReqExtension.MAX_REQUEST_LENGTH || bytes > Integer.MAX_VALUE)
                 throw new IOException("Invalid BIG-REQUESTS length.");
             requestLength = (int) bytes;
         }
@@ -308,7 +319,10 @@ public class XClientRequestHandler implements RequestHandler {
                     }
                     break;
                 case ClientOpcodes.QUERY_KEYMAP:
-                    try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
+                    // The reply is written under the stream lock like every other one: an event from another thread must
+                    // not land in the middle of it.
+                    try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER);
+                         XStreamLock streamLock = outputStream.lock()) {
                         outputStream.writeByte(RESPONSE_CODE_SUCCESS);
                         outputStream.writeByte((byte) 0);
                         outputStream.writeShort(client.getSequenceNumber());
@@ -434,10 +448,10 @@ public class XClientRequestHandler implements RequestHandler {
                 case ClientOpcodes.GET_POINTER_MAPPING:
                     CursorRequests.getPointerMapping(client, inputStream, outputStream);
                     break;
+                // GrabServer and UngrabServer have no reply (X11 core): an unasked-for reply only confuses Xlib.
                 case ClientOpcodes.GRAB_SERVER:
                     try (XLock lock = client.xServer.lockAll()){
                         client.xServer.setGrabbed(true, client);
-                        outputStream.writeSuccessReply(client.getSequenceNumber(), 0);
                     }
                     break;
                 case ClientOpcodes.UNGRAB_SERVER:
@@ -445,27 +459,92 @@ public class XClientRequestHandler implements RequestHandler {
                         if (client.xServer.isGrabbedBy(client)) {
                             client.xServer.setGrabbed(false, null);
                         }
-                        outputStream.writeSuccessReply(client.getSequenceNumber(), 0);
                     }
+                    break;
+                case CoreFallbackRequests.CONVERT_SELECTION:
+                    try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
+                        SelectionRequests.convertSelection(client, inputStream, outputStream);
+                    }
+                    break;
+                case CoreFallbackRequests.LIST_PROPERTIES:
+                    try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER)) {
+                        CoreFallbackRequests.listProperties(client, inputStream, outputStream);
+                    }
+                    break;
+                case CoreFallbackRequests.GRAB_KEYBOARD:
+                case CoreFallbackRequests.SET_POINTER_MAPPING:
+                case CoreFallbackRequests.SET_MODIFIER_MAPPING:
+                    // Status Success; nothing changes (keyboard focus already follows the focus window, mappings are fixed).
+                    CoreFallbackRequests.statusReply(client, outputStream, (byte)0);
+                    break;
+                case CoreFallbackRequests.GET_MOTION_EVENTS:
+                case CoreFallbackRequests.GET_FONT_PATH:
+                case CoreFallbackRequests.LIST_INSTALLED_COLORMAPS:
+                case CoreFallbackRequests.LIST_HOSTS:
+                    CoreFallbackRequests.emptyListReply(client, outputStream, (byte)0);
+                    break;
+                case CoreFallbackRequests.LIST_FONTS_WITH_INFO:
+                    CoreFallbackRequests.listFontsWithInfo(client, outputStream);
+                    break;
+                case CoreFallbackRequests.QUERY_FONT:
+                case CoreFallbackRequests.QUERY_TEXT_EXTENTS:
+                    // There are no fonts; Xlib's XQueryFont expects (and swallows) BadFont.
+                    throw new BadFont(inputStream.readInt());
+                case CoreFallbackRequests.ALLOC_NAMED_COLOR:
+                case CoreFallbackRequests.LOOKUP_COLOR:
+                    // No colour database; Xlib returns 0 from XAllocNamedColor / XLookupColor on BadName without the handler.
+                    throw new BadName();
+                case CoreFallbackRequests.ALLOC_COLOR_CELLS:
+                case CoreFallbackRequests.ALLOC_COLOR_PLANES:
+                    throw new BadAlloc(); // the TrueColor colormap has no writable cells
+                case CoreFallbackRequests.ALLOC_COLOR:
+                    CoreFallbackRequests.allocColor(client, inputStream, outputStream);
+                    break;
+                case CoreFallbackRequests.QUERY_COLORS:
+                    CoreFallbackRequests.queryColors(client, inputStream, outputStream);
+                    break;
+                case CoreFallbackRequests.QUERY_BEST_SIZE:
+                    CoreFallbackRequests.queryBestSize(client, inputStream, outputStream);
+                    break;
+                case CoreFallbackRequests.LIST_EXTENSIONS:
+                    CoreFallbackRequests.listExtensions(client, outputStream);
+                    break;
+                case CoreFallbackRequests.GET_KEYBOARD_CONTROL:
+                    CoreFallbackRequests.getKeyboardControl(client, outputStream);
+                    break;
+                case CoreFallbackRequests.GET_POINTER_CONTROL:
+                    CoreFallbackRequests.getPointerControl(client, outputStream);
                     break;
                 default:
                     if (opcode < 0) {
                         Extension extension = client.xServer.extensions.get(opcode);
                         if (extension != null)
                             extension.handleRequest(client, inputStream, outputStream);
-                        else
-                            ;
-
                     }
-                    else ;
+                    // A request that expects a reply must get one, or its caller blocks for ever: an error at least.
+                    else if (CoreFallbackRequests.expectsReply(opcode)) throw new BadImplementation();
+                    // A void request without support is skipped (its body below, with every other request's rest).
                     break;
             }
         }
         catch (XRequestError e) {
-            client.skipRequest();
+            finishRequest(client, inputStream);
             e.sendError(client, opcode);
+            return true;
         }
 
+        finishRequest(client, inputStream);
         return true;
+    }
+
+    /**
+     * Leaves the stream at the start of the next request. A handler that did not read its whole request (unused fields, padding,
+     * unsupported request) has the rest skipped. One that read past its end parsed bytes of the next request as its own: the
+     * request was shorter than its fixed part, and the stream cannot be trusted any more, so the client is dropped.
+     */
+    private static void finishRequest(XClient client, XInputStream inputStream) throws IOException {
+        int remaining = client.getRemainingRequestLength();
+        if (remaining > 0) inputStream.skip(remaining);
+        else if (remaining < 0) throw new IOException("X request read " + (-remaining) + " bytes past its length.");
     }
 }

@@ -11,6 +11,7 @@
 #include <vector>
 #include "RenderWakeSignal.h"
 #define RLOG(...)
+#define RLOG_E(...)
 struct VulkanRendererContext {
  mutable std::shared_mutex frameMutex;std::mutex renderMutex;RenderWakeSignal renderWake;
  int filterMode=0,activeEffectId=0,activeEffectMask=0;bool cubicSupported=false,swapRB=false;
@@ -20,6 +21,7 @@ struct VulkanRendererContext {
  struct Tex{VkDescriptorSet ds=VK_NULL_HANDLE;VkImageView view=VK_NULL_HANDLE;};std::unordered_map<int,Tex>texMap,ahbImportCache;
  struct Dispatch {std::atomic<bool>*touched;VkResult DeviceWaitIdle(VkDevice){*touched=true;return VK_SUCCESS;}void DestroySampler(VkDevice,VkSampler,const VkAllocationCallbacks*){}void UpdateDescriptorSets(VkDevice,uint32_t,const VkWriteDescriptorSet*,uint32_t,const VkCopyDescriptorSet*){}}vk_{&gpuTouched};
  void createSampler(){}
+ VkSampler makeSampler(int){return VK_NULL_HANDLE;}
  VkPresentModeKHR requestedPresentMode=VK_PRESENT_MODE_FIFO_KHR;std::vector<VkPresentModeKHR>availablePresentModes{VK_PRESENT_MODE_FIFO_KHR,VK_PRESENT_MODE_MAILBOX_KHR};
  void setFilterMode(int);void setEffect(int,float,int,float,float,float);void setSwapRB(bool);void setPresentMode(VkPresentModeKHR);
 };

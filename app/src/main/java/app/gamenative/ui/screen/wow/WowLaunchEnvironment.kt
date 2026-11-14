@@ -105,6 +105,9 @@ internal object WowLaunchEnvironment {
     fun apply(context: Context, container: Container, manager: ContentsManager, env: EnvVars) {
 
         if (container.id != WowContainerProfile.CONTAINER_ID) return
+        // The session copied every saved variable into these launch variables; the launcher-owned names and the search lists go
+        // back to the launcher (its final merge appends the saved search-list entries).
+        withdrawLauncherNames(EnvVars(container.envVars), env, com.winlator.xenvironment.ImageFs.find(context).wineprefix)
         applyRuntimeDefaults(container, env)
         keepWinegstreamerVisibleForDiagnostics(container, env, WowDiagnostics.enabled(context))
         val gamescope = app.gamenative.display.WowDisplayBackend.isGamescope(container)
@@ -114,14 +117,14 @@ internal object WowLaunchEnvironment {
         WowRuntimeTuning.applyGameGpuWait(env, EnvVars(container.envVars), !gamescope &&
             WowVkd3dComponents.api(container) == WowVkd3dComponents.DX12 && WowLaunchPolicy.enabled(context, WowRuntimeTuning.GAME_GPU_WAIT))
         if (location(container) == GAMENATIVE_DEFAULT) {
-            mergeUserOverrides(container, env)
+            mergeUserValues(EnvVars(container.envVars), env, final = false)
             return
         }
         val supported = supportedDxvkCacheVariables(selectedDxvkFiles(context, container, manager))
         // The old global DXVK helper default must not survive for a build with a different cache API.
         cacheNames.forEach(env::remove)
         env.putAll(defaults(container, supported))
-        mergeUserOverrides(container, env)
+        mergeUserValues(EnvVars(container.envVars), env, final = false)
 
     }
 
@@ -168,7 +171,7 @@ internal object WowLaunchEnvironment {
             val async = dxvkConfig.get("async")
             default("DXVK_ASYNC", if (async == "0") "0" else "1")
         }
-        env.putAll(saved)
+        mergeUserValues(saved, env, final = false)
     }
 
     /** Default both presentation layers consistently, preserving explicit Mesa overrides. */
@@ -190,10 +193,60 @@ internal object WowLaunchEnvironment {
         }
     }
 
+    /**
+     * Names the launcher sets itself and a saved value must not replace: the prefix, home and temp folders, the exec redirect and the
+     * controller/shared-memory plumbing. A wrong value here does not tune anything, it just stops the game from starting.
+     */
+    val LAUNCHER_OWNED: Set<String> = setOf(
+        "HOME", "USER", "WINEPREFIX", "TMPDIR", "PREFIX", "REDIRECT_EXEC__PROC_SELF_EXE", "ANDROID_SYSVSHM_SERVER",
+        "WINEMU_HOST_PKG", "HOST_PKG", "EVSHIM_BASE_PATH", "EVSHIM_SHM_ID", "EVSHIM_SHM_NAME", "EVSHIM_MAX_PLAYERS", "EVSHIM_WINE",
+        "GUEST_PROGRAM_LAUNCHER_COMMAND",
+    )
+
+    /** Search lists the launcher fills in (preloaded libraries, library and program folders): a saved value is added after them. */
+    val APPENDED_LISTS: Set<String> = setOf("LD_PRELOAD", "LD_LIBRARY_PATH", "PATH")
+
+    /**
+     * The final merge of the saved variables into the environment a process is started with (the game launcher and the developer
+     * shell call it last): a launcher-owned name keeps the launcher's value, a search list gets the saved entries appended, anything
+     * else takes the saved value.
+     */
     @JvmStatic
     fun mergeUserOverrides(container: Container, env: EnvVars) {
+        if (container.id == WowContainerProfile.CONTAINER_ID) mergeUserValues(EnvVars(container.envVars), env, final = true)
+    }
 
-        if (container.id == WowContainerProfile.CONTAINER_ID) env.putAll(container.envVars)
+    /**
+     * Merges [user] into [env]. [final] = false is the early merge (into the variables handed to the launcher, which builds the
+     * search lists afterwards and would replace them with the saved ones): the search lists are then left to the final merge.
+     */
+    internal fun mergeUserValues(user: EnvVars, env: EnvVars, final: Boolean) {
+        for (name in user) {
+            val value = user.get(name)
+            when (name) {
+                in LAUNCHER_OWNED -> Unit
+                in APPENDED_LISTS -> if (final) env.put(name, appendList(env.get(name), value))
+                else -> env.put(name, value)
+            }
+        }
+    }
 
+    /**
+     * Takes the saved values of launcher-owned names and search lists back out of [env] (only where [env] still holds exactly the
+     * saved value), and puts the session's own Wine prefix back.
+     */
+    internal fun withdrawLauncherNames(user: EnvVars, env: EnvVars, wineprefix: String) {
+        for (name in user) {
+            if (name !in LAUNCHER_OWNED && name !in APPENDED_LISTS) continue
+            if (env.get(name) == user.get(name)) env.remove(name)
+        }
+        if (user.has("WINEPREFIX") && wineprefix.isNotEmpty()) env.put("WINEPREFIX", wineprefix)
+    }
+
+    /** [base] followed by the entries of [extra] it does not already hold (both ':'-separated, empty entries dropped). */
+    internal fun appendList(base: String, extra: String): String {
+        val entries = base.split(':').filter { it.isNotBlank() }.toMutableList()
+        extra.split(':').filter { it.isNotBlank() && it !in entries }.forEach { entries += it }
+        return entries.joinToString(":")
     }
 }

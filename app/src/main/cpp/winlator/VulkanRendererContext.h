@@ -1,5 +1,6 @@
 #pragma once
 #include "RenderWakeSignal.h"
+#include "ScanoutReleaseWaiter.h"
 #include <vulkan/vulkan.h>
 #include <list>
 #include <memory>
@@ -163,8 +164,14 @@ public:
     void applyScanoutBuffer();
     void initScanoutFromWindows(ANativeWindow* gameWin, ANativeWindow* cursorWin);
     void scanoutSetDst(int x, int y, int w, int h);
-    void scanoutSetBuffer(AHardwareBuffer* ahb, int x, int y, int w, int h, int fenceFd = -1);
+    /** Shows [ahb] on the game layer. [idleToken] (0 = none) is the Present hold of this buffer. True: the renderer hands the
+     *  token of the buffer this one replaces back itself, once SurfaceFlinger no longer shows it; false: the caller does. */
+    bool scanoutSetBuffer(AHardwareBuffer* ahb, int x, int y, int w, int h, int fenceFd = -1, int64_t idleToken = 0);
     void scanoutSetCursorImage(void* pixels, short w, short h, short stride);
+    void scanoutSetCursorVisible(bool visible);
+    /** The game's frames went back to the compositor while the scanout layer stays: its buffer's hold is handed back now (as the
+     *  Java side does with its own), so a game with few buffers does not wait for it. */
+    void scanoutDropShownToken();
     void scanoutSetCursorPos(short x, short y, short hotX, short hotY);
     std::atomic<bool> scanoutActive{false};
     std::atomic<bool> displayPriorityHint{false};
@@ -203,6 +210,10 @@ public:
 
     void detachSurface();
     bool reattachSurface(ANativeWindow* newWindow);
+    /** False once the render thread has stopped for good (device lost, failed swapchain): Java then builds a new renderer. */
+    bool isAlive() const { return isRunning.load(); }
+    /** Hands a Present hold back as soon as the render thread runs (an update that could not be used never reads its buffer). */
+    void handBackIdleToken(int64_t token);
 
     bool verboseLog = true;
     void setVerboseLog(bool v) { verboseLog = v; }
@@ -285,6 +296,7 @@ private:
     float activeGamma = 1.0f;
     float maxAnisotropy           = 1.0f;
     bool  cubicSupported          = false;
+    const char* cubicExtName      = nullptr;   // the cubic filter extension the driver offers (EXT preferred), if any
     VkPhysicalDeviceMemoryProperties memProperties{};
     VkPresentModeKHR requestedPresentMode = VK_PRESENT_MODE_FIFO_KHR;
     uint32_t graphicsQueueFamilyIndex = 0;
@@ -309,10 +321,14 @@ private:
     std::mutex idleSinkMutex;
     std::atomic<bool> idleSinkInstalled{false};                           // lock-free "is the hand-back on": the render loop skips every token check while it is off
     void retireIdleTokens(std::vector<int64_t>& tokens);                 // renderMutex held; empties [tokens]
+    void handBackIdleTokenLocked(int64_t token);                         // renderMutex held; never throws
+    void updateWindowContentAHBLocked(int64_t id, AHardwareBuffer* ahb, short w, short h, int offX, int offY, int winW, int winH,
+                                      int64_t idleToken, bool& tokenTaken);
     void drainFinishedOtherSlots();                                       // frees what a finished other slot holds (cheap check)
     void pollIdleTokens();                                                // like the above for ALL slots; used when nothing else wakes the render thread
     bool hasIdleTokensInFlight();                                         // a submitted frame still carries hand-back tokens, or some wait to be delivered
-    void deliverReleasedIdle();                                           // renderMutex NOT held
+    /** True when it handed tokens back. */
+    bool deliverReleasedIdle();                                           // renderMutex NOT held
     std::vector<WinTex>    pendingRetirements;
     std::vector<WinTex>    submittedRetirements[MAX_FRAMES_IN_FLIGHT];
     std::vector<RenderEntry> renderList;
@@ -350,7 +366,26 @@ private:
     void*  fnSTSetVisibility  = nullptr;
     void*  fnSTSetGeometry    = nullptr;
     void*  fnSTSetBackPressure = nullptr;
+    void*  fnSTReparent           = nullptr;
+    void*  fnSTSetOnComplete      = nullptr;
+    void*  fnStatsGetControls     = nullptr;
+    void*  fnStatsReleaseControls = nullptr;
+    void*  fnStatsGetPrevFence    = nullptr;
     bool   loadScanoutApi();
+    // ---- scanout buffer hand-back (scanoutLifeMutex): the token of the buffer the game layer shows, freed when it is replaced
+    // and SurfaceFlinger has let go of it (see ScanoutReleaseWaiter).
+    int64_t scanoutShownToken = 0;
+    std::shared_ptr<ScanoutReleaseWaiter> scanoutReleaser;
+    bool scanoutReleaseFailed = false;
+    static constexpr int64_t kScanoutCallbackTimeoutNs = 250000000;   // a completion normally comes within 2-3 refreshes
+    static constexpr int64_t kScanoutFenceTimeoutNs    = 100000000;
+    static constexpr int kScanoutCallbackTimeoutLimit  = 8;
+    bool scanoutReleaseUsable();
+    void releaseScanoutTokenAfter(void* transaction, void* sc, int64_t token);
+    void deliverIdleTokenNow(int64_t token);                              // renderMutex NOT held
+    // The X cursor's own visibility, and whether its last rectangle lies on screen (scanoutLifeMutex).
+    bool scanoutCursorWanted = true;
+    bool scanoutCursorGeoValid = true;
 
     int32_t scanoutDstX=0, scanoutDstY=0, scanoutDstW=0, scanoutDstH=0;
 
@@ -524,6 +559,11 @@ private:
     std::thread       renderThread;
     std::atomic<bool> isRunning{false};
     std::atomic<bool> fbResized{false};
+    // A swapchain that could not be rebuilt (a 0x0 window, a transient driver error): the loop waits ~100 ms before the next try.
+    static constexpr uint64_t kAcquireTimeoutNs = 100000000;   // 100 ms, see renderFrame
+    bool recreateBackoff = false;
+    int recreateFailures = 0;
+    static constexpr int kRecreateFailureLimit = 50;   // ~5 s of failures that are not a 0x0 window: the renderer stops (Java rebuilds it)
     std::mutex        renderMutex;
     RenderWakeSignal renderWake;
     mutable std::shared_mutex frameMutex;
@@ -542,6 +582,7 @@ private:
     void createFramebuffers();
     void createCmdPool();
     void createSampler();
+    VkSampler makeSampler(int mode);
     void createWinTexPool();
     void createCursorDS();
     void createCmdBufs();

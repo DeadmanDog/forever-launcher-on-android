@@ -16,7 +16,7 @@ else:
  start=s.index('        frameDraws.clear();',s.index('void VulkanRendererContext::renderFrame()'));end=s.index('        if (isCursorImageDirty.load()',start);capture=s[start:end];commit=''
 start=s.index('    for (auto& d : draws)',s.index('void VulkanRendererContext::recordCmdBuf('));end=s.index('    for (auto& d : draws)',start+10);barriers=s[start:end]
 t=Path(__file__).with_name('RenderUploadSceneRegression.cpp.in');cpp=a.out/'upload.cpp';cpp.write_text(t.read_text().replace('/* PRODUCTION */','\n'.join(method(m) for m in markers)).replace('/* CAPTURE */',capture).replace('/* COMMIT */',commit).replace('/* BARRIERS */',barriers));exe=a.out/'upload'
-inc=Path(os.environ.get('ANDROID_HOME','/home/fsos-x/.local/share/wow-build-tools/sdk'))/'ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include';own=Path(__file__).resolve().parents[3]/'app/src/main/cpp/winlator'
+inc=Path(os.environ.get('ANDROID_HOME',str(Path.home()/'.local/share/wow-build-tools/sdk')))/'ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include';own=Path(__file__).resolve().parents[3]/'app/src/main/cpp/winlator'
 subprocess.run(['g++','-std=c++17','-O1','-g','-pthread','-fsanitize=address,undefined','-idirafter',str(inc),'-I'+str(own),str(cpp),'-o',str(exe)],check=True)
 results=[]
 for n in range(21):

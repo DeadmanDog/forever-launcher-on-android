@@ -101,7 +101,8 @@ fun PluviaMain(
             when (event) {
                 MainViewModel.MainUiEvent.LaunchApp -> {
                     if (state.showBootingSplash) {
-                        navController.navigate(PluviaScreen.XServer.route)
+                        // One game screen: a second LaunchApp event must not stack another one on top of it.
+                        navController.navigate(PluviaScreen.XServer.route) { launchSingleTop = true }
                     }
                 }
 
@@ -435,108 +436,121 @@ fun preLaunchApp(
     setLoadingDialogVisible(true)
 
     return CoroutineScope(Dispatchers.IO).launch {
+        // Review 2026-11-13: every way this ends without a game must also give the launcher back (it waits on "Loading..." with Play
+        // disabled until then): [fail] shows the dialog and emits ForceCloseApp, which the launcher answers with its reset.
+        fun fail(state: MessageDialogState) {
+            setLoadingDialogVisible(false)
+            setMessageDialogState(state)
+            PluviaApp.events.emit(AndroidEvent.ForceCloseApp)
+        }
+        try {
 
-        val containerManager = ContainerManager(context)
-        val container = ContainerUtils.getOrCreateContainer(context, appId, containerManager)
-        if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) {
-            try {
-                app.gamenative.display.WowGamescopePayload.ensure(context)
-            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (e: Exception) {
-                setLoadingDialogVisible(false)
-                setMessageDialogState(MessageDialogState(visible = true, type = DialogType.SYNC_FAIL,
-                    title = "Gamescope", message = e.message ?: "Gamescope runtime preparation failed",
-                    dismissBtnText = context.getString(R.string.ok)))
+            val containerManager = ContainerManager(context)
+            val container = ContainerUtils.getOrCreateContainer(context, appId, containerManager)
+            if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) {
+                try {
+                    app.gamenative.display.WowGamescopePayload.ensure(context)
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                catch (e: Exception) {
+                    fail(MessageDialogState(visible = true, type = DialogType.SYNC_FAIL,
+                        title = "Gamescope", message = e.message ?: "Gamescope runtime preparation failed",
+                        dismissBtnText = context.getString(R.string.ok)))
+                    return@launch
+                }
+            }
+
+
+            val legacyImageFsRoot = File(context.filesDir, "imagefs")
+            val migrationOk = ImageFSLegacyMigrator.migrateLegacyDirsIfNeeded(
+                context,
+                legacyImageFsRoot,
+                container.wineVersion,
+            )
+            if (!migrationOk) {
+
+                fail(
+                    MessageDialogState(
+                        visible = true,
+                        type = DialogType.SYNC_FAIL,
+                        title = context.getString(R.string.install_failed_title),
+                        message = context.getString(R.string.install_failed_message),
+                        dismissBtnText = context.getString(R.string.ok),
+                    ),
+                )
                 return@launch
             }
-        }
 
+            val effectiveExe = container.executablePath
+            if (effectiveExe.isBlank()) {
 
-        val legacyImageFsRoot = File(context.filesDir, "imagefs")
-        val migrationOk = ImageFSLegacyMigrator.migrateLegacyDirsIfNeeded(
-            context,
-            legacyImageFsRoot,
-            container.wineVersion,
-        )
-        if (!migrationOk) {
+                fail(
+                    MessageDialogState(
+                        visible = true,
+                        type = DialogType.EXECUTABLE_NOT_FOUND,
+                        title = context.getString(R.string.game_executable_not_found_title),
+                        message = context.getString(R.string.game_executable_not_found),
+                        dismissBtnText = context.getString(R.string.ok),
+                    ),
+                )
+                return@launch
+            }
 
-            setLoadingDialogVisible(false)
-            setMessageDialogState(
-                MessageDialogState(
-                    visible = true,
-                    type = DialogType.SYNC_FAIL,
-                    title = context.getString(R.string.install_failed_title),
-                    message = context.getString(R.string.install_failed_message),
-                    dismissBtnText = context.getString(R.string.ok),
-                ),
-            )
-            return@launch
-        }
+            // The root file system ships inside the APK; nothing is downloaded.
+            if (context.assets.list("")?.contains("imagefs_bionic.txz") != true) {
+                fail(
+                    MessageDialogState(
+                        visible = true,
+                        type = DialogType.SYNC_FAIL,
+                        title = context.getString(R.string.download_failed_title),
+                        message = "The root file system is missing from the app package.",
+                        dismissBtnText = context.getString(R.string.ok),
+                    ),
+                )
+                return@launch
+            }
 
-        val effectiveExe = container.executablePath
-        if (effectiveExe.isBlank()) {
+            setLoadingMessage(context.getString(R.string.main_installing_bionic))
+            // The wait is interruptible: an Abort cancels this job, and nothing may navigate or activate afterwards.
+            // The extraction itself keeps going to its end; the next launch waits for it (ImageFsInstaller lock).
+            val installFuture = ImageFsInstaller.installIfNeededFuture(context, context.assets, container) { progress ->
+                if (isActive) setLoadingProgress(progress / 100f)
+            }
+            val imageFsInstallSuccess = kotlinx.coroutines.runInterruptible { installFuture.get() }
 
-            setLoadingDialogVisible(false)
-            setMessageDialogState(
-                MessageDialogState(
-                    visible = true,
-                    type = DialogType.EXECUTABLE_NOT_FOUND,
-                    title = context.getString(R.string.game_executable_not_found_title),
-                    message = context.getString(R.string.game_executable_not_found),
-                    dismissBtnText = context.getString(R.string.ok),
-                ),
-            )
-            return@launch
-        }
+            if (!imageFsInstallSuccess) {
 
-        // The root file system ships inside the APK; nothing is downloaded.
-        if (context.assets.list("")?.contains("imagefs_bionic.txz") != true) {
-            setLoadingDialogVisible(false)
-            setMessageDialogState(
-                MessageDialogState(
-                    visible = true,
-                    type = DialogType.SYNC_FAIL,
-                    title = context.getString(R.string.download_failed_title),
-                    message = "The root file system is missing from the app package.",
-                    dismissBtnText = context.getString(R.string.ok),
-                ),
-            )
-            return@launch
-        }
+                fail(
+                    MessageDialogState(
+                        visible = true,
+                        type = DialogType.SYNC_FAIL,
+                        title = context.getString(R.string.install_failed_title),
+                        message = context.getString(R.string.install_failed_message),
+                        dismissBtnText = context.getString(R.string.ok),
+                    ),
+                )
+                return@launch
+            }
 
-        setLoadingMessage(context.getString(R.string.main_installing_bionic))
-        // The wait is interruptible: an Abort cancels this job, and nothing may navigate or activate afterwards.
-        // The extraction itself keeps going to its end; the next launch waits for it (ImageFsInstaller lock).
-        val installFuture = ImageFsInstaller.installIfNeededFuture(context, context.assets, container) { progress ->
-            if (isActive) setLoadingProgress(progress / 100f)
-        }
-        val imageFsInstallSuccess = kotlinx.coroutines.runInterruptible { installFuture.get() }
+            // An aborted launch must not activate the container or start a game.
+            if (!isActive) return@launch
+            setLoadingMessage(context.getString(R.string.main_loading))
+            setLoadingProgress(-1f)
 
-        if (!imageFsInstallSuccess) {
+            // must activate container before downloading save files
+            containerManager.activateContainer(container)
 
             setLoadingDialogVisible(false)
-            setMessageDialogState(
-                MessageDialogState(
-                    visible = true,
-                    type = DialogType.SYNC_FAIL,
-                    title = context.getString(R.string.install_failed_title),
-                    message = context.getString(R.string.install_failed_message),
-                    dismissBtnText = context.getString(R.string.ok),
-                ),
-            )
-            return@launch
+            if (!isActive) return@launch
+            onSuccess(context, appId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // E.g. an ExecutionException from the root file system install, or a container that could not be read.
+            val cause = (e as? java.util.concurrent.ExecutionException)?.cause ?: e
+            fail(MessageDialogState(visible = true, type = DialogType.SYNC_FAIL,
+                title = context.getString(R.string.install_failed_title),
+                message = cause.message ?: context.getString(R.string.install_failed_message),
+                dismissBtnText = context.getString(R.string.ok)))
         }
-
-        // An aborted launch must not activate the container or start a game.
-        if (!isActive) return@launch
-        setLoadingMessage(context.getString(R.string.main_loading))
-        setLoadingProgress(-1f)
-
-        // must activate container before downloading save files
-        containerManager.activateContainer(container)
-
-        setLoadingDialogVisible(false)
-        if (!isActive) return@launch
-        onSuccess(context, appId)
     }
 }

@@ -90,11 +90,9 @@ final class VsyncPacingCore<T> {
         }
         afterIdle = false;
         lastFrameNs = frameTimeNs;
-        List<T> released = new ArrayList<>();
-        if (limit <= 0) {
-            released.addAll(releaseAll());
-            return released;
-        }
+        if (limit <= 0) return releaseAll();
+        // Most refreshes release nothing: the list is made only when something goes (2026-11-12 review: no list per vsync).
+        List<T> released = null;
         double perVsync = perVsync();
         // At or above the refresh rate, cap the number of releases per refresh. An exact
         // refresh divisor (such as 60 FPS on 120 Hz) must also drop surplus credit after a late
@@ -112,12 +110,13 @@ final class VsyncPacingCore<T> {
             }
             state.budget = Math.min(cap, state.budget + perVsync * elapsed);
             while (state.budget >= 1.0 - 1e-6 && !state.pending.isEmpty()) {
+                if (released == null) released = new ArrayList<>(2);
                 released.add(state.pending.poll());
                 state.budget -= 1.0;
             }
             if (state.budget < 0) state.budget = 0;
         }
-        return released;
+        return released != null ? released : java.util.Collections.emptyList();
     }
 
     private double perVsync() { return snap(limit * (periodNs / 1e9)); }

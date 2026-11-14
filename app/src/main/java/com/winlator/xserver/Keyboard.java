@@ -12,7 +12,8 @@ public class Keyboard {
     public static final short KEYS_COUNT = 248;
     public static final short MAX_KEYCODE = 255;
     public static final short MIN_KEYCODE = 8;
-    public final int[] keysyms = new int[KEYS_COUNT];
+    // Two keysyms for each of the KEYS_COUNT keycodes (MIN_KEYCODE..MAX_KEYCODE): KEYS_COUNT entries only covered keycodes 8..131.
+    public final int[] keysyms = new int[KEYS_COUNT * KEYSYMS_PER_KEYCODE];
     private final Bitmask modifiersMask = new Bitmask();
     private final XKeycode[] keycodeMap = createKeycodeMap();
     private final ArraySet<Byte> pressedKeys = new ArraySet<>();
@@ -64,13 +65,16 @@ public class Keyboard {
     }
 
     public void setKeysyms(byte keycode, int minKeysym, int majKeysym) {
-        int index = keycode - 8;
+        // Keycodes are unsigned (8..255); a Java byte above 127 is negative.
+        int index = (keycode & 0xFF) - MIN_KEYCODE;
+        if (index < 0) return;
         keysyms[index*KEYSYMS_PER_KEYCODE+0] = minKeysym;
         keysyms[index*KEYSYMS_PER_KEYCODE+1] = majKeysym;
     }
 
     public boolean hasKeysym(byte keycode, int keysym) {
-        int index = keycode - 8;
+        int index = (keycode & 0xFF) - MIN_KEYCODE;
+        if (index < 0) return false;
         return keysyms[index*KEYSYMS_PER_KEYCODE+0] == keysym || keysyms[index*KEYSYMS_PER_KEYCODE+1] == keysym;
     }
 

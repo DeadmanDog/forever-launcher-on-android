@@ -12,6 +12,9 @@ import java.security.MessageDigest
 
 /** Installs bundled profiles into the existing catalog. Never creates or edits a container. Call on IO. */
 internal object WowBundledComponents {
+    /** Reported in English; the launcher shows it through localizedStatus. */
+    private val SESSION_ACTIVE = "Bundled components cannot be installed during an active game session." to
+        "A beépített komponensek nem telepíthetők futó játék közben."
     const val PROTON_NAME = "proton-11.0-90639.34-arm64ec"
     /** The only bundled/default DXVK: Vegas r63 on upstream 3.1.1, including the cache, bind-skip and pipeline-handle fixes. */
     const val DXVK_NAME = "Vegas-3.1.1-wow-arm64-hybrid-gamenative-r63"
@@ -82,7 +85,7 @@ internal object WowBundledComponents {
             val current = WowVkd3dComponents.profiles(context)
                 .singleOrNull { it.verName == VKD3D_NAME && it.verCode == VKD3D_VERSION_CODE }?.let(WowVkd3dComponents::id)
             if (current != null) try {
-                onStatus("Updating VKD3D to r$VKD3D_VERSION_CODE...")
+                onStatus(WowI18n.pick(context, "Updating VKD3D to r$VKD3D_VERSION_CODE...", "A VKD3D frissítése: r$VKD3D_VERSION_CODE..."))
                 WowVkd3dComponents.applyProfile(context, current, isSessionActive)
             } catch (e: Exception) {
                 if (isSessionActive()) throw e
@@ -97,7 +100,7 @@ internal object WowBundledComponents {
                 else -> null to 0
             }
             if (name != null) try {
-                onStatus("Updating DXVK to r$code...")
+                onStatus(WowI18n.pick(context, "Updating DXVK to r$code...", "A DXVK frissítése: r$code..."))
                 val profiles = WowDxvkSelector.installedProfiles(context)
                 val target = profiles.singleOrNull { it.verName == name && it.verCode == code } ?: error("$name is not installed")
                 WowDxvkSelector.applyToContainer(c, WowDxvkSelector.identifier(target), profiles, isSessionActive)
@@ -109,7 +112,8 @@ internal object WowBundledComponents {
         container()?.let { c ->
             val driver = com.winlator.core.KeyValueSet(c.graphicsDriverConfig).get("version").ifBlank { c.graphicsDriverVersion }
             if (supersededDriver(driver)) try {
-                onStatus("Updating the driver to ${DRIVER_NAME.substringAfterLast(' ')}...")
+                onStatus(WowI18n.pick(context, "Updating the driver to ${DRIVER_NAME.substringAfterLast(' ')}...",
+                    "A driver frissítése: ${DRIVER_NAME.substringAfterLast(' ')}..."))
                 val entry = WowDeveloperComponents.drivers(context).singleOrNull { it.id == DRIVER_NAME }
                     ?: error("$DRIVER_NAME is not installed")
                 WowDeveloperComponents.applyDriver(c, entry)
@@ -120,7 +124,7 @@ internal object WowBundledComponents {
         }
         val runtime = container() ?: return
         if (supersededProton(runtime.wineVersion)) try {
-            onStatus("Updating Proton to r$PROTON_VERSION_CODE (once, about a minute)...")
+            onStatus(WowI18n.pick(context, "Updating Proton to r$PROTON_VERSION_CODE (once, about a minute)...", "A Proton frissítése: r$PROTON_VERSION_CODE (egyszer, kb. egy perc)..."))
             WowDeveloperComponents.applyRuntime(context, runtime, PROTON_ID)
         } catch (e: Exception) {
             if (isSessionActive()) throw e
@@ -144,12 +148,13 @@ internal object WowBundledComponents {
      * Runs the removals one by one: a component still in use (a failed upgrade keeps the old one in the container) or one that
      * cannot be deleted is skipped and logged, never fatal; nothing is removed once a game session starts. Returns the removed ids.
      */
-    internal fun runRemovals(removals: List<Removal>, onStatus: (String) -> Unit, isSessionActive: () -> Boolean): List<String> {
+    internal fun runRemovals(removals: List<Removal>, onStatus: (String) -> Unit, isSessionActive: () -> Boolean,
+                             label: (String) -> String = { "Removing the old $it..." }): List<String> {
         val removed = mutableListOf<String>()
         for (removal in removals) {
             if (isSessionActive()) break
             try {
-                onStatus("Removing the old ${removal.id}...")
+                onStatus(label(removal.id))
                 removal.remove()
                 removed += removal.id
             } catch (e: Exception) {
@@ -184,7 +189,9 @@ internal object WowBundledComponents {
                 Removal(id) { WowDeveloperComponents.delete(context,
                     WowDeveloperComponents.Entry(WowDeveloperComponents.Kind.RUNTIME, id, "", ContentsManager.getInstallDir(context, p))) }
             }
-        return runRemovals(removals, onStatus, isSessionActive)
+        return runRemovals(removals, onStatus, isSessionActive) {
+            WowI18n.pick(context, "Removing the old $it...", "A régi $it eltávolítása...")
+        }
     }
 
     fun ensureInstalled(
@@ -192,7 +199,7 @@ internal object WowBundledComponents {
         onStatus: (String) -> Unit = {},
         isSessionActive: () -> Boolean = { PluviaApp.keepAlive },
     ) = synchronized(ContentsManager.getLocalInstallLock()) {
-        check(!isSessionActive()) { "Bundled components cannot be installed during an active game session." }
+        check(!isSessionActive()) { SESSION_ACTIVE.first }
         val manager = ContentsManager(context)
         for (bundle in bundles) {
             if (!bundle.experimental) {
@@ -218,7 +225,7 @@ internal object WowBundledComponents {
         onStatus: (String) -> Unit,
         isSessionActive: () -> Boolean,
     ) {
-        check(!isSessionActive()) { "Bundled components cannot be installed during an active game session." }
+        check(!isSessionActive()) { SESSION_ACTIVE.first }
         val directory = directory(context, bundle)
         if (directory.exists()) {
             // A complete install is preserved, never silently overwritten. A folder left half-written by an
@@ -233,16 +240,16 @@ internal object WowBundledComponents {
             Thread.sleep(300)
             val second = runCatching { validateInstalled(context, manager, bundle, directory) }.exceptionOrNull() ?: return
             if (second is BundledConflict || !isProvablyIncomplete(second)) throw second
-            check(!isSessionActive()) { "Bundled components cannot be installed during an active game session." }
-            onStatus("Repairing ${bundle.name}...")
+            check(!isSessionActive()) { SESSION_ACTIVE.first }
+            onStatus(WowI18n.pick(context, "Repairing ${bundle.name}...", "${bundle.name} javítása..."))
             com.winlator.core.FileUtils.delete(directory)
             check(!directory.exists()) { "Cannot remove the incomplete ${bundle.name} installation." }
         }
         onStatus(when (bundle.type) {
-            ContentProfile.ContentType.CONTENT_TYPE_PROTON -> "Installing Proton..."
-            ContentProfile.ContentType.CONTENT_TYPE_DXVK -> "Installing DXVK..."
-            ContentProfile.ContentType.CONTENT_TYPE_VKD3D -> "Installing VKD3D..."
-            else -> "Installing driver..."
+            ContentProfile.ContentType.CONTENT_TYPE_PROTON -> WowI18n.pick(context, "Installing Proton...", "A Proton telepítése...")
+            ContentProfile.ContentType.CONTENT_TYPE_DXVK -> WowI18n.pick(context, "Installing DXVK...", "A DXVK telepítése...")
+            ContentProfile.ContentType.CONTENT_TYPE_VKD3D -> WowI18n.pick(context, "Installing VKD3D...", "A VKD3D telepítése...")
+            else -> WowI18n.pick(context, "Installing driver...", "A driver telepítése...")
         })
         val temporary = File(context.cacheDir, "bundled-${java.util.UUID.randomUUID()}-${bundle.asset}")
         try {
@@ -260,7 +267,7 @@ internal object WowBundledComponents {
             }
             val hash = digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) }
             check(hash == bundle.sha256) { "Bundled ${bundle.name} checksum mismatch." }
-            check(!isSessionActive()) { "Bundled components cannot be installed during an active game session." }
+            check(!isSessionActive()) { SESSION_ACTIVE.first }
             val uri = Uri.fromFile(temporary)
             when (bundle.type) {
                 ContentProfile.ContentType.CONTENT_TYPE_PROTON -> WowDeveloperComponents.importRuntime(context, uri)

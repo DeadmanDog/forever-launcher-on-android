@@ -268,7 +268,9 @@ public class WindowManager extends XResourceManager {
                     sibling = getWindow(inputStream.readInt());
                     break;
                 case Window.FLAG_STACK_MODE:
-                    stackMode = Window.StackMode.values()[inputStream.readInt()];
+                    int stackModeValue = inputStream.readInt();
+                    if (stackModeValue < 0 || stackModeValue >= Window.StackMode.values().length) throw new BadValue(stackModeValue);
+                    stackMode = Window.StackMode.values()[stackModeValue];
                     break;
             }
         }
@@ -277,6 +279,8 @@ public class WindowManager extends XResourceManager {
         if (height <= 0) throw new BadValue(height);
 
         Window parent = window.getParent();
+        // The root window cannot be moved, resized or restacked (it used to be a NullPointerException on its missing parent).
+        if (parent == null) return;
         boolean overrideRedirect = window.attributes.isOverrideRedirect();
         if (!parent.hasEventListenerFor(Event.SUBSTRUCTURE_REDIRECT) || overrideRedirect) {
             changeWindowGeometry(window, x, y, width, height);

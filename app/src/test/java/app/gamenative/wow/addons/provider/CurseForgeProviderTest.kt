@@ -85,8 +85,12 @@ class CurseForgeProviderTest {
 
     @Test fun getManyPostsTheIdsAndDescriptionIsPlainText() = runBlocking {
         val provider = start()
-        assertEquals(3, provider.getMany(listOf("1001", "1002", "x", "1003")).size)
-        assertEquals("/mods", seen.last().first)
+        val many = provider.getMany(listOf("1001", "1002", "x", "1003"))
+        assertEquals(3, many.size)
+        assertTrue(seen.any { it.first == "/mods" })
+        // 2026-11-12 review: getMany (installed-addon updates) also resolves a Forever file known only from the index.
+        assertEquals("/mods/1003/files/9002", seen.last().first)
+        assertTrue(many.single { it.projectId == "1003" }.latest.getValue(AddonFlavor.FOREVER).installable)
         assertEquals("Shows quests\n• on the map", provider.description("1001"))
     }
 

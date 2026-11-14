@@ -178,7 +178,9 @@ public class XServerView extends SurfaceView implements SurfaceHolder.Callback, 
     /** Called only when the AndroidView is permanently released. */
     public void dispose() {
         stopWatchingRefreshRate();
-        if (gamescopeMode) {
+        // Review 2026-11-13: a view rebuilt while the game runs (activity recreation) must not end the Gamescope display, input
+        // injector or input sink the session still uses; the session's Gamescope component stops them when the game ends.
+        if (gamescopeMode && !app.gamenative.PluviaApp.hasLiveEnvironment()) {
             app.gamenative.display.GameNativeDrm.INSTANCE.setFrameListener(null);
             app.gamenative.display.GameNativeDrm.nativeInjectorStop();
             app.gamenative.display.GameNativeDrm.nativeStop();

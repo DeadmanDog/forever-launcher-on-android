@@ -11,8 +11,20 @@ public class ClientSocket {
     private final SocketWritePump.Transport writer = this::send;
     private final ArrayDeque<Integer> ancillaryFds = new ArrayDeque<>();
 
+    // Set before the connector closes fd: a writer that is still looping on a partial write must not send the rest to a
+    // descriptor number that may already belong to another connection.
+    private volatile boolean closed;
+
     public ClientSocket(int fd) {
         this.fd = fd;
+    }
+
+    void markClosed() {
+        closed = true;
+    }
+
+    public boolean isClosed() {
+        return closed;
     }
 
     public boolean hasAncillaryFds() {
@@ -68,10 +80,12 @@ public class ClientSocket {
 
     /** Never blocks: bytes accepted by the socket, or -2 when it is full and nothing was consumed. */
     int sendNoWait(ByteBuffer data, int offset, int length, int ancillaryFd) throws IOException {
+        if (closed) throw new IOException("X client connection is closed");
         return XConnectorEpollNative.sendSocketNoWait(fd, data, offset, length, ancillaryFd);
     }
 
     private int send(ByteBuffer data, int offset, int length, int ancillaryFd) throws IOException {
+        if (closed) throw new IOException("X client connection is closed");
         return XConnectorEpollNative.sendSocket(fd, data, offset, length, ancillaryFd);
     }
 }

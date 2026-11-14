@@ -379,7 +379,9 @@ public class XInput2Extension implements Extension {
 
             for (int word = 0; word < maskLen; word++) {
                 long value = inputStream.readUnsignedInt();
-                mask.set(value << (word * 32));
+                // The Bitmask holds events 0..63 (words 0 and 1). A shift by 64 or more is taken mod 64 in Java, so word 2
+                // used to land on word 0; events past 63 do not exist in XI 2.x, so further words are read and ignored.
+                if (word < 2) mask.set(value << (word * 32));
             }
 
             Selection sel = new Selection();

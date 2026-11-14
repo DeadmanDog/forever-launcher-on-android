@@ -41,7 +41,7 @@ internal object WowRuntimeTuning {
             .let { if (key == "present" && it == "") "fifo" else if (key == "handoff" && it == "") "0" else it }
 
     /** Choices that map to app behaviour instead of a single env variable. */
-    private val appChoices = mapOf("pacing" to setOf("api"), "fifolatency" to setOf("low", "lowest"), "cpuprofile" to setOf("laptop", "off"), "gpuprofile" to setOf("laptop", "off"),
+    private val appChoices = mapOf("pacing" to setOf("api"), "fifolatency" to setOf("low", "lowest"),
         // The WoW game account (WoW1, WoW2 ...) preselected at login when the Battle.net account has several; "" = the last used one.
         GAME_ACCOUNT to setOf("1", "2"),
         // The game region the next launch connects to; "" = the install's own region (.build.info). The game data is the same.
@@ -133,7 +133,6 @@ internal object WowRuntimeTuning {
      * skip); "low" = one step after a hitch, then stop; "lowest" = also tries one step further (an extra hitch if it does not hold).
      */
     fun fifoDrainMode(context: Context): Int = when (selected(context, "fifolatency")) { "low" -> 1; "lowest" -> 2; else -> 0 }
-    fun fifoLowLatency(context: Context): Boolean = fifoDrainMode(context) != 0
 
     /** App pacing: no API limiter is injected; inherited API limiter env is dropped. */
     fun applyAppPacing(env: EnvVars, target: Int): String {
@@ -195,15 +194,10 @@ internal object WowRuntimeTuning {
     const val LOW_LATENCY_DX12 = "lowlatency12"
 
     /**
-     * What the game is told about the processor and GPU (Proton r22+ / Vegas r48+). Saved choice values:
-     * "" = this phone's own SoC and Adreno (the default), "laptop" = a Windows-on-ARM laptop (Snapdragon X Plus +
-     * Adreno X1), "off" = what Android gives (no CPU name; the NVIDIA GeForce name for the GPU).
+     * What the game is told about the processor and GPU (Proton r22+ / Vegas r48+): since 1.3.6 always this phone's own SoC
+     * and Adreno (user; the laptop/off choices are gone). Typed values in Environment Variables still win.
      */
-    const val CPU_PROFILE = "cpuprofile"
-    const val GPU_PROFILE = "gpuprofile"
     const val CPU_VENDOR = "Qualcomm Technologies Inc"
-    // The Wine side keeps at most 48 characters of the name.
-    const val LAPTOP_CPU_NAME = "Snapdragon(R) X Plus Oryon(TM) CPU"
 
     /** The marketing name of a Snapdragon SoC from Build.SOC_MODEL; null when unknown. */
     fun realCpuName(socModel: String): String? = when (socModel.uppercase()) {
@@ -230,30 +224,18 @@ internal object WowRuntimeTuning {
     }
 
     /** Saved WINE_CPU_NAME / _VENDOR / _PEAK_MHZ (Environment Variables) always win. Every core reports the chip's peak frequency. */
-    fun applyCpuIdentity(env: EnvVars, saved: EnvVars, profile: String, socModel: String) {
-        val values = when (profile) {
-            "off" -> null
-            "laptop" -> mapOf("WINE_CPU_VENDOR" to CPU_VENDOR, "WINE_CPU_NAME" to LAPTOP_CPU_NAME, "WINE_CPU_PEAK_MHZ" to "1")
-            else -> mapOf("WINE_CPU_VENDOR" to CPU_VENDOR,
-                "WINE_CPU_NAME" to (realCpuName(socModel) ?: "Snapdragon(R) $socModel CPU"), "WINE_CPU_PEAK_MHZ" to "1")
-        }
-        for (key in listOf("WINE_CPU_VENDOR", "WINE_CPU_NAME", "WINE_CPU_PEAK_MHZ")) {
-            if (saved.has(key)) continue
-            val value = values?.get(key)
-            if (value != null) env.put(key, value) else env.remove(key)
-        }
+    fun applyCpuIdentity(env: EnvVars, saved: EnvVars, socModel: String) {
+        val values = mapOf("WINE_CPU_VENDOR" to CPU_VENDOR,
+            "WINE_CPU_NAME" to (realCpuName(socModel) ?: "Snapdragon(R) $socModel CPU"), "WINE_CPU_PEAK_MHZ" to "1")
+        for ((key, value) in values) if (!saved.has(key)) env.put(key, value)
     }
 
-    /** Saved DXVK_VEGAS_* (Environment Variables) always win. the default keeps the Qualcomm vendor with this Adreno's own name and id. */
-    fun applyGpuIdentity(env: EnvVars, saved: EnvVars, profile: String, gpuModel: String?) {
-        val values = when (profile) {
-            "off" -> emptyMap()
-            "laptop" -> mapOf("DXVK_VEGAS_PERSONA" to "qualcomm")
-            else -> buildMap {
-                put("DXVK_VEGAS_PERSONA", "qualcomm")
-                realGpuName(gpuModel)?.let { put("DXVK_VEGAS_GPU_NAME", it) }
-                realGpuDeviceId(gpuModel)?.let { put("DXVK_VEGAS_GPU_DEVICE", it) }
-            }
+    /** Saved DXVK_VEGAS_* (Environment Variables) always win: the Qualcomm vendor with this Adreno's own name and id. */
+    fun applyGpuIdentity(env: EnvVars, saved: EnvVars, gpuModel: String?) {
+        val values = buildMap {
+            put("DXVK_VEGAS_PERSONA", "qualcomm")
+            realGpuName(gpuModel)?.let { put("DXVK_VEGAS_GPU_NAME", it) }
+            realGpuDeviceId(gpuModel)?.let { put("DXVK_VEGAS_GPU_DEVICE", it) }
         }
         for (key in listOf("DXVK_VEGAS_PERSONA", "DXVK_VEGAS_GPU_NAME", "DXVK_VEGAS_GPU_DEVICE")) {
             if (saved.has(key)) continue
@@ -279,7 +261,7 @@ internal object WowRuntimeTuning {
         env.put("MESA_VK_WSI_DEBUG", (flags + "forcesync").joinToString(","))
     }
 
-    /** WowLaunchPolicy switch: report the highest-clocked cores as performance cores (Proton r21+, off by default). */
+    /** WowLaunchPolicy switch: report the highest-clocked cores as performance cores (Proton r21+, on by default since 2026-11-07). */
     const val CPU_CLASSES = "cpuclasses"
 
     /**
@@ -319,13 +301,11 @@ internal object WowRuntimeTuning {
     /**
      * VKD3D r11, DX12 only: VKD3D_REPORT_DISCRETE=1 answers the game's D3D12 architecture query with UMA = false. WoW's DX12
      * renderer caps the render scale at 100% on a UMA GPU (1.1.6 diag: DXGI says Discrete, VKD3D "UMA-like topology"); DX11 has no
-     * such query. Off by default (WoW may then upload through copies); a saved value wins.
+     * such query. Always on under DX12 since 1.3.6 (user; no setting); a saved value wins.
      */
-    const val REPORT_DISCRETE = "reportdiscrete"
-
-    fun applyReportDiscrete(env: EnvVars, saved: EnvVars, dx12: Boolean, enabled: Boolean) {
+    fun applyReportDiscrete(env: EnvVars, saved: EnvVars, dx12: Boolean) {
         if (saved.has("VKD3D_REPORT_DISCRETE")) return
-        if (dx12 && enabled) env.put("VKD3D_REPORT_DISCRETE", "1") else env.remove("VKD3D_REPORT_DISCRETE")
+        if (dx12) env.put("VKD3D_REPORT_DISCRETE", "1") else env.remove("VKD3D_REPORT_DISCRETE")
     }
 
     fun applyEventPool(env: EnvVars, saved: EnvVars, enabled: Boolean) {
@@ -343,7 +323,7 @@ internal object WowRuntimeTuning {
     fun kgslGpuModel(): String? = listOf("/sys/class/kgsl/kgsl-3d0/gpu_model", "/sys/class/kgsl/kgsl-3d0/devfreq/device/gpu_model")
         .firstNotNullOfOrNull { runCatching { java.io.File(it).readText().trim() }.getOrNull()?.takeIf { text -> text.isNotEmpty() } }
 
-    /** WowLaunchPolicy switch: Vegas r49+ real pipeline bind-skip (experimental, off by default; not in the Quick Menu). */
+    /** WowLaunchPolicy switch: Vegas r49+ real pipeline bind-skip (on by default since 2026-11-07; not in the Quick Menu). */
     const val VEGAS_BINDSKIP = "vegasbindskip"
     const val HYBRID_GPL = "hybridgpl"
 
@@ -457,13 +437,6 @@ internal object WowRuntimeTuning {
         return LiveLimit(if (lower) requested else 0, inForce, requested != inForce)
     }
 
-    /**
-     * 1.2.0: the frame rate the renderer (its latency windows and late-frame test, the FIFO drain) and the Android surface are
-     * told for a limit change in the running game: the one that really holds. It used to be [surfaceTarget]: the request itself,
-     * or the saved DXVK/VKD3D value; with DXVK/VKD3D owning pacing a higher request stayed at the launch limit while the renderer
-     * expected the request, and a lower one (the app limiter on top of a typed limit) ran slower than the renderer expected.
-     */
-    fun engineLimit(apiOwned: Boolean, requested: Int, apiLimit: Int = apiLimitAtLaunch): Int = live(apiOwned, requested, apiLimit).inForce
 
     /**
      * Gamescope: whether a limit change made in the running game waits for the next launch. Gamescope's limiter takes a lower limit
@@ -511,21 +484,21 @@ internal object WowRuntimeTuning {
             // The default silently stays on the saved mode with an older DXVK; an explicit Hybrid choice must fail loudly.
             if (asyncIsDefault(context)) choices["async"] = ""
             else if (!dx12 && EnvVars(container.envVars).get("DXVK_ASYNC") in setOf("", "1"))
-                error("Hybrid needs the bundled DXVK. Apply it on the Components tab or choose Saved / default.")
+                error("Hybrid needs the bundled DXVK. Apply it on the Components tab or choose GPL or Async.")
         }
         applyChoices(env, EnvVars(container.envVars), dx12, choices)
         applyFrameLatency(env, dx12, WowLaunchPolicy.enabled(context, if (dx12) LOW_LATENCY_DX12 else LOW_LATENCY))
         applyVkd3dSteer(env, EnvVars(container.envVars), dx12 && !WowDisplayBackend.isGamescope(container))
         // 1.3.6 (user): always report a dedicated GPU under DX12 (no setting); a typed VKD3D_REPORT_DISCRETE still wins.
-        applyReportDiscrete(env, EnvVars(container.envVars), dx12, true)
+        applyReportDiscrete(env, EnvVars(container.envVars), dx12)
         applyVegasBindSkip(env, EnvVars(container.envVars), WowLaunchPolicy.enabled(context, VEGAS_BINDSKIP))
         applyHybridGpl(env, EnvVars(container.envVars), WowLaunchPolicy.enabled(context, HYBRID_GPL))
         // 1.3.6 (user): the game always sees this phone's own Snapdragon and Adreno (the choices are gone; typed values still win).
-        applyCpuIdentity(env, EnvVars(container.envVars), "", android.os.Build.SOC_MODEL.orEmpty())
+        applyCpuIdentity(env, EnvVars(container.envVars), android.os.Build.SOC_MODEL.orEmpty())
         applyCpuClasses(env, EnvVars(container.envVars), WowLaunchPolicy.enabled(context, CPU_CLASSES))
         applyEventPool(env, EnvVars(container.envVars), WowLaunchPolicy.enabled(context, EVENT_POOL))
         applyPresentSteer(env, EnvVars(container.envVars), WowDisplayBackend.isGamescope(container) && dx12)
-        applyGpuIdentity(env, EnvVars(container.envVars), "", kgslGpuModel())
+        applyGpuIdentity(env, EnvVars(container.envVars), kgslGpuModel())
         // These probes are launch-local and share the existing diagnostic switch. OFF removes
         // inherited paths too, while the saved container environment remains untouched.
         applyDiagnosticStats(env, EnvVars(container.envVars), WowDiagnostics.enabled(context))

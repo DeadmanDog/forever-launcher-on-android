@@ -15,6 +15,9 @@ public class XOutputStream {
     private final ReentrantLock lock = new ReentrantLock();
     private int ancillaryFd = -1;
     private IOException writeFailure;
+    // Set (under lock) by the connector before it closes the socket: the descriptor number may already belong to a new
+    // connection, so nothing may be written through it any more. Output written after this is dropped.
+    private volatile boolean closed;
 
     /** One flush that the socket could not take yet: its remaining bytes and the descriptor that travels with its first byte. */
     private static final class Pending {
@@ -133,6 +136,12 @@ public class XOutputStream {
     }
 
     private void flush() throws IOException {
+        if (closed) {
+            // The connection is gone (its fd may be reused): drop the bytes, never write them anywhere.
+            buffer.clear();
+            ancillaryFd = -1;
+            return;
+        }
         if (writeFailure != null) {
             buffer.clear();
             throw writeFailure;
@@ -163,6 +172,7 @@ public class XOutputStream {
 
     /** Caller holds [lock]. Sends what the socket takes now and queues the rest, keeping the byte order. */
     private void flushNonBlocking() throws IOException {
+        if (closed) { buffer.clear(); ancillaryFd = -1; return; }
         if (buffer.position() == 0) return;
         buffer.flip();
         int fdToSend = ancillaryFd;
@@ -209,6 +219,7 @@ public class XOutputStream {
     boolean drainPending() throws IOException {
         lock.lock();
         try {
+            if (closed) { releasePending(); return true; }
             if (writeFailure != null) { releasePending(); throw writeFailure; }
             try {
                 while (!pending.isEmpty()) {
@@ -235,14 +246,65 @@ public class XOutputStream {
         }
     }
 
+    /**
+     * The connection is closed: from now on output is dropped instead of written to the socket's descriptor, which the connector
+     * closes right after this (and the kernel may hand to the next client). Waits for a write in progress to end, so no write can
+     * start or continue on the descriptor once this returns; queued output is dropped too. The wait is bounded: a writer stuck in
+     * a blocking write to a peer that stopped reading must not stall the connector forever (its next write sees the flag).
+     */
+    public void markClosed() {
+        closed = true;
+        if (clientSocket != null) clientSocket.markClosed();
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(2, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (!locked) return;
+        try {
+            buffer.clear();
+            ancillaryFd = -1;
+            pending.clear();
+            pendingBytes = 0;
+            hasPendingOutput = false;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public boolean isClosed() {
+        return closed;
+    }
+
     /** Drops queued output (the connection is gone). A descriptor that never travelled stays owned by its sender. */
     void releasePending() {
         lock.lock();
         try { pending.clear(); pendingBytes = 0; hasPendingOutput = false; } finally { lock.unlock(); }
     }
 
+    // Holds no state of its own (the ReentrantLock counts nested holds), so one instance serves every lock() (2026-11-12 review).
+    private final OutputStreamLock streamLock = new OutputStreamLock();
+
     public XStreamLock lock() {
-        return new OutputStreamLock();
+        lock.lock();
+        return streamLock;
+    }
+
+    // The thread whose writes stay buffered until endBatch (guarded by lock). Writes from any other thread flush as always, and
+    // take the batched bytes with them in order.
+    private Thread batchOwner;
+
+    /** Writes of the calling thread are kept until {@link #endBatch()} (one dispatch round of the epoll thread). */
+    void beginBatch() {
+        lock.lock();
+        try { batchOwner = Thread.currentThread(); } finally { lock.unlock(); }
+    }
+
+    /** Ends the round and sends everything it buffered. */
+    void endBatch() throws IOException {
+        lock.lock();
+        try { batchOwner = null; flush(); } finally { lock.unlock(); }
     }
 
     private void ensureSpaceIsAvailable(int length) {
@@ -268,13 +330,11 @@ public class XOutputStream {
     }
 
     private class OutputStreamLock implements XStreamLock {
-        public OutputStreamLock() {
-            lock.lock();
-        }
-
         @Override
         public void close() throws IOException {
             try {
+                // In a batch round: keep the bytes (a descriptor or an earlier failure still go out / surface at once).
+                if (batchOwner == Thread.currentThread() && ancillaryFd == -1 && writeFailure == null) return;
                 flush();
             }
             finally {

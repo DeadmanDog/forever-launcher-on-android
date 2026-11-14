@@ -182,6 +182,8 @@ private const val EXIT_PROCESS_TIMEOUT_MS = 30_000L
 private const val EXIT_PROCESS_POLL_INTERVAL_MS = 1_000L
 private const val EXIT_PROCESS_RESPONSE_TIMEOUT_MS = 2_000L
 private const val QUICK_MENU_PROCESS_POLL_INTERVAL_MS = 2_000L
+/** How long a game setup waits for an earlier one (an aborted first-boot extraction) before it gives up; the launcher waits as long. */
+private const val SETUP_GATE_WAIT_MS = 30_000L
 private const val DEFAULT_FPS_LIMITER_MAX_HZ = 60
 private const val DEFAULT_FPS_LIMITER_TARGET_HZ = 60
 private const val FPS_LIMITER_ENABLED_EXTRA = "fpsLimiterEnabled"
@@ -1282,6 +1284,16 @@ fun XServerScreen(
         }
     }
 
+    // Review 2026-11-13: lets go of everything the game holds (keys, controller buttons/sticks/triggers, the stick-mouse timer) when
+    // the Quick Menu takes the input and when the app is paused. The controller part runs on the next main-loop turn: the menu can
+    // be opened from inside the controller handler's own event processing.
+    fun releaseHeldInput() {
+        releaseGuestKeys(xServerView)
+        view.post {
+            ControllerInputRelease.release(physicalControllerHandler, xServerView?.getxServer()?.winHandler) { releaseGuestKeys(xServerView) }
+        }
+    }
+
     val gameBack: () -> Unit = gameBack@{
         val imeVisible = ViewCompat.getRootWindowInsets(view)
             ?.isVisible(WindowInsetsCompat.Type.ime()) == true
@@ -1317,8 +1329,8 @@ fun XServerScreen(
             }
         }, 100)
 
-        // A key held in the game would never see its release while the menu has the keyboard.
-        releaseGuestKeys(xServerView)
+        // A key or controller input held in the game would never see its release while the menu has the input.
+        releaseHeldInput()
         showQuickMenu = true
     }
 
@@ -1592,6 +1604,8 @@ fun XServerScreen(
                     Lifecycle.Event.ON_PAUSE,
                     Lifecycle.Event.ON_RESUME -> {
 
+                        // The game keeps running in the background: nothing it holds may stay pressed while the app is away.
+                        if (event == Lifecycle.Event.ON_PAUSE && !session.isExiting) releaseHeldInput()
                         syncRendererToCurrentLifecycleState()
                         if (event == Lifecycle.Event.ON_RESUME) {
                             xServerView?.getxServer()?.winHandler?.reassertPrimaryController()
@@ -1801,10 +1815,16 @@ fun XServerScreen(
                     val output = panelMode?.takeIf { effects.needsPanelOutput }?.let {
                         app.gamenative.display.GamescopeEffects.outputSize(guest, it.physicalWidth, it.physicalHeight)
                     } ?: guest
-                    app.gamenative.display.GameNativeDrm.beginSession(
-                        app.gamenative.display.GamescopeWindowPolicy.gameLaunch(true, container.executablePath), output, effects,
-                        app.gamenative.ui.screen.wow.WowRuntimeTuning.gamescopeOwnsFifoPacing(context, container))
-                    xServerToUse.setInputEventSink(app.gamenative.display.GamescopeInputSink(guest.first, guest.second))
+                    // Review 2026-11-13: only a new session begins one. A view rebuilt for a running game (activity recreation)
+                    // keeps the session's readiness watcher, cursor state and input sink (the pointer position it tracks).
+                    if (existingXServer == null) {
+                        app.gamenative.display.GameNativeDrm.beginSession(
+                            app.gamenative.display.GamescopeWindowPolicy.gameLaunch(true, container.executablePath), output, effects,
+                            app.gamenative.ui.screen.wow.WowRuntimeTuning.gamescopeOwnsFifoPacing(context, container))
+                    }
+                    if (existingXServer == null || xServerToUse.inputEventSink !is app.gamenative.display.GamescopeInputSink) {
+                        xServerToUse.setInputEventSink(app.gamenative.display.GamescopeInputSink(guest.first, guest.second))
+                    }
                     (renderer as? VulkanRenderer)?.setGamescopeInputScaling(effects.inputScalingMode)
                     app.gamenative.display.GameNativeDrm.frameListener = {
                         frameRating?.updateNanos(SystemClock.elapsedRealtimeNanos())
@@ -2021,154 +2041,168 @@ fun XServerScreen(
                         Thread(r, "WineSetup-Thread").apply { isDaemon = false }
                     }
 
+                    // Counted from here, not from the thread's start: a launch that comes in before the thread runs must wait for it too.
+                    PluviaApp.beginGameSetup()
+                    try {
                     setupExecutor.submit {
-                        var preparedEnvironment: XEnvironment? = null
-                        try {
-                            if (session.isExiting) return@submit
-                            val containerManager = ContainerManager(context)
-                            // Configure WinHandler with container's input API settings
-                            val handler = getxServer().winHandler
-                            if (container.inputType !in 0..3) {
-                                container.inputType = PreferredInputApi.BOTH.ordinal
-                                container.saveData()
-                            }
-                            handler.setPreferredInputApi(PreferredInputApi.values()[container.inputType])
-                            handler.setDInputMapperType(container.dinputMapperType)
-                            if (container.isDisableMouseInput()) {
-                                PluviaApp.touchpadView?.setTouchscreenMouseDisabled(true)
-                            } else if (container.isTouchscreenMode()) {
-                                PluviaApp.touchpadView?.setTouchscreenMode(true)
-                                // Apply per-game gesture configuration
-                                val gestureConfig = app.gamenative.data.TouchGestureConfig.fromJson(container.getGestureConfig())
-                                PluviaApp.touchpadView?.setGestureConfig(gestureConfig)
-                            }
+                      try {
+                        val ran = PluviaApp.runGameSetupExclusively(SETUP_GATE_WAIT_MS) setup@{
+                            var preparedEnvironment: XEnvironment? = null
+                            try {
+                                if (session.isExiting) return@setup
+                                val containerManager = ContainerManager(context)
+                                // Configure WinHandler with container's input API settings
+                                val handler = getxServer().winHandler
+                                if (container.inputType !in 0..3) {
+                                    container.inputType = PreferredInputApi.BOTH.ordinal
+                                    container.saveData()
+                                }
+                                handler.setPreferredInputApi(PreferredInputApi.values()[container.inputType])
+                                handler.setDInputMapperType(container.dinputMapperType)
+                                if (container.isDisableMouseInput()) {
+                                    PluviaApp.touchpadView?.setTouchscreenMouseDisabled(true)
+                                } else if (container.isTouchscreenMode()) {
+                                    PluviaApp.touchpadView?.setTouchscreenMode(true)
+                                    // Apply per-game gesture configuration
+                                    val gestureConfig = app.gamenative.data.TouchGestureConfig.fromJson(container.getGestureConfig())
+                                    PluviaApp.touchpadView?.setGestureConfig(gestureConfig)
+                                }
 
-                            containerManager.activateContainer(container)
-                            app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.26f, 0.34f, 2500)
+                                containerManager.activateContainer(container)
+                                app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.26f, 0.34f, 2500)
 
-                            val imageFs = ImageFs.find(context)
+                                val imageFs = ImageFs.find(context)
 
-                            taskAffinityMask = ProcessHelper.getAffinityMask(container.getCPUList(true)).toShort().toInt()
-                            taskAffinityMaskWoW64 = ProcessHelper.getAffinityMask(container.getCPUListWoW64(true)).toShort().toInt()
-                            win32AppWorkarounds?.setTaskAffinityMasks(taskAffinityMask, taskAffinityMaskWoW64)
-                            val appliedVariantSeen = container.getExtra("appliedContainerVariant")
-                            val appliedWineVersionSeen = container.getExtra("appliedWineVersion")
-                            val markersAvail = appliedVariantSeen.isNotEmpty() && appliedWineVersionSeen.isNotEmpty()
-                            val variantMismatch = markersAvail && container.containerVariant != appliedVariantSeen
-                            val wineVersionMismatch = markersAvail && container.wineVersion != appliedWineVersionSeen
-                            val imgVersionMismatch = container.getExtra("imgVersion") != imageFs.getVersion().toString()
-                            containerVariantChanged = variantMismatch || wineVersionMismatch || imgVersionMismatch
-                            firstTimeBoot = container.getExtra("appVersion").isEmpty() || containerVariantChanged
-                            needsUnpacking = container.isNeedsUnpacking
+                                taskAffinityMask = ProcessHelper.getAffinityMask(container.getCPUList(true)).toShort().toInt()
+                                taskAffinityMaskWoW64 = ProcessHelper.getAffinityMask(container.getCPUListWoW64(true)).toShort().toInt()
+                                win32AppWorkarounds?.setTaskAffinityMasks(taskAffinityMask, taskAffinityMaskWoW64)
+                                val appliedVariantSeen = container.getExtra("appliedContainerVariant")
+                                val appliedWineVersionSeen = container.getExtra("appliedWineVersion")
+                                val markersAvail = appliedVariantSeen.isNotEmpty() && appliedWineVersionSeen.isNotEmpty()
+                                val variantMismatch = markersAvail && container.containerVariant != appliedVariantSeen
+                                val wineVersionMismatch = markersAvail && container.wineVersion != appliedWineVersionSeen
+                                val imgVersionMismatch = container.getExtra("imgVersion") != imageFs.getVersion().toString()
+                                containerVariantChanged = variantMismatch || wineVersionMismatch || imgVersionMismatch
+                                firstTimeBoot = container.getExtra("appVersion").isEmpty() || containerVariantChanged
+                                needsUnpacking = container.isNeedsUnpacking
 
-                            val wineVersion = container.wineVersion
+                                val wineVersion = container.wineVersion
 
-                            val contentsManager = ContentsManager(context)
-                            contentsManager.syncContents()
-                            val resolvedWineInfo = WineInfo.fromIdentifier(context, contentsManager, wineVersion)
+                                val contentsManager = ContentsManager(context)
+                                contentsManager.syncContents()
+                                val resolvedWineInfo = WineInfo.fromIdentifier(context, contentsManager, wineVersion)
 
-                            xServerState.value = xServerState.value.copy(
-                                wineInfo = resolvedWineInfo,
-                            )
+                                xServerState.value = xServerState.value.copy(
+                                    wineInfo = resolvedWineInfo,
+                                )
 
-                            if (!xServerState.value.wineInfo.isMainWineVersion()) {
+                                if (!xServerState.value.wineInfo.isMainWineVersion()) {
 
-                                imageFs.setWinePath(xServerState.value.wineInfo.path)
-                            } else {
-                                imageFs.setWinePath(imageFs.rootDir.path + "/opt/wine")
-                            }
+                                    imageFs.setWinePath(xServerState.value.wineInfo.path)
+                                } else {
+                                    imageFs.setWinePath(imageFs.rootDir.path + "/opt/wine")
+                                }
 
-                            val onExtractFileListener = if (!xServerState.value.wineInfo.isWin64) {
-                                object : OnExtractFileListener {
-                                    override fun onExtractFile(destination: File?, size: Long): File? {
-                                        return destination?.path?.let {
-                                            if (it.contains("system32/")) {
-                                                null
-                                            } else {
-                                                File(it.replace("syswow64/", "system32/"))
+                                val onExtractFileListener = if (!xServerState.value.wineInfo.isWin64) {
+                                    object : OnExtractFileListener {
+                                        override fun onExtractFile(destination: File?, size: Long): File? {
+                                            return destination?.path?.let {
+                                                if (it.contains("system32/")) {
+                                                    null
+                                                } else {
+                                                    File(it.replace("syswow64/", "system32/"))
+                                                }
                                             }
                                         }
                                     }
-                                }
-                            } else {
-                                null
-                            }
-
-                            val envVars = EnvVars()
-
-                            app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.34f, 0.50f, 5000)
-                            runBlocking {
-                                setupWineSystemFiles(
-                                    context,
-                                    firstTimeBoot,
-                                    xServerView!!.getxServer().screenInfo,
-                                    xServerState,
-                                    container,
-                                    containerManager,
-                                    envVars,
-                                    contentsManager,
-                                    onExtractFileListener,
-                                )
-                            }
-
-                            app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.52f, 0.60f, 2500)
-                            runBlocking {
-                                extractGraphicsDriverFiles(
-                                    context,
-                                    xServerState.value.graphicsDriver,
-                                    xServerState.value.dxwrapper,
-                                    xServerState.value.dxwrapperConfig!!,
-                                    container,
-                                    envVars,
-                                    firstTimeBoot,
-                                )
-                            }
-
-                            selectWinePulseDriver(container, ImageFs.find(context))
-                            setImagefsContainerVariant(context, container)
-                            if (session.isExiting) return@submit
-                            app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.62f, 0.68f, 2000)
-                            preparedEnvironment = setupXEnvironment(
-                                session,
-                                context,
-                                appId,
-                                xServerState,
-                                envVars,
-                                container,
-                                xServerView!!.getxServer(),
-                                containerVariantChanged,
-                                onGameLaunchError,
-                                isOffline,
-                                contentsManager,
-                            )
-
-                            if (session.isExiting) {
-                                preparedEnvironment.stopEnvironmentComponents()
-                                return@submit
-                            }
-                            PluviaApp.xEnvironment = preparedEnvironment
-                            // Wine and the game are starting: from here the bar only waits for the game's own window.
-                            app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.70f, 0.97f, 9000)
-                            if (!PluviaApp.isActivityInForeground && !neverSuspend) {
-                                PluviaApp.xEnvironment?.onPause()
-                                if (manualResumeMode) {
-                                    view.post {
-                                        PluviaApp.isOverlayPaused = true
-
-                                    }
                                 } else {
-
+                                    null
                                 }
+
+                                val envVars = EnvVars()
+
+                                app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.34f, 0.50f, 5000)
+                                runBlocking {
+                                    setupWineSystemFiles(
+                                        context,
+                                        firstTimeBoot,
+                                        xServerView!!.getxServer().screenInfo,
+                                        xServerState,
+                                        container,
+                                        containerManager,
+                                        envVars,
+                                        contentsManager,
+                                        onExtractFileListener,
+                                    )
+                                }
+
+                                // An exit during the (long, first-boot) prefix extraction: nothing more is extracted for a session that ended.
+                                if (session.isExiting) return@setup
+                                app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.52f, 0.60f, 2500)
+                                runBlocking {
+                                    extractGraphicsDriverFiles(
+                                        context,
+                                        xServerState.value.graphicsDriver,
+                                        xServerState.value.dxwrapper,
+                                        xServerState.value.dxwrapperConfig!!,
+                                        container,
+                                        envVars,
+                                        firstTimeBoot,
+                                    )
+                                }
+
+                                selectWinePulseDriver(container, ImageFs.find(context))
+                                setImagefsContainerVariant(context, container)
+                                if (session.isExiting) return@setup
+                                app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.62f, 0.68f, 2000)
+                                preparedEnvironment = setupXEnvironment(
+                                    session,
+                                    context,
+                                    appId,
+                                    xServerState,
+                                    envVars,
+                                    container,
+                                    xServerView!!.getxServer(),
+                                    containerVariantChanged,
+                                    onGameLaunchError,
+                                    isOffline,
+                                    contentsManager,
+                                )
+
+                                if (session.isExiting) {
+                                    preparedEnvironment.stopEnvironmentComponents()
+                                    return@setup
+                                }
+                                PluviaApp.xEnvironment = preparedEnvironment
+                                // Wine and the game are starting: from here the bar only waits for the game's own window.
+                                app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.70f, 0.97f, 9000)
+                                if (!PluviaApp.isActivityInForeground && !neverSuspend) {
+                                    // Review 2026-11-13: the same as MainActivity.onPause - the game keeps running (and connected) while
+                                    // the app is in the background; only the microphone pauses. Stopping Wine here (onPause) made WoW
+                                    // drop its connection when the environment became ready with the app in the background.
+                                    PluviaApp.xEnvironment?.onBackground()
+                                }
+                            } catch (e: Exception) {
+                                try {
+                                    preparedEnvironment?.stopEnvironmentComponents()
+                                } catch (cleanupEx: Exception) { }
+                                if (PluviaApp.xEnvironment === preparedEnvironment) PluviaApp.xEnvironment = null
+                                if (!session.isExiting) onGameLaunchError?.invoke("Failed to setup wine: ${e.message}")
                             }
-                        } catch (e: Exception) {
-                            try {
-                                preparedEnvironment?.stopEnvironmentComponents()
-                            } catch (cleanupEx: Exception) { }
-                            if (PluviaApp.xEnvironment === preparedEnvironment) PluviaApp.xEnvironment = null
-                            if (!session.isExiting) onGameLaunchError?.invoke("Failed to setup wine: ${e.message}")
-                        } finally {
-                            setupExecutor.shutdown()
                         }
+                        if (!ran && !session.isExiting) {
+                            onGameLaunchError?.invoke(app.gamenative.ui.screen.wow.WowI18n.pick(context,
+                                "The previous game session is still closing. Try again in a moment.",
+                                "Az előző játékmenet még záródik. Próbáld újra egy pillanat múlva."))
+                        }
+                      } finally {
+                        PluviaApp.endGameSetup()
+                        setupExecutor.shutdown()
+                      }
+                    }
+                    } catch (rejected: java.util.concurrent.RejectedExecutionException) {
+                        PluviaApp.endGameSetup()
+                        throw rejected
                     }
                 }
             }
@@ -2222,7 +2256,10 @@ fun XServerScreen(
                 xServer = xServerView.getxServer(),
                 gameNameProvider = { container.name },
                 showKeyboard = showSoftKeyboard,
-                openQuickMenu = { showQuickMenu = true },
+                openQuickMenu = {
+                    releaseHeldInput()
+                    showQuickMenu = true
+                },
                 onSettingsVisibilityChanged = { visible ->
                     keepPausedForEditor = visible
                     if (!visible) resumeIfAllowedAfterOverlay()

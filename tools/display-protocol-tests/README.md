@@ -3,7 +3,7 @@
 Run with the persistent JDK environment:
 
 ```sh
-source /home/fsos-x/.local/share/wow-build-tools/env.sh
+source ~/.local/share/wow-build-tools/env.sh
 python3 -B tools/display-protocol-tests/run.py . /tmp/new-empty-display-test-directory
 ```
 

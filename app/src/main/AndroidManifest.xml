@@ -26,6 +26,8 @@
         android:name=".PluviaApp"
         android:usesCleartextTraffic="false"
         android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:extractNativeLibs="true"
         android:icon="${icon}"
         android:roundIcon="${roundIcon}"

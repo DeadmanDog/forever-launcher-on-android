@@ -190,12 +190,36 @@ object SystemMetricsSources {
         return null
     }
 
+    // 2026-11-12 review: the HUD reads dozens of one-line sysfs and /proc files every second; a BufferedReader per read cost
+    // about 16 KB of buffers each time. One small buffer per thread is reused instead.
+    private val lineBuffer = ThreadLocal.withInitial { ByteArray(1024) }
+
+    /** The first line of a small file (without its line end), or null when it is empty or unreadable. */
     fun readFirstLine(path: String): String? {
         return try {
-            File(path).bufferedReader().use { it.readLine() }
+            java.io.FileInputStream(path).use { input ->
+                val buffer = lineBuffer.get()!!
+                var length = 0
+                while (length < buffer.size) {
+                    val read = input.read(buffer, length, buffer.size - length)
+                    if (read <= 0) break
+                    val end = firstLineEnd(buffer, length, length + read)
+                    length += read
+                    if (end >= 0) return@use String(buffer, 0, end, Charsets.UTF_8)
+                }
+                if (length == 0) null
+                else if (length < buffer.size) String(buffer, 0, length, Charsets.UTF_8)
+                // A first line longer than the buffer: the plain way.
+                else File(path).bufferedReader().use { it.readLine() }
+            }
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun firstLineEnd(buffer: ByteArray, from: Int, to: Int): Int {
+        for (i in from until to) if (buffer[i] == '\n'.code.toByte() || buffer[i] == '\r'.code.toByte()) return i
+        return -1
     }
 
     fun readNthLine(path: String, lineIndex: Int): String? {
@@ -253,6 +277,9 @@ class CpuUsageSampler(
     private var lastIdle: Long? = null
     private var lastProcessTicks: Map<Int, Long>? = null
     private var lastProcessTimeMs = 0L
+    // /proc/stat is denied to apps on current Android: after a few failed reads it is not tried (and failed) every second.
+    private var procStatMisses = 0
+    private companion object { const val PROC_STAT_MAX_MISSES = 3 }
 
     fun reset() {
         lastTotal = null
@@ -279,7 +306,8 @@ class CpuUsageSampler(
     }
 
     fun sample(): CpuUsageReading? {
-        val parts = readLine("/proc/stat")
+        val parts = if (procStatMisses >= PROC_STAT_MAX_MISSES) null else readLine("/proc/stat")
+            .also { if (it == null) procStatMisses++ else procStatMisses = 0 }
             ?.trim()
             ?.split(Regex("\\s+"))
 

@@ -13,7 +13,10 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#include <memory>
+#include <new>
 #include "RenderWakeSignal.h"
+#include "ScanoutReleaseWaiter.h"
 #define RLOG(...)
 #define SCANOUT_LOG(...)
 
@@ -95,6 +98,16 @@ struct VulkanRendererContext {
     std::mutex scanoutMutex; std::recursive_mutex scanoutLifeMutex;
     short pendingCursorX = 0, pendingCursorY = 0, pendingCursorHotX = 0, pendingCursorHotY = 0;
     bool cursorPosDirty = false, cursorImageDirty = false;
+    // scanout buffer hand-back and cursor visibility (the optional entry points stay null here: the fallback paths run)
+    void *fnSTReparent = nullptr, *fnSTSetOnComplete = nullptr, *fnStatsGetControls = nullptr, *fnStatsReleaseControls = nullptr,
+         *fnStatsGetPrevFence = nullptr;
+    int64_t scanoutShownToken = 0; std::shared_ptr<ScanoutReleaseWaiter> scanoutReleaser; bool scanoutReleaseFailed = false;
+    static constexpr int64_t kScanoutCallbackTimeoutNs = 250000000, kScanoutFenceTimeoutNs = 100000000;
+    static constexpr int kScanoutCallbackTimeoutLimit = 8;
+    bool scanoutCursorWanted = true, scanoutCursorGeoValid = true;
+    std::mutex idleSinkMutex; std::function<void(const std::vector<int64_t>&)> idleSink;
+    bool scanoutReleaseUsable(); void releaseScanoutTokenAfter(void*, void*, int64_t); void deliverIdleTokenNow(int64_t);
+    void scanoutSetCursorVisible(bool); void scanoutDropShownToken();
 
     bool loadScanoutApi() {
         fnSCCreateFromWin = (void*)api_sc_create; fnSCRelease = (void*)api_sc_release; fnSTCreate = (void*)api_st_create;
@@ -103,7 +116,7 @@ struct VulkanRendererContext {
         return true;
     }
     void initScanout(); void initScanoutFromWindows(ANativeWindow*, ANativeWindow*); void destroyScanout();
-    void scanoutSetBuffer(AHardwareBuffer*, int, int, int, int, int = -1);
+    bool scanoutSetBuffer(AHardwareBuffer*, int, int, int, int, int = -1, int64_t = 0);
     void applyScanoutBuffer(); void scanoutSetDst(int, int, int, int);
     void scanoutSetCursorImage(void*, short, short, short); void scanoutSetCursorPos(short, short, short, short);
 };

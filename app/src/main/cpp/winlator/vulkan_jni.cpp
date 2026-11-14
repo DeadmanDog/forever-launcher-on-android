@@ -113,6 +113,7 @@ Java_com_winlator_renderer_VulkanRenderer_nativeUpdateWindowContentAHB(
     if (!r||!ahbPtr) return;
     // A C++ exception must never leave a JNI function (it would abort the process): out-of-memory here only skips this frame's update.
     try { r->updateWindowContentAHB(id,reinterpret_cast<AHardwareBuffer*>(ahbPtr),w,h,offX,offY,winW,winH,idleToken); }
+    // The renderer has already settled the Present hold (handed back unless the window kept it), so nothing is left waiting.
     catch (...) { __android_log_print(ANDROID_LOG_ERROR,"Winlator_Renderer","AHB window update failed (out of memory); previous content kept"); }
 }
 // ---- Present buffer hand-back: render thread -> Java VulkanRenderer.onPixmapIdle(long) ----
@@ -203,8 +204,11 @@ Java_com_winlator_renderer_VulkanRenderer_nativeUpdateCursorImage(
     auto* r=reinterpret_cast<VulkanRendererContext*>(handle);
     if (!r||!buf) return;
     void* px=env->GetDirectBufferAddress(buf);
-    if (px && env->GetDirectBufferCapacity(buf)>=(jlong)w*h*4)
-        r->updateCursorImage(px,w,h,hotX,hotY);
+    // A C++ exception must never leave a JNI function: out of memory keeps the previous cursor.
+    try {
+        if (px && env->GetDirectBufferCapacity(buf)>=(jlong)w*h*4)
+            r->updateCursorImage(px,w,h,hotX,hotY);
+    } catch (...) { __android_log_print(ANDROID_LOG_ERROR,"Winlator_Renderer","cursor update failed (out of memory)"); }
 }
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_renderer_VulkanRenderer_nativeSetRenderList(
@@ -235,7 +239,9 @@ Java_com_winlator_renderer_VulkanRenderer_nativeSetRenderList(
 }
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_renderer_VulkanRenderer_nativeRemoveWindow(JNIEnv*, jobject, jlong handle, jlong id) {
-    auto* r=reinterpret_cast<VulkanRendererContext*>(handle); if (r) r->removeWindow(id);
+    auto* r=reinterpret_cast<VulkanRendererContext*>(handle);
+    try { if (r) r->removeWindow(id); }
+    catch (...) { __android_log_print(ANDROID_LOG_ERROR,"Winlator_Renderer","removeWindow failed (out of memory)"); }
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -250,12 +256,35 @@ Java_com_winlator_renderer_VulkanRenderer_nativeDestroyScanout(JNIEnv*, jobject,
     if (r) r->destroyScanout();
 }
 
-extern "C" JNIEXPORT void JNICALL
+// True: the renderer hands [idleToken]'s predecessor back itself once SurfaceFlinger has let go of it; false: the caller does.
+extern "C" JNIEXPORT jboolean JNICALL
 Java_com_winlator_renderer_VulkanRenderer_nativeScanoutSetBuffer(
-    JNIEnv*, jobject, jlong handle, jlong ahbPtr, jint x, jint y, jint w, jint h, jint fenceFd)
+    JNIEnv*, jobject, jlong handle, jlong ahbPtr, jint x, jint y, jint w, jint h, jint fenceFd, jlong idleToken)
 {
     auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r && ahbPtr) r->scanoutSetBuffer(reinterpret_cast<AHardwareBuffer*>(ahbPtr), x, y, w, h, (int)fenceFd);
+    if (!r || !ahbPtr) { if (fenceFd >= 0) close(fenceFd); return JNI_FALSE; }
+    try {
+        return r->scanoutSetBuffer(reinterpret_cast<AHardwareBuffer*>(ahbPtr), x, y, w, h, (int)fenceFd, (int64_t)idleToken)
+            ? JNI_TRUE : JNI_FALSE;
+    } catch (...) { return JNI_FALSE; }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_winlator_renderer_VulkanRenderer_nativeScanoutDropShownToken(JNIEnv*, jobject, jlong handle) {
+    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
+    if (r) r->scanoutDropShownToken();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_winlator_renderer_VulkanRenderer_nativeScanoutSetCursorVisible(JNIEnv*, jobject, jlong handle, jboolean visible) {
+    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
+    if (r) r->scanoutSetCursorVisible(visible == JNI_TRUE);
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_winlator_renderer_VulkanRenderer_nativeIsAlive(JNIEnv*, jobject, jlong handle) {
+    auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
+    return r && r->isAlive() ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -319,7 +348,7 @@ Java_com_winlator_renderer_VulkanRenderer_nativeSetVerboseLog(JNIEnv*, jobject, 
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_renderer_VulkanRenderer_nativeDumpRendererInfo(JNIEnv*, jobject, jlong handle) {
     auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r) r->dumpRendererInfo();
+    try { if (r) r->dumpRendererInfo(); } catch (...) {}
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -331,7 +360,9 @@ Java_com_winlator_renderer_VulkanRenderer_nativeIsGameFrameDelivered(JNIEnv*, jo
 extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_renderer_VulkanRenderer_nativeSetFilterMode(JNIEnv*, jobject, jlong handle, jint mode) {
     auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
-    if (r) r->setFilterMode((int)mode);
+    // setFilterMode keeps the old sampler when a new one cannot be made; nothing may unwind into the JVM either way.
+    try { if (r) r->setFilterMode((int)mode); }
+    catch (...) { __android_log_print(ANDROID_LOG_ERROR,"Winlator_Renderer","setFilterMode failed"); }
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -373,7 +404,9 @@ Java_com_winlator_renderer_VulkanRenderer_nativeReattachSurface(JNIEnv* env, job
     if (!r || !surface) return JNI_FALSE;
     ANativeWindow* win = ANativeWindow_fromSurface(env, surface);
     if (!win) return JNI_FALSE;
-    bool ok = r->reattachSurface(win);
+    bool ok = false;
+    try { ok = r->reattachSurface(win); }   // owns [win] from here on
+    catch (...) { ok = false; }
     if (ok && r->scanoutActive.load()) {
         r->destroyScanout();
     }
@@ -430,7 +463,9 @@ extern "C" JNIEXPORT jlongArray JNICALL
 Java_com_winlator_renderer_VulkanRenderer_nativeTakeFrameLog(JNIEnv* env, jobject, jlong handle) {
     auto* r = reinterpret_cast<VulkanRendererContext*>(handle);
     if (!r) return nullptr;
-    std::vector<int64_t> rows((size_t)VulkanRendererContext::kFrameLogRows * VulkanRendererContext::kFrameLogFields);
+    std::vector<int64_t> rows;
+    try { rows.resize((size_t)VulkanRendererContext::kFrameLogRows * VulkanRendererContext::kFrameLogFields); }
+    catch (...) { return nullptr; }   // out of memory: no rows this time (Java treats null as empty)
     const int count = r->takeFrameLog(rows.data(), VulkanRendererContext::kFrameLogRows);
     const jsize length = count * VulkanRendererContext::kFrameLogFields;
     jlongArray out = env->NewLongArray(length);

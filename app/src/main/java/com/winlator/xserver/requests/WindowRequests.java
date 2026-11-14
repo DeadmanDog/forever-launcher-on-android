@@ -10,6 +10,7 @@ import com.winlator.xserver.Bitmask;
 import com.winlator.xserver.WindowAttributes;
 import com.winlator.xserver.errors.BadDrawable;
 import com.winlator.xserver.errors.BadIdChoice;
+import com.winlator.xserver.errors.BadLength;
 import com.winlator.xserver.errors.BadValue;
 import com.winlator.xserver.events.CreateNotify;
 import com.winlator.xserver.events.Event;
@@ -43,13 +44,23 @@ public abstract class WindowRequests {
         short width = inputStream.readShort();
         short height = inputStream.readShort();
         short borderWidth = inputStream.readShort();
-        WindowAttributes.WindowClass windowClass = WindowAttributes.WindowClass.values()[(byte)inputStream.readShort()];
+        int windowClassValue = inputStream.readUnsignedShort();
+        if (windowClassValue >= WindowAttributes.WindowClass.values().length) throw new BadValue(windowClassValue);
+        WindowAttributes.WindowClass windowClass = WindowAttributes.WindowClass.values()[windowClassValue];
         Visual visual = client.xServer.pixmapManager.getVisual(inputStream.readInt());
         Bitmask valueMask = new Bitmask(inputStream.readInt());
 
         Window window = client.xServer.windowManager.createWindow(windowId, parent, x, y, width, height, windowClass, visual, depth, client);
         window.setBorderWidth(borderWidth);
-        if (!valueMask.isEmpty()) window.attributes.update(valueMask, inputStream, client);
+        if (!valueMask.isEmpty()) {
+            try {
+                window.attributes.update(valueMask, inputStream, client);
+            } catch (XRequestError e) {
+                // A request with an error has no effect: the window is not left behind unowned.
+                client.xServer.windowManager.destroyWindow(windowId);
+                throw e;
+            }
+        }
         client.setEventListenerForWindow(window, window.attributes.getEventMask());
         client.registerAsOwnerOfResource(window);
         parent.sendEvent(Event.SUBSTRUCTURE_NOTIFY, new CreateNotify(parent, window));
@@ -160,17 +171,23 @@ public abstract class WindowRequests {
     }
 
     public static void changeProperty(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError {
-        Property.Mode mode = Property.Mode.values()[client.getRequestData()];
+        int modeValue = client.getRequestData();
+        if (modeValue < 0 || modeValue >= Property.Mode.values().length) throw new BadValue(modeValue);
+        Property.Mode mode = Property.Mode.values()[modeValue];
         int windowId = inputStream.readInt();
         Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
 
         int atom = inputStream.readInt();
         int type = inputStream.readInt();
-        byte format = inputStream.readByte();
+        int format = inputStream.readUnsignedByte();
         inputStream.skip(3);
-        int length  = inputStream.readInt();
-        int totalSize = length * (format >> 3);
+        long length = inputStream.readUnsignedInt();
+        if (Property.Format.valueOf(format) == null) throw new BadValue(format);
+        long size = length * (format >> 3);
+        // The data must be inside this request (a larger length read the following requests as property data).
+        if (size > client.getRemainingRequestLength()) throw new BadLength();
+        int totalSize = (int)size;
 
         byte[] data = null;
         if (totalSize > 0) {
@@ -201,11 +218,12 @@ public abstract class WindowRequests {
 
         int atom = inputStream.readInt();
         int type = inputStream.readInt();
-        int longOffset = inputStream.readInt();
-        int longLength = inputStream.readInt();
+        // CARD32 each: Xlib asks for 0x7FFFFFFF or 0xFFFFFFFF longs to mean "all of it".
+        long longOffset = inputStream.readUnsignedInt();
+        long longLength = inputStream.readUnsignedInt();
         Property property = window.getProperty(atom);
 
-        int bytesAfter = 0;
+        boolean deletable = false;
         try (XStreamLock lock = outputStream.lock()) {
             if (property == null) {
                 outputStream.writeByte(RESPONSE_CODE_SUCCESS);
@@ -218,21 +236,26 @@ public abstract class WindowRequests {
                 outputStream.writePad(12);
             }
             else if (property.type != type && type != 0) {
+                // Type mismatch: no data, bytes-after = the whole length, and the property is never deleted.
                 outputStream.writeByte(RESPONSE_CODE_SUCCESS);
                 outputStream.writeByte(property.format.value);
                 outputStream.writeShort(sequenceNumber);
                 outputStream.writeInt(0);
                 outputStream.writeInt(property.type);
-                outputStream.writeInt(0);
+                outputStream.writeInt(property.data.capacity());
                 outputStream.writeInt(0);
                 outputStream.writePad(12);
             }
             else {
+                // X11 GetProperty, in unsigned 64-bit arithmetic: I = 4*offset, T = N - I, L = min(T, 4*length), A = N - (I + L);
+                // BadValue only when I > N.
                 byte[] data = property.data.array();
-                int offset = longOffset * 4;
-                int length = Math.min(data.length - offset, longLength * 4);
-                if (length < 0) throw new BadValue(longOffset);
-                bytesAfter = data.length - (offset + length);
+                long start = longOffset * 4L;
+                if (start > data.length) throw new BadValue((int)longOffset);
+                int offset = (int)start;
+                int length = (int)Math.min(data.length - start, longLength * 4L);
+                int bytesAfter = data.length - (offset + length);
+                deletable = bytesAfter == 0;
 
                 outputStream.writeByte(RESPONSE_CODE_SUCCESS);
                 outputStream.writeByte(property.format.value);
@@ -247,7 +270,7 @@ public abstract class WindowRequests {
             }
         }
 
-        if (delete && property != null && bytesAfter == 0) {
+        if (delete && deletable) {
             window.removeProperty(atom);
         }
     }
@@ -346,18 +369,21 @@ public abstract class WindowRequests {
     }
 
     public static void setInputFocus(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError {
-        WindowManager.FocusRevertTo focusRevertTo = WindowManager.FocusRevertTo.values()[client.getRequestData()];
+        int revertTo = client.getRequestData();
+        if (revertTo < 0 || revertTo >= WindowManager.FocusRevertTo.values().length) throw new BadValue(revertTo);
+        WindowManager.FocusRevertTo focusRevertTo = WindowManager.FocusRevertTo.values()[revertTo];
         int windowId = inputStream.readInt();
         inputStream.skip(4);
 
-        switch (focusRevertTo) {
-            case NONE:
+        // The focus is chosen by the focus argument (0 None, 1 PointerRoot, else a window); revert-to is only stored for later.
+        switch (windowId) {
+            case 0:
                 client.xServer.windowManager.setFocus(null, focusRevertTo);
                 break;
-            case POINTER_ROOT:
+            case 1:
                 client.xServer.windowManager.setFocus(client.xServer.windowManager.rootWindow, focusRevertTo);
                 break;
-            case PARENT:
+            default:
                 Window window = client.xServer.windowManager.getWindow(windowId);
                 if (window == null) throw new BadWindow(windowId);
                 client.xServer.windowManager.setFocus(window, focusRevertTo);
@@ -450,7 +476,10 @@ public abstract class WindowRequests {
         Event event = new RawEvent(data);
 
         if (eventMask.isEmpty()) {
-            destination.originClient.sendEvent(event);
+            // X11: an empty mask sends the event to the client that created the window; none if that client is gone (the root
+            // window has no creating client at all).
+            XClient creator = destination.originClient;
+            if (creator != null && creator.isConnected()) creator.sendEvent(event);
         }
         else destination.sendEvent(eventMask, event);
     }

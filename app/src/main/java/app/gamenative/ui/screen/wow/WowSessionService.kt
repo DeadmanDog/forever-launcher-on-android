@@ -36,11 +36,22 @@ class WowSessionService : Service() {
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .build()
+        // Always first: Android ends the app when a service started with startForegroundService() does not call this in time,
+        // even when the session it was started for has already ended.
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification,
             if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0)
         running = true
+        // Review 2026-11-13: the session ended before the service got here (its stop was held back, see [sessionChanged]), or the
+        // app says no session runs: leave the foreground again and stop.
+        if (stopRequested || !sessionStillAlive()) {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
         return START_NOT_STICKY
     }
+
+    /** The app's own session flag; a host that is not the app (unit tests) has no say. */
+    private fun sessionStillAlive(): Boolean = application !is app.gamenative.PluviaApp || app.gamenative.PluviaApp.keepAlive
 
     override fun onDestroy() {
         running = false
@@ -50,6 +61,10 @@ class WowSessionService : Service() {
     companion object {
         /** True while the service runs in the foreground (set in onStartCommand, cleared in onDestroy). */
         @Volatile @JvmStatic var running = false
+            private set
+
+        /** The session ended while a start was still on its way to onStartCommand: the service stops itself there. */
+        @Volatile @JvmStatic var stopRequested = false
             private set
 
         /**
@@ -72,7 +87,17 @@ class WowSessionService : Service() {
         fun sessionChanged(context: Context, alive: Boolean) {
             val intent = Intent(context, WowSessionService::class.java)
             try {
-                if (alive) context.startForegroundService(intent) else context.stopService(intent)
+                if (alive) {
+                    stopRequested = false
+                    context.startForegroundService(intent)
+                } else {
+                    // Review 2026-11-13: stopService() before the service called startForeground() makes Android end the app
+                    // ("did not then call Service.startForeground()"). The flag goes first, then the stop only for a service that is
+                    // in the foreground: either onStartCommand sees the flag, or this sees it running (running is set after
+                    // startForeground), whatever thread this runs on.
+                    stopRequested = true
+                    if (running) context.stopService(intent)
+                }
             } catch (e: Exception) {
                 // A start while the app is already in the background is refused: the game simply runs without the service.
                 android.util.Log.w("WowSession", "Session service ${if (alive) "start" else "stop"} failed", e)

@@ -39,7 +39,7 @@ public class SyncExtension implements Extension {
     public int getNumEvents() { return 2; }
 
     @Override
-    public int getNumErrors() { return 2; }
+    public int getNumErrors() { return 3; } // SYNC 3.1: Counter, Alarm, Fence
 
     @Override
     public void setFirstEventId(byte id) { this.firstEventId = id; }
@@ -54,7 +54,11 @@ public class SyncExtension implements Extension {
     public byte getFirstErrorId() { return firstErrorId; }
 
     boolean afterPresentFence(XClient client, int id, Runnable ready, Runnable cancel) throws BadFence {
-        return fences.afterTrigger(client, id, ready, cancel);
+        try {
+            return fences.afterTrigger(client, id, ready, cancel);
+        } catch (BadFence e) {
+            throw new BadFence(firstErrorId, e.getData());
+        }
     }
 
     Object capturePresentFence(int id) { return fences.capture(id); }
@@ -102,6 +106,14 @@ public class SyncExtension implements Extension {
 
     @Override
     public void handleRequest(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        try {
+            dispatch(client, inputStream, outputStream);
+        } catch (BadFence e) {
+            throw new BadFence(firstErrorId, e.getData());
+        }
+    }
+
+    private void dispatch(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         int opcode = client.getRequestData();
         switch (opcode) {
             case ClientOpcodes.CREATE_FENCE :

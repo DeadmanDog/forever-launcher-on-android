@@ -27,18 +27,20 @@ internal object WowGameData {
     private fun cacheKey(gameRoot: File, locale: String): String? =
         WowClientDownloader.readBuildInfo(File(gameRoot, ".build.info"))?.get("Build Key")?.takeIf { it.isNotBlank() }?.let { "gamedata_total2_${it}_$locale" }
 
-    private fun locale(gameRoot: File): String = runCatching { WowGameConfig.current(gameRoot).locale }.getOrDefault("enUS")
+    /** The language the next launch plays in: the one chosen in Settings, else Config.wtf's (the launch writes the choice there). */
+    internal fun locale(context: Context, gameRoot: File): String =
+        WowRuntimeTuning.gameLocale(context) ?: runCatching { WowGameConfig.current(gameRoot).locale }.getOrDefault("enUS")
 
     /** The cached total for the installed build, or null when it was not computed yet. */
     fun cachedTotal(context: Context, gameRoot: File): Long? {
-        val key = cacheKey(gameRoot, locale(gameRoot)) ?: return null
+        val key = cacheKey(gameRoot, locale(context, gameRoot)) ?: return null
         return context.getSharedPreferences(PREFS, 0).getLong(key, -1L).takeIf { it > 0 }
     }
 
     /** Computes and caches the total when it is missing (network, about 46 MB once per build). Call on IO. */
     fun ensureTotal(context: Context, gameRoot: File): Long? {
         cachedTotal(context, gameRoot)?.let { return it }
-        val locale = locale(gameRoot)
+        val locale = locale(context, gameRoot)
         val key = cacheKey(gameRoot, locale) ?: return null
         val total = WowClientDownloader.gameDataSize(gameRoot, locale).takeIf { it > 0 } ?: return null
         context.getSharedPreferences(PREFS, 0).edit().putLong(key, total).apply()

@@ -11,7 +11,8 @@ import java.io.IOException;
 
 public class BigReqExtension implements Extension {
     public static final byte MAJOR_OPCODE = -100;
-    private static final int MAX_REQUEST_LENGTH = 4194303;
+    /** The largest request length (in 4-byte units) this server accepts; the connection enforces it. */
+    public static final int MAX_REQUEST_LENGTH = 4194303;
     private byte firstEventId = 0;
     private byte firstErrorId = 0;
 

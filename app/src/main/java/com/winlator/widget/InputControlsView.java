@@ -450,7 +450,9 @@ public class InputControlsView extends View {
                     // An exception would end the Timer thread for good and freeze touch mouse movement.
                     try {
                         XServer server = xServer;
-                        if (server != null) server.injectPointerMoveDelta((int)(mouseMoveOffset.x * 10 * cursorSpeed), (int)(mouseMoveOffset.y * 10 * cursorSpeed));
+                        int dx = (int)(mouseMoveOffset.x * 10 * cursorSpeed), dy = (int)(mouseMoveOffset.y * 10 * cursorSpeed);
+                        // Nothing to move most of the time: a zero delta still cost Gamescope thread hops 60 times a second.
+                        if (server != null && (dx != 0 || dy != 0)) server.injectPointerMoveDelta(dx, dy);
                     } catch (RuntimeException ignored) {
                     }
                 }

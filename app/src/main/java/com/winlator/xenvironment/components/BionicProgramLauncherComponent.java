@@ -96,25 +96,77 @@ public class BionicProgramLauncherComponent extends EnvironmentComponent {
     }
 
     /**
-     * Kills the guest processes, then asks the wineserver to exit. The kills are immediate; the wineserver request can take seconds
-     * when the server is wedged, so a stop (which runs on the UI thread when the player exits) finishes it in the background:
-     * the session stays marked alive until it is done and the next launch waits for it. A start replaces a launch in place and
-     * waits for the request itself.
+     * Kills the game, then ends the rest of the Wine session (see [endWineSession]). The game's kill is immediate (one signal); the
+     * rest lists processes and asks the wineserver to exit, which can take seconds, so a stop (which runs on the UI thread when the
+     * player exits) finishes it in the background: the session stays marked alive until it is done and the next launch waits for
+     * it. A start replaces a launch in place and does it itself.
      */
     private void stopCurrentLaunchLocked(boolean wineserverInBackground) {
         launches.invalidate();
-        if (pid != -1) {
-            Process.killProcess(pid);
-            List<ProcessHelper.ProcessInfo> subProcesses = ProcessHelper.listSubProcesses();
-            for (ProcessHelper.ProcessInfo subProcess : subProcesses) Process.killProcess(subProcess.pid);
-        }
+        final boolean hadGuest = pid != -1;
+        if (hadGuest) Process.killProcess(pid);
         pid = -1;
         if (wineserverInBackground) {
-            PluviaApp.runTeardownInBackground(this::killWineserver);
+            PluviaApp.runTeardownInBackground(() -> endWineSession(hadGuest));
         } else {
             PluviaApp.setKeepAlive(false);
-            killWineserver();
+            endWineSession(hadGuest);
         }
+    }
+
+    /**
+     * Review 2026-11-13: the wineserver keeps the registry in memory and writes it out when it is asked to exit. It used to be
+     * SIGKILLed together with every other process first, so `wineserver -k` found nothing to ask and the session's registry
+     * changes were lost; the process listing (`id`, `ps`) also ran on the UI thread. Now: every other process of the session is
+     * killed, the wineserver is asked to exit (bounded), and only what is still left after that is killed.
+     */
+    private void endWineSession(boolean hadGuest) {
+        if (hadGuest) {
+            for (int leftover : pidsToKillBeforeWineserverExit(ProcessHelper.listSubProcesses())) Process.killProcess(leftover);
+        }
+        killWineserver();
+        if (hadGuest) {
+            for (String leftover : ProcessHelper.listRunningWineProcesses()) {
+                try { Process.killProcess(Integer.parseInt(leftover)); } catch (NumberFormatException ignored) { }
+            }
+        }
+    }
+
+    /** Every listed process except the wineserver, which must stay alive until it has been asked to exit (it saves the registry). */
+    static List<Integer> pidsToKillBeforeWineserverExit(List<ProcessHelper.ProcessInfo> processes) {
+        List<Integer> pids = new ArrayList<>();
+        for (ProcessHelper.ProcessInfo info : processes) {
+            if (!isWineserver(info.name) && !isWineserverCommandLine(readCommandLine(info.pid))) pids.add(info.pid);
+        }
+        return pids;
+    }
+
+    /** Programs run through the linker (`linker64 /path/wineserver ...`): the program is the first or the second argument. */
+    static boolean isWineserverCommandLine(String[] args) {
+        if (args == null) return false;
+        for (int i = 0; i < Math.min(2, args.length); i++) if (isWineserver(args[i])) return true;
+        return false;
+    }
+
+    private static String[] readCommandLine(int pid) {
+        try (java.io.FileInputStream in = new java.io.FileInputStream("/proc/" + pid + "/cmdline")) {
+            byte[] buffer = new byte[4096];
+            int length = in.read(buffer);
+            if (length <= 0) return null;
+            return new String(buffer, 0, length, java.nio.charset.StandardCharsets.UTF_8).split("\u0000");
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    static boolean isWineserver(String processName) {
+        if (processName == null) return false;
+        String name = processName.trim();
+        int slash = name.lastIndexOf('/');
+        if (slash >= 0) name = name.substring(slash + 1);
+        int space = name.indexOf(' ');
+        if (space >= 0) name = name.substring(0, space);
+        return name.equals("wineserver") || name.startsWith("wineserver");
     }
 
     // Bounded: a wedged wineserver must not hang the caller for ever.

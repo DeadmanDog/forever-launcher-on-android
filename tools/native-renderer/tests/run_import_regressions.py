@@ -10,7 +10,7 @@ def method(marker):
  return s[start:i]
 production='\n'.join(method(m) for m in ['uint32_t VulkanRendererContext::findMemType(', 'bool VulkanRendererContext::importAHBToWinTex(', 'void VulkanRendererContext::destroyWinTex('])
 t=Path(__file__).with_name('RenderImportRegression.cpp.in');cpp=a.out/'import.cpp';cpp.write_text(t.read_text().replace('/* PRODUCTION */',production));exe=a.out/'import'
-inc=Path(os.environ.get('ANDROID_HOME','/home/fsos-x/.local/share/wow-build-tools/sdk'))/'ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include'
+inc=Path(os.environ.get('ANDROID_HOME',str(Path.home()/'.local/share/wow-build-tools/sdk')))/'ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include'
 subprocess.run(['g++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-idirafter',str(inc),str(cpp),'-o',str(exe)],check=True)
 results=[]
 for n in range(9):

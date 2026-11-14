@@ -123,7 +123,7 @@
 122|Europa
 123|Experimentelle Einstellungen. Gelten nur für den nächsten Start; die Container-Einstellungen bleiben erhalten.
 124|FIFO (Standard)
-125|FIFO (Standard): Jeder Frame kommt der Reihe nach auf den Bildschirm; mit der VSync-gebundenen Taktung war das messbar am flüssigsten. Mailbox: Ein neuerer Frame ersetzt einen noch wartenden, etwas weniger Latenz, aber ab und zu fällt ein Frame weg (ein kleiner Ruck).
+125|FIFO (Standard): Jeder Frame kommt der Reihe nach auf den Bildschirm; mit der an VSync ausgerichteten Taktung der App war das messbar am flüssigsten. Mailbox: Ein neuerer Frame ersetzt einen noch wartenden, etwas weniger Latenz, aber ab und zu fällt ein Frame weg (ein kleiner Ruck).
 126|FIFO-Latenz
 127|FPS-Limit
 128|Taktung des FPS-Limits
@@ -570,3 +570,41 @@ res:screen_effects_scaling_mode_dls_desc|Schärfe- / Klarheitsdurchgang.
 495|Der Autor erlaubt das Herunterladen nur auf der CurseForge-Website. Tippe auf der Seite auf „Download“ (es kann auch von selbst starten); die App installiert die Datei.
 496|Schlüssel bei CurseForge holen
 497|Melde dich dort an, öffne „API keys“ und kopiere deinen Schlüssel in dieses Feld.
+498|Ausgewogen
+499|Battle.net-Anmeldung
+500|E-Mail
+501|DXVK wird installiert...
+502|Proton wird installiert...
+503|VKD3D wird installiert...
+504|Treiber wird installiert...
+505|Passwort
+506|Leistung
+507|Altes {0} wird entfernt...
+508|{0} wird repariert...
+509|Speichern & anmelden
+510|Wird verschlüsselt nur auf diesem Gerät gespeichert. Wähle vor der Anmeldung das E-Mail-Feld von WoW aus.
+511|DXVK wird auf r{0} aktualisiert...
+512|Proton wird auf r{0} aktualisiert (einmalig, etwa eine Minute)...
+513|VKD3D wird auf r{0} aktualisiert...
+514|Treiber wird auf {0} aktualisiert...
+515|Installation der mitgelieferten Komponenten fehlgeschlagen
+516|Mitgelieferte Komponenten können während einer laufenden Spielsitzung nicht installiert werden.
+517|Der Umzug konnte nicht gespeichert werden.
+518|Das Spielprogramm (Wow-ARM64.exe) konnte nicht heruntergeladen werden: 
+519|Für {0} ist kein Client-Build verfügbar. Prüfe deine Verbindung oder versuche es später erneut.
+520|Pausiert: Android erlaubt 6 Stunden Hintergrund-Download pro Tag. Tippe später erneut auf Herunterladen, um fortzufahren.
+521|Wird beim Start nach den eigenen Einträgen des Launchers angehängt.
+522|Battle.net-Anmeldung…
+523|Battle.net-Anmeldung ausgefüllt: tippe auf Anmelden.
+524|Spielprogramm wird geprüft...
+525|Spieldateien geändert
+526|Beim Start ignoriert: diese Variable setzt der Launcher selbst.
+527|Keine CurseForge-Seite: in deinem Browser geöffnet.
+528|Seite: 
+529|REPARIEREN
+530|Reparatur fehlgeschlagen: 
+531|Das Spielprogramm stimmt nicht mit Blizzards Original überein: 
+532|Diese Spieldateien stimmen nicht mit Blizzards Original überein: {0}. Eine andere App hat sie möglicherweise verändert, daher wurde das Spiel nicht gestartet. Reparieren lädt die Originaldateien erneut herunter.
+533|das Archiv enthält mehr als {0} Dateien
+534|das Archiv ist entpackt größer als {0} MB
+535|der Download ist größer als {0} MB

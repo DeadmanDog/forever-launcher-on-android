@@ -15,11 +15,12 @@ import java.io.IOException;
 public abstract class AtomRequests {
     public static void internAtom(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         boolean onlyIfExists = client.getRequestData() == 1;
-        short length = inputStream.readShort();
+        int length = inputStream.readUnsignedShort();
         inputStream.skip(2);
         String name = inputStream.readString8(length);
         int id = onlyIfExists ? Atom.getId(name) : Atom.internAtom(name);
-        if (id < 0) throw new BadAtom(id);
+        // only-if-exists for a name that was never interned: the reply is None (0), not an error (Xlib callers check for None).
+        if (id < 0) id = 0;
 
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
@@ -33,11 +34,10 @@ public abstract class AtomRequests {
 
     public static void getAtomName(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError, IOException {
         int id = inputStream.readInt();
-        if (id < 0) {
-            throw new BadAtom(id);
-        }
+        // None (0) and ids that were never handed out are BadAtom (they used to throw NPE / IndexOutOfBounds and drop the client).
+        if (!Atom.isValid(id)) throw new BadAtom(id);
         String name = Atom.getName(id);
-        short length = (short) name.length();
+        int length = name.length();
         try (XStreamLock lock = outputStream.lock()){
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
             outputStream.writeByte((byte) 0);

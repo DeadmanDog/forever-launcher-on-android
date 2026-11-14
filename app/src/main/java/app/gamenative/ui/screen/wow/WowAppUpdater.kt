@@ -128,7 +128,8 @@ internal object WowAppUpdater {
         val now = System.currentTimeMillis()
         if (!force && now - p.getLong("checked", 0) < CHECK_EVERY_MS) return pending(context)
         val release = runCatching { latest() }.getOrNull()
-        p.edit().putLong("checked", now).apply()
+        // Offline or rate-limited: no "checked" mark, so the next start asks again instead of waiting 6 hours.
+        if (release != null) p.edit().putLong("checked", now).apply()
         if (release == null || !isNewer(release.version, installedVersion(context))) return null
         p.edit().putString("version", release.version).putString("url", release.apkUrl).putLong("size", release.apkSize)
             .putString("notes", release.notes.take(2000)).putString("page", release.page).apply()

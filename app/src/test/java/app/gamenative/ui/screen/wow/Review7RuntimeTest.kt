@@ -41,13 +41,13 @@ class Review7RuntimeTest {
     // The renderer and the Android surface follow the limit that really holds after a change in the running game.
     @Test fun theRendererIsToldTheLimitInForce() {
         // DXVK/VKD3D own pacing at 60 (launch): a request for 90 cannot lift it before the next launch.
-        assertEquals(60, WowRuntimeTuning.engineLimit(apiOwned = true, requested = 90, apiLimit = 60))
+        assertEquals(60, WowRuntimeTuning.live(apiOwned = true, requested = 90, apiLimit = 60).inForce)
         // A typed VKD3D_FRAME_RATE=30 with 20 asked: the app limiter holds 20 on top of it.
-        assertEquals(20, WowRuntimeTuning.engineLimit(apiOwned = true, requested = 20, apiLimit = 30))
+        assertEquals(20, WowRuntimeTuning.live(apiOwned = true, requested = 20, apiLimit = 30).inForce)
         // OFF under an API limit: the API limit stays.
-        assertEquals(30, WowRuntimeTuning.engineLimit(apiOwned = true, requested = 0, apiLimit = 30))
+        assertEquals(30, WowRuntimeTuning.live(apiOwned = true, requested = 0, apiLimit = 30).inForce)
         // The app limiter owns pacing: the request itself.
-        assertEquals(45, WowRuntimeTuning.engineLimit(apiOwned = false, requested = 45, apiLimit = 0))
+        assertEquals(45, WowRuntimeTuning.live(apiOwned = false, requested = 45, apiLimit = 0).inForce)
         // What the renderer was told before 1.2.0 in the first two cases (the request, the saved value): not the limit in force.
         val typed = Container("wow_forever").apply { putExtra(WowVkd3dComponents.API_KEY, WowVkd3dComponents.DX12); envVars = "VKD3D_FRAME_RATE=30" }
         assertEquals(30, WowRuntimeTuning.surfaceTarget(typed, 20))

@@ -13,6 +13,8 @@ public class VulkanSceneRegression {
  List<RenderableWindow>renderableWindows;List<Long>removed=new ArrayList<>();
  void collectWindows(ArrayList<RenderableWindow>a,Window w,int x,int y){}
  void pushRenderList(ArrayList<RenderableWindow>a){}
+ boolean nativeIsAlive(long h){return true;}
+ void recoverDeadRenderer(){}
  void nativeRemoveWindow(long h,long id){removed.add(id);}
  /* PRODUCTION */
  static void check(boolean b,String m){if(!b)throw new AssertionError(m);}

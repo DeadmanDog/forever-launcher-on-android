@@ -81,7 +81,8 @@ class XClientRequestHandlerTest {
 
     @Test fun validBigRequestWithMissingBodyWaitsForMoreInput() {
         assertFalse(invoke("handleNormalRequest", big(3)))
-        assertFalse(invoke("handleNormalRequest", big(0x20000001)))
+        // 2026-11-13: the largest valid length is now the advertised BIG-REQUESTS maximum (finding 20); 0x20000001 is dropped.
+        assertFalse(invoke("handleNormalRequest", big(com.winlator.xserver.extensions.BigReqExtension.MAX_REQUEST_LENGTH.toLong())))
     }
 
     @Test fun incompleteBigRequestHeaderWaitsBeforeReadingExtendedLength() {

@@ -52,6 +52,8 @@ public class XServer {
     public XServer(ScreenInfo screenInfo, boolean mouseDragCompatibilityEnabled) {
         this.screenInfo = screenInfo;
         for (Lockable lockable : Lockable.values()) locks.put(lockable, new ReentrantLock());
+        for (Lockable lockable : ALL_LOCKABLES) singleLocks[lockable.ordinal()] = new SingleXLock(locks.get(lockable));
+        allLock = () -> { for (int i = ALL_LOCKABLES.length - 1; i >= 0; i--) locks.get(ALL_LOCKABLES[i]).unlock(); };
 
         pixmapManager = new PixmapManager();
         drawableManager = new DrawableManager(this);
@@ -106,19 +108,21 @@ public class XServer {
         this.shmSegmentManager = shmSegmentManager;
     }
 
-    private class SingleXLock implements XLock {
+    /** Holds no state but its lock, so one instance per Lockable serves every caller (2026-11-12 review: no object per request). */
+    private static final class SingleXLock implements XLock {
         private final ReentrantLock lock;
 
-        private SingleXLock(Lockable lockable) {
-            this.lock = locks.get(lockable);
-            lock.lock();
-        }
+        private SingleXLock(ReentrantLock lock) { this.lock = lock; }
 
         @Override
         public void close() {
             lock.unlock();
         }
     }
+
+    private static final Lockable[] ALL_LOCKABLES = Lockable.values();
+    private final SingleXLock[] singleLocks = new SingleXLock[ALL_LOCKABLES.length];
+    private XLock allLock;
 
     private class MultiXLock implements XLock {
         private final Lockable[] lockables;
@@ -137,7 +141,9 @@ public class XServer {
     }
 
     public XLock lock(Lockable lockable) {
-        return new SingleXLock(lockable);
+        SingleXLock single = singleLocks[lockable.ordinal()];
+        single.lock.lock();
+        return single;
     }
 
     public XLock lock(Lockable... lockables) {
@@ -145,7 +151,8 @@ public class XServer {
     }
 
     public XLock lockAll() {
-        return new MultiXLock(Lockable.values());
+        for (Lockable lockable : ALL_LOCKABLES) locks.get(lockable).lock();
+        return allLock;
     }
 
     public Extension getExtensionByName(String name) {

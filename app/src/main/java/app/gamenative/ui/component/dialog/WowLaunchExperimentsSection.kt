@@ -105,7 +105,7 @@ internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, d
         TuningChoice("gpu", tx("GPU power mode", "GPU-mód"),
             tx("How the GPU clock behaves while you play. Balanced (default): the clock follows the load; the driver raises it only as far as the game needs (with DX12 at 1 frame latency: as far as the FPS limit needs). Performance: the GPU stays at its highest clock (about 1200 MHz) all the time: more heat and power.",
                 "Hogyan viselkedik a GPU órajele játék közben. Balanced (alapértelmezett): az órajel a terheléshez igazodik; a driver csak annyira emeli, amennyire a játéknak kell (DX12-nél 1 képkocka késleltetéssel: amennyi az FPS-limithez kell). Performance: a GPU folyamatosan a legmagasabb órajelen (kb. 1200 MHz) marad: több hő és fogyasztás."),
-            listOf("" to tx("Balanced (default)", "Balanced (alapértelmezett)"), "1" to "Performance"), blocked, { error = it })
+            listOf("" to tx("Balanced (default)", "Balanced (alapértelmezett)"), "1" to tx("Performance", "Performance")), blocked, { error = it })
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         TuningChoice("pacing", tx("FPS limit pacing", "FPS-limit ütemezése"),
             tx("Who holds the frame rate to the limit. App, vsync-aligned (recommended): the app releases frames in step with the display's refresh and shifts them a few milliseconds so they finish mid-refresh, so they stay evenly spaced. DXVK / VKD3D: the graphics layer limits with its own timer, which can make motion judder; a fallback. A limiter typed into Environment Variables always uses DXVK / VKD3D.",
@@ -125,8 +125,8 @@ internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, d
             style = MaterialTheme.typography.bodySmall)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         TuningChoice("present", tx("Present mode", "Megjelenítési mód (present)"),
-            tx("FIFO (default): every frame reaches the screen in order; with the vsync-locked pacing this measured smoothest. Mailbox: a newer frame replaces one still waiting, a little less latency, but now and then a frame is dropped (a small jerk).",
-                "FIFO (alapértelmezett): minden kocka sorban kerül a képre; a vsync-hez kötött ütemezéssel ez mérhetően a legsimább. Mailbox: az újabb kocka lecseréli a még várakozót, kicsit kisebb a késleltetés, de időnként kiesik egy kocka (apró rándulás)."),
+            tx("FIFO (default): every frame reaches the screen in order; with the app's vsync-aligned pacing this measured smoothest. Mailbox: a newer frame replaces one still waiting, a little less latency, but now and then a frame is dropped (a small jerk).",
+                "FIFO (alapértelmezett): minden kocka sorban kerül a képre; az app vsync-hez igazított ütemezésével ez mérhetően a legsimább. Mailbox: az újabb kocka lecseréli a még várakozót, kicsit kisebb a késleltetés, de időnként kiesik egy kocka (apró rándulás)."),
             listOf("fifo" to tx("FIFO (default)", "FIFO (alapértelmezett)"), "mailbox" to "Mailbox"), blocked, { error = it },
             onSelected = { present = it })
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -255,6 +255,6 @@ internal fun switchNeeds(key: String, dx12: Boolean, gamescope: Boolean): Switch
 /** Switches that only act on the DX11 path (DXVK / Vegas); 1.1.7: Low input latency is the DX11 one, DX12 has LOW_LATENCY_DX12. */
 private val dx11Only = setOf(WowRuntimeTuning.LOW_LATENCY, WowRuntimeTuning.HYBRID_GPL, WowRuntimeTuning.VEGAS_BINDSKIP)
 /** WowLaunchEnvironment applies the GPU wait only for XServer + DX12; since 1.1.7 DX12 has its own low-latency switch. */
-private val dx12Only = setOf(WowRuntimeTuning.LOW_LATENCY_DX12, WowRuntimeTuning.GAME_GPU_WAIT, WowRuntimeTuning.REPORT_DISCRETE)
+private val dx12Only = setOf(WowRuntimeTuning.LOW_LATENCY_DX12, WowRuntimeTuning.GAME_GPU_WAIT)
 private val xserverOnlySettings = setOf("scanout", "xnonblock", "presentidle", "priority", "adpf", WowRuntimeTuning.GAME_GPU_WAIT)
 private val gamescopeOnlySettings = setOf(app.gamenative.display.GamescopeWindowPolicy.DIRECT_SCANOUT)

@@ -17,6 +17,13 @@ public class XConnectorEpoll implements Runnable {
     private final Object controlLock = new Object();
     private boolean serverFdsClosed; // guarded by controlLock
     private final java.util.concurrent.ConcurrentLinkedQueue<Runnable> controlTasks = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    /**
+     * 2026-11-12 review: one eventfd write per wake-up, not per task. Set by the producer that signals; the epoll thread clears it
+     * before draining, so a task added after the clear signals again and one added before it is drained in this round.
+     */
+    private final WakeCoalescer controlSignal = new WakeCoalescer();
+    /** One supplier for every read (it was a new lambda per read). */
+    private final java.util.function.BooleanSupplier isRunning = () -> running;
     private boolean canReceiveAncillaryMessages = false;
     private int initialInputBufferCapacity = 128;
     private int initialOutputBufferCapacity = 128;
@@ -190,6 +197,7 @@ public class XConnectorEpoll implements Runnable {
     private void handleExistingConnection(int fd) {
         if (fd == shutdownFd) {
             XConnectorEpollNative.drainEventFd(shutdownFd);
+            controlSignal.consumed();
             Runnable task;
             while (running && (task = controlTasks.poll()) != null) {
                 try { task.run(); }
@@ -209,7 +217,7 @@ public class XConnectorEpoll implements Runnable {
             if (!running || !client.connected || client.requestGate.isBlocked()) return;
             if (inputStream != null) {
                 if (inputStream.readMoreData(this.canReceiveAncillaryMessages) > 0) {
-                    BufferedRequestDispatcher.drain(client, requestHandler, () -> running);
+                    BufferedRequestDispatcher.drain(client, requestHandler, isRunning);
                     return;
                 }
                 killConnection(client);
@@ -253,7 +261,7 @@ public class XConnectorEpoll implements Runnable {
         synchronized (controlLock) {
             if (!running) return;
             controlTasks.add(task);
-            XConnectorEpollNative.signalEventFd(shutdownFd);
+            if (controlSignal.shouldSignal()) XConnectorEpollNative.signalEventFd(shutdownFd);
         }
     }
 
@@ -276,7 +284,7 @@ public class XConnectorEpoll implements Runnable {
             try {
                 XInputStream input = client.getInputStream();
                 if (input != null && input.available() > 0)
-                    BufferedRequestDispatcher.drain(client, requestHandler, () -> running);
+                    BufferedRequestDispatcher.drain(client, requestHandler, isRunning);
             } catch (IOException e) { killConnection(client); }
             refreshClientInterest(client);
         });
@@ -346,6 +354,11 @@ public class XConnectorEpoll implements Runnable {
         client.connected = false;
         client.requestGate.close();
         cancelPendingPause(client);
+        // Before anything else (the shutdown callback below sends events, e.g. when it releases the client's pointer grab): from
+        // here on this client's output is dropped, so nothing reaches the descriptor after it is closed and possibly reused.
+        XOutputStream output = client.getOutputStream();
+        if (output != null) output.markClosed();
+        else client.clientSocket.markClosed();
         try {
             this.connectionHandler.handleConnectionShutdown(client);
         } finally {
@@ -407,6 +420,10 @@ public class XConnectorEpoll implements Runnable {
     }
 
     private void requestShutdown() {
-        XConnectorEpollNative.signalEventFd(shutdownFd);
+        // The loop may have ended by itself and closed the eventfd already; its number may then belong to another descriptor.
+        synchronized (controlLock) {
+            if (serverFdsClosed) return;
+            XConnectorEpollNative.signalEventFd(shutdownFd);
+        }
     }
 }

@@ -8,28 +8,35 @@ import com.winlator.xconnector.XOutputStream;
 import com.winlator.xconnector.XStreamLock;
 import com.winlator.xserver.Keyboard;
 import com.winlator.xserver.XClient;
+import com.winlator.xserver.errors.BadValue;
 import com.winlator.xserver.errors.XRequestError;
 
 import java.io.IOException;
 
 public abstract class KeyboardRequests {
     public static void getKeyboardMapping(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
-        byte firstKeycode = inputStream.readByte();
+        // Keycodes are CARD8: read unsigned (a first keycode of 128 or more used to be a negative byte).
+        int firstKeycode = inputStream.readUnsignedByte();
         int count = inputStream.readUnsignedByte();
         inputStream.skip(2);
 
+        // X11: first-keycode >= min-keycode and first-keycode + count - 1 <= max-keycode, otherwise BadValue.
+        if (firstKeycode < Keyboard.MIN_KEYCODE) throw new BadValue(firstKeycode);
+        if (firstKeycode + count - 1 > Keyboard.MAX_KEYCODE) throw new BadValue(count);
+
+        int[] keysyms = client.xServer.keyboard.keysyms;
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
             outputStream.writeByte(KEYSYMS_PER_KEYCODE);
             outputStream.writeShort(client.getSequenceNumber());
-            outputStream.writeInt(count);
+            // The reply carries KEYSYMS_PER_KEYCODE keysyms for every keycode: count * n words.
+            outputStream.writeInt(count * KEYSYMS_PER_KEYCODE);
             outputStream.writePad(24);
 
-            int i = firstKeycode - Keyboard.MIN_KEYCODE;
-            while (count != 0) {
-                outputStream.writeInt(client.xServer.keyboard.keysyms[i]);
-                count--;
-                i++;
+            int start = (firstKeycode - Keyboard.MIN_KEYCODE) * KEYSYMS_PER_KEYCODE;
+            for (int i = 0, total = count * KEYSYMS_PER_KEYCODE; i < total; i++) {
+                int index = start + i;
+                outputStream.writeInt(index < keysyms.length ? keysyms[index] : 0);
             }
         }
     }

@@ -34,6 +34,18 @@ internal object WowDataDownloadState {
 class WowDataDownloadService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * Android 15+: a data-sync foreground service gets 6 hours a day. When it is used up, Android calls this and kills the app if
+     * the service does not stop within seconds. The download stops (everything so far is kept) and says why; it continues later.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        WowDataDownloadState.cancel = true
+        WowDataDownloadState.error = WowI18n.pick(this, "Paused: Android allows 6 hours of background download a day. Tap Download again later to continue.",
+            "Szünetel: az Android naponta 6 óra háttérletöltést enged. Később koppints újra a Letöltésre a folytatáshoz.")
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { WowDataDownloadState.cancel = true; return START_NOT_STICKY }
         if (WowDataDownloadState.running) return START_NOT_STICKY
@@ -55,7 +67,8 @@ class WowDataDownloadService : Service() {
                     if (now - lastNotify > 2000) { lastNotify = now; manager.notify(NOTIFICATION_ID, notification(p)) }
                 }
             } catch (e: Throwable) {
-                WowDataDownloadState.error = e.message ?: e.javaClass.simpleName
+                // A stop after Android's time limit keeps the reason onTimeout gave.
+                if (WowDataDownloadState.error == null) WowDataDownloadState.error = e.message ?: e.javaClass.simpleName
             } finally {
                 if (wake.isHeld) wake.release()
                 WowDataDownloadState.running = false

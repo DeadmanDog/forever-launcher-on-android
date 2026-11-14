@@ -29,7 +29,7 @@ case=r"""
 """
 template=template.replace(' printf("PASS upload/scene',case+'\n printf("PASS upload/scene')
 mutated=production.replace('        if (!drawn && !housekeeping && !scanoutActive.load()) return;\n','');assert mutated!=production
-inc=Path('/home/fsos-x/.local/share/wow-build-tools/sdk/ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include');env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0');results=[]
+inc=Path(os.environ.get('ANDROID_HOME',str(Path.home()/'.local/share/wow-build-tools/sdk')))/'ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include';env=dict(os.environ,ASAN_OPTIONS='detect_leaks=0');results=[]
 for label,prod in [('production',production),('mutation-no-visibility-check',mutated)]:
  d=out/label;d.mkdir(exist_ok=True);cpp=d/'test.cpp';exe=d/'test'
  cpp.write_text(template.replace('/* PRODUCTION */',prod).replace('/* CAPTURE */','frameDraws.clear();for(auto& re:renderList)appendWindowDraw(re);').replace('/* COMMIT */','commitCpuUploads();').replace('/* BARRIERS */',barriers))

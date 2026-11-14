@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -52,6 +53,7 @@ import app.gamenative.wow.addons.AddonDb
 import app.gamenative.wow.addons.AddonFlavor
 import app.gamenative.wow.addons.AddonListing
 import app.gamenative.wow.addons.AddonManager
+import app.gamenative.wow.addons.CurseForgeWebHosts
 import app.gamenative.wow.addons.InstalledAddon
 import app.gamenative.wow.addons.NeedsWebsiteDownload
 import app.gamenative.wow.addons.ProviderIds
@@ -108,7 +110,7 @@ internal class WowAddonsController(gameRoot: File, private val scope: CoroutineS
     /** Browse filters (1.3.5): a category (null = all) and the list order. */
     var category by mutableStateOf<AddonCategory?>(null); private set
     var sort by mutableStateOf(CurseForgeProvider.Sort.POPULAR); private set
-    fun pickCategory(value: AddonCategory?) { category = value; curse.category = value; if (mode == Mode.BROWSE) load() }
+    fun pickCategory(value: AddonCategory?) { category = value; if (mode == Mode.BROWSE) load() }
     fun pickSort(value: CurseForgeProvider.Sort) { sort = value; curse.sort = value; if (mode == Mode.BROWSE) load() }
     var query by mutableStateOf(""); private set
     var listings by mutableStateOf<List<AddonListing>>(emptyList()); private set
@@ -206,12 +208,16 @@ internal class WowAddonsController(gameRoot: File, private val scope: CoroutineS
         WowAddonJobs.scope.launch {
             try {
                 withContext(Dispatchers.IO) { block() }
+                // Dependencies that only the CurseForge website offers open its download page next.
+                manager.takeWebsiteDownloads().takeIf { it.isNotEmpty() }?.let { websiteQueue = websiteQueue + it }
                 message = "${label.first}: done." to "${label.second}: kész."
             } catch (e: CancellationException) {
                 throw e
             } catch (e: NeedsWebsiteDownload) {
-                websiteQueue = websiteQueue + e
+                websiteQueue = websiteQueue + manager.takeWebsiteDownloads() + e
                 message = null
+            } catch (e: app.gamenative.wow.addons.AddonLimitException) {
+                message = "${label.first} failed: ${e.en}" to "${label.second} nem sikerült: ${e.hu}"
             } catch (e: Exception) {
                 val reason = e.message ?: "unknown error"
                 message = "${label.first} failed: $reason" to "${label.second} nem sikerült: $reason"
@@ -235,7 +241,8 @@ internal fun WowAddonsPage(onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val gamePath = remember { GamePath.load(context) }
-    val ready = remember { GamePath.isReady(context, gamePath) }
+    // The AddOns folder needs the installed game data, not Wow-ARM64.exe (that one downloads on the first Play).
+    val ready = remember { GamePath.hasGameData(context, gamePath) }
     val c = remember(gamePath) { WowAddonsController(File(gamePath), scope) }
     // Also after a write that an earlier, closed page started has finished.
     val idle = WowAddonJobs.running == 0
@@ -252,8 +259,12 @@ internal fun WowAddonsPage(onBack: () -> Unit) {
             androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(systemDensity.density * 0.85f, systemDensity.fontScale),
         ) {
         Box(Modifier.fillMaxSize().background(WowUi.background).windowInsetsPadding(WindowInsets.safeDrawing).padding(20.dp)) {
+            // Review 2026-11-12: in landscape the keyboard left no room under the fixed header, so no result showed while typing.
+            // While it is open only the tabs, the search field and the results stay.
+            @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+            val typing = WindowInsets.isImeVisible
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Column {
+                if (!typing) Column {
                     Text(tx("ADDONS", "ADDONOK"), fontSize = 22.sp, fontWeight = FontWeight.Black,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Serif, letterSpacing = 5.sp, color = WowUi.Gold)
                     Text(tx("Only addons made for WoW Forever.", "Csak a WoW Forever-hez készült addonok."),
@@ -274,7 +285,7 @@ internal fun WowAddonsPage(onBack: () -> Unit) {
                 // the actions are one compact scrollable row under it.
                 OutlinedTextField(value = c.query, onValueChange = c::search, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text(tx("Search addons", "Addon keresése"), maxLines = 1) })
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp),
+                if (!typing) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     if (c.mode == WowAddonsController.Mode.INSTALLED && updates > 0) {
                         AddonAction(tx("Update all", "Mindet frissít") + " ($updates)", primary = true, enabled = !c.busy, onClick = c::updateAll)
@@ -282,7 +293,7 @@ internal fun WowAddonsPage(onBack: () -> Unit) {
                     AddonAction(tx("From link", "Linkről"), enabled = !c.busy) { linkDialog = true }
                     AddonAction(tx("CurseForge key", "CurseForge-kulcs"), enabled = !c.busy) { keyDialog = true }
                 }
-                if (c.mode == WowAddonsController.Mode.BROWSE && hasKey) {
+                if (c.mode == WowAddonsController.Mode.BROWSE && hasKey && !typing) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         for ((sort, label) in listOf(CurseForgeProvider.Sort.POPULAR to tx("Popular", "Népszerű"),
                             CurseForgeProvider.Sort.UPDATED to tx("Recently updated", "Nemrég frissült"),
@@ -322,7 +333,7 @@ internal fun WowAddonsPage(onBack: () -> Unit) {
                     }
                 }
                 if (c.loading || c.listings.isEmpty()) Spacer(Modifier.weight(1f))
-                AddonsCloseButton(onBack)
+                if (!typing) AddonsCloseButton(onBack)
             }
         }
         }
@@ -367,8 +378,11 @@ internal fun WowAddonsPage(onBack: () -> Unit) {
                 }) { Text(tx("Save", "Mentés")) } },
                 dismissButton = { TextButton(onClick = { keyDialog = false }) { Text(tx("Cancel", "Mégse")) } })
         }
-        c.websiteQueue.firstOrNull()?.let { request ->
-            WebsiteDownloadDialog(request, onDownloaded = { url, headers -> c.browserDownloaded(request, url, headers) }, onCancel = c::skipWebsite)
+        c.websiteQueue.firstOrNull()?.takeIf { !c.busy }?.let { request ->
+            // key: the next queued addon gets a fresh WebView and listener (the reused one kept the first addon's page).
+            androidx.compose.runtime.key(request) {
+                WebsiteDownloadDialog(request, onDownloaded = { url, headers -> c.browserDownloaded(request, url, headers) }, onCancel = c::skipWebsite)
+            }
         }
         removing?.let { record ->
             AlertDialog(onDismissRequest = { removing = null },
@@ -473,30 +487,61 @@ private fun AddonAction(label: String, primary: Boolean = false, enabled: Boolea
 /**
  * 1.3.6: an addon whose only release is on CurseForge and which its author keeps off third-party apps: its download page opens
  * here, in the app, and the player taps Download like in a browser. The file the page hands over is installed by the app.
+ * Only CurseForge's own hosts load in here (see [CurseForgeWebHosts]); a link to anywhere else opens in the player's browser, and
+ * the header always shows which host the page is on.
  */
 @Composable
 private fun WebsiteDownloadDialog(request: NeedsWebsiteDownload, onDownloaded: (String, Map<String, String>) -> Unit, onCancel: () -> Unit) {
+    val context = LocalContext.current
+    val tr = rememberTx()
     androidx.compose.ui.window.Dialog(onDismissRequest = onCancel,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
         Column(Modifier.fillMaxSize().background(WowUi.background).windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(request.remote.name.trim(), color = WowUi.Gold, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            var host by remember(request) { mutableStateOf(android.net.Uri.parse(request.pageUrl).host.orEmpty()) }
+            Text(tx("Page: ", "Oldal: ") + "https://" + host, color = WowUi.Cream, fontSize = 12.sp, maxLines = 1,
+                overflow = TextOverflow.Ellipsis)
             Text(tx("Its author allows downloading only on the CurseForge website. Tap Download on the page (it may also start by itself); the app installs the file.",
                 "A szerzője csak a CurseForge weboldaláról engedi letölteni. Koppints az oldalon a Download gombra (magától is elindulhat); az app telepíti a fájlt."),
                 color = WowUi.Muted, fontSize = 12.sp)
             var handed by remember(request) { mutableStateOf(false) }
+            fun openOutside(uri: android.net.Uri) {
+                runCatching {
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+                        .addCategory(android.content.Intent.CATEGORY_BROWSABLE)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+                app.gamenative.ui.util.SnackbarManager.show(tr("Not a CurseForge page: opened in your browser.",
+                    "Nem CurseForge-oldal: a böngésződben nyílt meg."))
+            }
             androidx.compose.ui.viewinterop.AndroidView(modifier = Modifier.fillMaxWidth().weight(1f), factory = { ctx ->
                 android.webkit.WebView(ctx).apply {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
+                    settings.allowFileAccess = false
+                    settings.allowContentAccess = false
+                    settings.javaScriptCanOpenWindowsAutomatically = false
+                    settings.setSupportMultipleWindows(false)
                     android.webkit.CookieManager.getInstance().setAcceptCookie(true)
-                    android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                    android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
                     webViewClient = object : android.webkit.WebViewClient() {
-                        override fun shouldOverrideUrlLoading(view: android.webkit.WebView, req: android.webkit.WebResourceRequest) =
-                            req.url.scheme != "https"
+                        override fun shouldOverrideUrlLoading(view: android.webkit.WebView, req: android.webkit.WebResourceRequest): Boolean {
+                            val url = req.url
+                            if (url.scheme != "https") return true
+                            // A frame inside the CurseForge page (its bot check) stays part of that page.
+                            if (!req.isForMainFrame) return false
+                            if (CurseForgeWebHosts.isAllowedHost(url.host)) return false
+                            if (req.hasGesture()) openOutside(url)
+                            return true
+                        }
+
+                        override fun onPageStarted(view: android.webkit.WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                            url?.let { android.net.Uri.parse(it).host }?.let { host = it }
+                        }
                     }
                     setDownloadListener { url, userAgent, _, _, _ ->
-                        if (handed || !url.startsWith("https://")) return@setDownloadListener
+                        if (handed || !CurseForgeWebHosts.isAllowed(url)) return@setDownloadListener
                         handed = true
                         val headers = buildMap {
                             put("User-Agent", userAgent)
@@ -505,7 +550,8 @@ private fun WebsiteDownloadDialog(request: NeedsWebsiteDownload, onDownloaded: (
                         }
                         onDownloaded(url, headers)
                     }
-                    loadUrl(request.pageUrl)
+                    if (CurseForgeWebHosts.isAllowed(request.pageUrl)) loadUrl(request.pageUrl)
+                    else openOutside(android.net.Uri.parse(request.pageUrl))
                 }
             }, onRelease = { it.destroy() })
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

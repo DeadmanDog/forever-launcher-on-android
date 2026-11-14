@@ -203,6 +203,9 @@ public abstract class TarCompressorUtils {
              InputStream inStream = getCompressorInputStream(type, ownedSource);
              ArchiveInputStream tar = new TarArchiveInputStream(inStream)) {
             java.util.Set<String> writtenPaths = new java.util.HashSet<>();
+            // Every link this extraction made: a later entry can replace a link that an earlier link's check went through, so they
+            // are all checked again once the whole tree is in place (see linksStayInside).
+            java.util.List<File> createdLinks = new java.util.ArrayList<>();
             TarArchiveEntry entry;
             while ((entry = (TarArchiveEntry)tar.getNextEntry()) != null) {
                 if (!tar.canReadEntryData(entry)) continue;
@@ -248,6 +251,7 @@ public abstract class TarCompressorUtils {
                         if (validatePaths) {
                             java.nio.file.Files.deleteIfExists(file.toPath());
                             java.nio.file.Files.createSymbolicLink(file.toPath(), java.nio.file.Paths.get(entry.getLinkName()));
+                            createdLinks.add(file);
                         } else FileUtils.symlink(entry.getLinkName(), file.getAbsolutePath());
                     }
                     else {
@@ -262,11 +266,38 @@ public abstract class TarCompressorUtils {
 
                 if (!validatePaths || !entry.isSymbolicLink()) FileUtils.chmod(file, 0771);
             }
+            if (validatePaths && !linksStayInside(destination, createdLinks)) return false;
             return true;
         }
         catch (IOException e) {
             return false;
         }
+    }
+
+    /**
+     * Checks every extracted link again against the finished tree: each must still be a link whose target, resolved through the
+     * links as they are now, stays inside [destination] (the prefix's "dosdevices/z:" link to "/" excepted). A link that fails is
+     * removed and the extraction counts as failed.
+     */
+    static boolean linksStayInside(File destination, java.util.List<File> links) throws IOException {
+        java.nio.file.Path root = destination.getCanonicalFile().toPath();
+        boolean ok = true;
+        for (File link : links) {
+            java.nio.file.Path path = link.toPath();
+            if (!java.nio.file.Files.isSymbolicLink(path)) continue; // replaced by a later file or directory entry: checked as that
+            String target = java.nio.file.Files.readSymbolicLink(path).toString();
+            File parent = link.getAbsoluteFile().getParentFile();
+            boolean wineRootLink = "/".equals(target) && link.getPath().replace('\\', '/').endsWith("/dosdevices/z:");
+            if (wineRootLink) continue;
+            boolean inside = parent != null && !new File(target).isAbsolute()
+                    && parent.getCanonicalFile().toPath().startsWith(root)
+                    && new File(parent.getCanonicalFile(), target).getCanonicalFile().toPath().startsWith(root);
+            if (!inside) {
+                java.nio.file.Files.deleteIfExists(path);
+                ok = false;
+            }
+        }
+        return ok;
     }
 
     //! Detects Mac Prefixes - Some builds are done with Macs and it trips up extraction algorithm

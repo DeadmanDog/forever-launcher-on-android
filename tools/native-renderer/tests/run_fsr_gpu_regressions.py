@@ -6,7 +6,7 @@ The production shader must pass; the same shader with EASU given the pixel centr
 from pathlib import Path
 import os,subprocess,sys,tempfile
 r=Path(__file__).resolve().parents[3];t=Path(__file__).resolve().parent;cpp=r/'app/src/main/cpp/winlator'
-sdk=Path(os.environ.get('ANDROID_HOME','/home/fsos-x/.local/share/wow-build-tools/sdk'))
+sdk=Path(os.environ.get('ANDROID_HOME',str(Path.home()/'.local/share/wow-build-tools/sdk')))
 include=sdk/'ndk/27.3.13750724/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include'
 FIXED='FsrEasuF(pix, floor(uv * outRes), con0, con1, con2, con3);'
 OLD='FsrEasuF(pix, uv * outRes, con0, con1, con2, con3);'

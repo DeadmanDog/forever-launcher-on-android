@@ -67,13 +67,6 @@ internal object WowDisplaySettings {
         sdk >= 30 -> android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
         else -> android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
     }
-    /** True when the physical display has the aspect of the RedMagic fullscreen resolution (1344x608, half of 2688x1216). */
-    fun redMagicFits(context: Context): Boolean {
-        val wm = context.getSystemService(android.view.WindowManager::class.java)
-        val size = if (android.os.Build.VERSION.SDK_INT >= 30) wm.maximumWindowMetrics.bounds.let { it.width() to it.height() }
-            else context.resources.displayMetrics.let { it.widthPixels to it.heightPixels }
-        return WowHardwareScale.fitsDisplay(size.first, size.second, REDMAGIC)
-    }
     fun gameResolution(container: Container): String? = container.screenSize.takeIf {
         container.getExtra(MANAGED) == "1" && valid(it)
     }

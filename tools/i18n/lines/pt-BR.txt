@@ -123,7 +123,7 @@
 122|Europa
 123|Configurações experimentais. Valem só na próxima inicialização; as configurações do contêiner são mantidas.
 124|FIFO (padrão)
-125|FIFO (padrão): cada quadro chega à tela em ordem; com a cadência sincronizada com vsync foi o mais suave medido. Mailbox: um quadro mais novo substitui o que está esperando, um pouco menos de latência, mas de vez em quando um quadro é descartado (um pequeno solavanco).
+125|FIFO (padrão): cada quadro chega à tela em ordem; com a cadência do app alinhada ao vsync foi o mais suave medido. Mailbox: um quadro mais novo substitui o que está esperando, um pouco menos de latência, mas de vez em quando um quadro é descartado (um pequeno solavanco).
 126|Latência FIFO
 127|Limite de FPS
 128|Cadência do limite de FPS
@@ -570,3 +570,41 @@ res:screen_effects_scaling_mode_dls_desc|Etapa de nitidez / clareza.
 495|O autor só permite baixar no site do CurseForge. Toque em "Download" na página (pode começar sozinho); o app instala o arquivo.
 496|Obter uma chave no CurseForge
 497|Entre na conta, abra "API keys" e copie sua chave neste campo.
+498|Equilibrado
+499|Login do Battle.net
+500|E-mail
+501|Instalando o DXVK...
+502|Instalando o Proton...
+503|Instalando o VKD3D...
+504|Instalando o driver...
+505|Senha
+506|Desempenho
+507|Removendo o antigo {0}...
+508|Reparando {0}...
+509|Salvar e entrar
+510|Salvo criptografado só neste aparelho. Selecione o campo de e-mail do WoW antes de entrar.
+511|Atualizando o DXVK para r{0}...
+512|Atualizando o Proton para r{0} (uma vez, cerca de um minuto)...
+513|Atualizando o VKD3D para r{0}...
+514|Atualizando o driver para {0}...
+515|Falha ao instalar os componentes integrados
+516|Os componentes integrados não podem ser instalados durante uma sessão de jogo.
+517|Não foi possível registrar a mudança.
+518|Não foi possível baixar o programa do jogo (Wow-ARM64.exe): 
+519|Nenhuma build do cliente disponível para {0}. Verifique sua conexão ou tente novamente mais tarde.
+520|Pausado: o Android permite 6 horas de download em segundo plano por dia. Toque em Baixar mais tarde para continuar.
+521|Adicionado após as entradas do próprio launcher ao iniciar.
+522|Login automático do Battle.net…
+523|Login do Battle.net preenchido: toque em Entrar.
+524|Verificando o programa do jogo...
+525|Arquivos do jogo alterados
+526|Ignorada ao iniciar: o launcher define esta variável.
+527|Não é uma página do CurseForge: aberta no seu navegador.
+528|Página: 
+529|REPARAR
+530|Falha no reparo: 
+531|O programa do jogo não corresponde ao original da Blizzard: 
+532|Estes arquivos do jogo não correspondem ao original da Blizzard: {0}. Outro app pode tê-los alterado, então o jogo não foi iniciado. Reparar baixa novamente os arquivos originais.
+533|o arquivo contém mais de {0} arquivos
+534|o arquivo descompactado passa de {0} MB
+535|o download passa de {0} MB

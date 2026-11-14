@@ -35,6 +35,7 @@ class PluviaApp : Application() {
         app.gamenative.ui.screen.wow.WowUiLanguage.load(this)
         app.gamenative.ui.screen.wow.WowI18n.init(this)
         app.gamenative.ui.screen.wow.WowDiagnostics.initialize(this)
+        app.gamenative.ui.screen.wow.WowClientIntegrity.init(this)
         com.winlator.core.FaultLog.init(this)
     }
 
@@ -156,6 +157,78 @@ class PluviaApp : Application() {
                 return false
             } finally { teardownLock.unlock() }
         }
+
+        private val setupLock = java.util.concurrent.locks.ReentrantLock()
+        private val setupDone = setupLock.newCondition()
+        private var setupsRunning = 0 // guarded by setupLock
+        /** One game setup at a time: a setup still extracting into the prefix must end before the next one touches it. */
+        private val setupGate = java.util.concurrent.Semaphore(1)
+
+        /**
+         * Review 2026-11-13: an exit during the game setup (first boot or an app update extracting the prefix) returned at once and
+         * nothing waited for the setup thread, so Play again started a second setup that extracted into the same prefix while the
+         * first was still writing it, and the first one's late cleanup could stop the new session's audio and clear its tmp. A
+         * setup counts from its submit ([beginGameSetup]) to the end of its thread ([endGameSetup]); a launch [awaitGameSetup]s
+         * first. This never touches [keepAlive]: the session's processes set and clear that themselves.
+         */
+        @JvmStatic
+        fun beginGameSetup() {
+            setupLock.lock()
+            try { setupsRunning++ } finally { setupLock.unlock() }
+        }
+
+        @JvmStatic
+        fun endGameSetup() {
+            setupLock.lock()
+            try {
+                if (setupsRunning > 0 && --setupsRunning == 0) setupDone.signalAll()
+            } finally { setupLock.unlock() }
+        }
+
+        @JvmStatic
+        fun isGameSetupRunning(): Boolean {
+            setupLock.lock()
+            try { return setupsRunning > 0 } finally { setupLock.unlock() }
+        }
+
+        /** Waits until no game setup thread is running. Never call on the UI thread. False when [timeoutMs] ran out first. */
+        @JvmStatic
+        fun awaitGameSetup(timeoutMs: Long): Boolean {
+            var left = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(timeoutMs)
+            setupLock.lock()
+            try {
+                while (setupsRunning > 0) {
+                    if (left <= 0L) return false
+                    left = setupDone.awaitNanos(left)
+                }
+                return true
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return false
+            } finally { setupLock.unlock() }
+        }
+
+        /**
+         * Runs [work] (a setup thread's body) only while no other setup runs: a setup of a screen that was rebuilt, or of a Play that
+         * came in while an aborted setup was still extracting, waits for the earlier one. False (and [work] not run) when the
+         * earlier one did not end within [timeoutMs].
+         */
+        @JvmStatic
+        fun runGameSetupExclusively(timeoutMs: Long, work: Runnable): Boolean {
+            val acquired = try {
+                setupGate.tryAcquire(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                false
+            }
+            if (!acquired) return false
+            try { work.run() } finally { setupGate.release() }
+            return true
+        }
+
+        /** True while a game environment exists (Java callers: [xEnvironment] is internal). */
+        @JvmStatic
+        fun hasLiveEnvironment(): Boolean = xEnvironment != null
 
         /**
          * full environment teardown — shared by XServerScreen.exit() and

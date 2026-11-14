@@ -84,6 +84,9 @@ internal object WowI18n {
         return result
     }
 
+    /** An English message from background work (an exception, a downloader status) in the saved UI language, when known. */
+    fun localize(context: Context, en: String): String = translate(WowUiLanguage.code(WowUiLanguage.saved(context)), en)
+
     /** For text built outside composition (services, background work): the saved UI language. */
     fun pick(context: Context, en: String, hu: String): String =
         when (val code = WowUiLanguage.code(WowUiLanguage.saved(context))) { "hu" -> hu; else -> translate(code, en) }

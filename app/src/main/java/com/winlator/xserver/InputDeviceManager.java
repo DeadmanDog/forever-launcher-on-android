@@ -169,23 +169,18 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
             winHandler.mouseEvent(MouseEventFlags.getFlagFor(button, true), 0, 0, wheelDelta);
         }
         else {
-            Window grabWindow = xServer.grabManager.getWindow();
-            if (grabWindow == null) {
-                grabWindow = pointWindow.getAncestorWithEventId(Event.BUTTON_PRESS);
-                if (grabWindow != null) xServer.grabManager.activatePointerGrab(grabWindow);
+            // The state of a button event is the key/button state just before it: this button is not yet part of it.
+            Bitmask state = getKeyButMask(button, false);
+            if (xServer.grabManager.getWindow() == null) {
+                // No grab: the press goes where it would without one and starts the implicit grab there (unchanged behaviour).
+                Window grabWindow = pointWindow.getAncestorWithEventId(Event.BUTTON_PRESS);
+                if (grabWindow == null) return;
+                xServer.grabManager.activatePointerGrab(grabWindow);
+                if (grabWindow.attributes.isEnabled()) {
+                    grabWindow.sendEvent(Event.BUTTON_PRESS, createButtonEvent(true, button, grabWindow, state));
+                }
             }
-
-            if (grabWindow != null && grabWindow.attributes.isEnabled()) {
-                Bitmask eventMask = createPointerEventMask();
-                eventMask.unset(button.flag());
-
-                short x = xServer.pointer.getX();
-                short y = xServer.pointer.getY();
-                short[] localPoint = grabWindow.rootPointToLocal(x, y);
-
-                Window child = grabWindow.isAncestorOf(pointWindow) ? pointWindow : null;
-                grabWindow.sendEvent(Event.BUTTON_PRESS, new ButtonPress(button.code(), xServer.windowManager.rootWindow, grabWindow, child, x, y, localPoint[0], localPoint[1], eventMask));
-            }
+            else sendGrabbedButtonEvent(true, button, state);
         }
     }
 
@@ -196,26 +191,52 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
             winHandler.mouseEvent(MouseEventFlags.getFlagFor(button, false), 0, 0, 0);
         }
         else {
-            Bitmask eventMask = createPointerEventMask();
-            Window grabWindow = xServer.grabManager.getWindow();
-            Window window = grabWindow == null || xServer.grabManager.isOwnerEvents() ? pointWindow.getAncestorWithEventMask(eventMask) : null;
-
-            if (grabWindow != null || window != null) {
-                Window eventWindow = window != null ? window : grabWindow;
-
-                short x = xServer.pointer.getX();
-                short y = xServer.pointer.getY();
-                short[] localPoint = eventWindow.rootPointToLocal(x, y);
-
-                Window child = eventWindow.isAncestorOf(pointWindow) ? pointWindow : null;
-                ButtonRelease buttonRelease = new ButtonRelease(button.code(), xServer.windowManager.rootWindow, eventWindow, child, x, y, localPoint[0], localPoint[1], eventMask);
-                sendEvent(window, eventMask, buttonRelease);
+            // The state just before the release still holds the button (the pointer has already cleared it).
+            Bitmask state = getKeyButMask(button, true);
+            if (xServer.grabManager.getWindow() == null) {
+                Window window = pointWindow.getAncestorWithEventId(Event.BUTTON_RELEASE);
+                if (window != null && window.attributes.isEnabled()) {
+                    window.sendEvent(Event.BUTTON_RELEASE, createButtonEvent(false, button, window, state));
+                }
             }
+            else sendGrabbedButtonEvent(false, button, state);
 
             if (xServer.pointer.getButtonMask().isEmpty() && xServer.grabManager.isReleaseWithButtons()) {
                 xServer.grabManager.deactivatePointerGrab();
             }
         }
+    }
+
+    /**
+     * A button event while a pointer grab is active (X11 core protocol, GrabPointer): with owner-events, an event that would
+     * normally go to the grabbing client goes there as usual; anything else goes to the grabbing client relative to the grab
+     * window, and only if the grab's event mask selects it.
+     */
+    private void sendGrabbedButtonEvent(boolean press, Pointer.Button button, Bitmask state) {
+        Window grabWindow = xServer.grabManager.getWindow();
+        EventListener grabListener = xServer.grabManager.getEventListener();
+        if (grabWindow == null || grabListener == null || !grabWindow.attributes.isEnabled()) return;
+        int eventId = press ? Event.BUTTON_PRESS : Event.BUTTON_RELEASE;
+        if (xServer.grabManager.isOwnerEvents()) {
+            Window window = pointWindow.getAncestorWithEventId(eventId);
+            if (window != null && window.hasEventListenerFor(eventId, grabListener.client)) {
+                if (window.attributes.isEnabled()) {
+                    window.sendEvent(eventId, createButtonEvent(press, button, window, state), grabListener.client);
+                }
+                return;
+            }
+        }
+        if (grabListener.isInterestedIn(eventId)) grabListener.sendEvent(createButtonEvent(press, button, grabWindow, state));
+    }
+
+    private Event createButtonEvent(boolean press, Pointer.Button button, Window eventWindow, Bitmask state) {
+        short x = xServer.pointer.getX();
+        short y = xServer.pointer.getY();
+        short[] localPoint = eventWindow.rootPointToLocal(x, y);
+        Window child = eventWindow.isAncestorOf(pointWindow) ? pointWindow : null;
+        return press
+            ? new ButtonPress(button.code(), xServer.windowManager.rootWindow, eventWindow, child, x, y, localPoint[0], localPoint[1], state)
+            : new ButtonRelease(button.code(), xServer.windowManager.rootWindow, eventWindow, child, x, y, localPoint[0], localPoint[1], state);
     }
 
     @Override
@@ -244,7 +265,8 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
         Window child = null;
         if (focusedWindow.isAncestorOf(pointWindow)) {
             eventWindow = pointWindow.getAncestorWithEventId(Event.KEY_PRESS, focusedWindow);
-            child = eventWindow.isAncestorOf(pointWindow) ? pointWindow : null;
+            // No listener between the pointer window and the focus (or a do-not-propagate mask): the focus window itself.
+            if (eventWindow != null) child = eventWindow.isAncestorOf(pointWindow) ? pointWindow : null;
         }
         if (eventWindow == null) {
             if (!focusedWindow.hasEventListenerFor(Event.KEY_PRESS)) return;
@@ -286,7 +308,8 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
         Window child = null;
         if (focusedWindow.isAncestorOf(pointWindow)) {
             eventWindow = pointWindow.getAncestorWithEventId(Event.KEY_RELEASE, focusedWindow);
-            child = eventWindow.isAncestorOf(pointWindow) ? pointWindow : null;
+            // No listener between the pointer window and the focus (or a do-not-propagate mask): the focus window itself.
+            if (eventWindow != null) child = eventWindow.isAncestorOf(pointWindow) ? pointWindow : null;
         }
         if (eventWindow == null) {
             if (!focusedWindow.hasEventListenerFor(Event.KEY_RELEASE)) return;
@@ -328,6 +351,15 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
             }
         }
         return eventMask;
+    }
+
+    /** The core SETofKEYBUTMASK: modifiers and Button1..Button5 (buttons 6 and 7 have no state bit in the core protocol). */
+    private static final long CORE_KEY_BUT_MASK = 0x1FFF;
+
+    private Bitmask getKeyButMask(Pointer.Button button, boolean pressed) {
+        Bitmask keyButMask = getKeyButMask();
+        keyButMask.set(button.flag(), pressed);
+        return new Bitmask(keyButMask.getBits() & CORE_KEY_BUT_MASK);
     }
 
     public Bitmask getKeyButMask() {

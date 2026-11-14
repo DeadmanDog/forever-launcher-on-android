@@ -21,7 +21,7 @@ a=s.index('        if (isCursorImageDirty.load()',s.index('void VulkanRendererCo
 upload='bool hasCurUpload=false,curVis=true;VkBuffer curUpload{};short curUpW=0,curUpH=0;cursorImg=12;cursorTexW=2;cursorTexH=2;cursorW=2;cursorH=2;std::vector<uint32_t>cursorPixels(4,7);'+upload
 fixture=(tests/'RenderCursorGpuTest.cpp.in').read_text().replace('/* STAGING_FIELDS */',fields).replace('/* SLOT_BUFFER */',buffer).replace('/* SLOT_MAPPED */',mapped).replace('/* PRODUCTION */',production).replace('/* CURSOR_BARRIER */',barrier).replace('/* CURSOR_UPLOAD */',upload)
 fixture=fixture.replace('struct VulkanRendererContext {','static constexpr unsigned MAX_FRAMES_IN_FLIGHT=2;\nstruct VulkanRendererContext {')
-ndk=Path(os.environ.get('ANDROID_NDK_HOME', str(Path(os.environ.get('ANDROID_HOME','/home/fsos-x/.local/share/wow-build-tools/sdk'))/'ndk/27.3.13750724')))
+ndk=Path(os.environ.get('ANDROID_NDK_HOME', str(Path(os.environ.get('ANDROID_HOME',str(Path.home()/'.local/share/wow-build-tools/sdk')))/'ndk/27.3.13750724')))
 include=ndk/'toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include'
 with tempfile.TemporaryDirectory(prefix='cursor-gpu-regressions-') as folder:
  p=Path(folder)/'cursor.cpp';p.write_text(fixture);exe=p.with_suffix('')

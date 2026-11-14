@@ -325,9 +325,12 @@ public class PresentExtension implements Extension {
             app.gamenative.ui.screen.wow.WowDiagnostics.presentFrame(window, pixmap);
         }
 
+        final boolean direct = vr != null && window.attributes.isMapped();
+        // 2026-11-12 review: CompleteNotify goes out before the render lock is taken (same order as before: ahead of the content
+        // update). A blocking socket write used to hold content.renderLock, and the renderer and input wait on that chain.
+        if (direct) sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
         synchronized (content.renderLock) {
-            if (vr != null && window.attributes.isMapped()) {
-                sendCompleteNotify(window, serial, Kind.PIXMAP, Mode.COPY, ust, msc);
+            if (direct) {
                 // With the experimental hand-back on, the renderer keeps the buffer and gives it back (through the callback) when the
                 // frames that may read it are done; otherwise the Idle goes out right away or on the pacer, as always.
                 boolean held = vr.onUpdateWindowContentDirect(window, pixmap.drawable, xOff, yOff,

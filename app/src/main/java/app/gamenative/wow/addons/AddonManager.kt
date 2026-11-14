@@ -109,7 +109,14 @@ class AddonManager(
     suspend fun checkUpdates(): List<AddonListing> = installed().filter { it.updateAvailable }
 
     /** Installs [remote]'s best file (Forever first), installing missing required dependencies first. */
-    suspend fun install(remote: RemoteAddon): InstalledAddon = lock.withLock { installLocked(remote, mutableSetOf()) }
+    suspend fun install(remote: RemoteAddon): InstalledAddon = lock.withLock { installLocked(resolved(remote), mutableSetOf()) }
+
+    /** A Browse listing may carry a file without its link (CurseForge index-only): the provider's full answer has it. */
+    private suspend fun resolved(remote: RemoteAddon): RemoteAddon {
+        if (remote.latest.values.all { it.installable }) return remote
+        val provider = providers.firstOrNull { it.id == remote.provider && it.enabled } ?: return remote
+        return safely { provider.get(remote.projectId) } ?: remote
+    }
 
     /** Reinstalls [addon] from its source's newest best file. */
     suspend fun update(addon: InstalledAddon): InstalledAddon = lock.withLock { updateLocked(addon) }
@@ -132,6 +139,13 @@ class AddonManager(
         return done
     }
 
+    /** Dependencies that only the CurseForge website offers, met while installing (taken by the page with [takeWebsiteDownloads]). */
+    private val pendingWebsiteDownloads = java.util.Collections.synchronizedList(mutableListOf<NeedsWebsiteDownload>())
+
+    fun takeWebsiteDownloads(): List<NeedsWebsiteDownload> = synchronized(pendingWebsiteDownloads) {
+        pendingWebsiteDownloads.toList().also { pendingWebsiteDownloads.clear() }
+    }
+
     /** What the last [updateAll] could not update (1.3.6: it said "done" even when an addon failed). */
     @Volatile var lastUpdateFailures: List<Pair<InstalledAddon, Exception>> = emptyList()
         private set
@@ -148,7 +162,9 @@ class AddonManager(
 
     /** Installs from a GitHub repository URL or a direct zip URL. */
     suspend fun installFromUrl(url: String): InstalledAddon = lock.withLock {
-        val repo = GitHubProvider.fromUrl(url)
+        // A link to one file (a release asset, an archive, any .zip) installs that file, not the repo's latest release.
+        val directFile = Regex("/releases/download/|/archive/|\\.zip([?#].*)?$", RegexOption.IGNORE_CASE).containsMatchIn(url.trim())
+        val repo = if (directFile) null else GitHubProvider.fromUrl(url)
         if (repo != null) {
             val github = providers.firstOrNull { it.id == ProviderIds.GITHUB } ?: GitHubProvider(http)
             val remote = github.get(repo) ?: throw IOException("no release found for $repo")
@@ -194,7 +210,9 @@ class AddonManager(
         results.forEach { groups.getOrPut(mergeKey(it)) { mutableListOf() } += it }
         return groups.values.map { group ->
             val primary = group.maxWith(compareBy<RemoteAddon>({ AddonFlavor.FOREVER in it.latest }, { it.downloads }))
+            // Installed from another source (the author's GitHub release instead of a blocked CurseForge file): same name.
             val installed = records.firstOrNull { record -> group.any { record.source.matches(it) } }
+                ?: records.firstOrNull { record -> record.source != null && normalize(record.name) == mergeKey(primary) }
             AddonListing(
                 // Sources fill in for each other: one may list categories or screenshots another lacks.
                 remote = primary.copy(
@@ -240,18 +258,24 @@ class AddonManager(
             // A file kept off third-party apps still counts when the project names a source repo to update from (alternateFor).
             best == null || (!best.installable && own?.sourceUrl == null) -> false
             source.fileId != null -> best.fileId != source.fileId
-            else -> installed.version == null || !best.version.contains(installed.version)
+            else -> installed.version == null || !sameVersion(best.version, installed.version)
         }
         val switchToForever = installed.flavor == AddonFlavor.CLASSIC &&
             group.any { it.latest[AddonFlavor.FOREVER]?.installable == true }
         return changed || switchToForever
     }
 
+    /** [installed] appears in [remote] as a whole version token ("2.1" is not in "12.1.0", "1.2.3" not in "1.2.30"). */
+    internal fun sameVersion(remote: String, installed: String): Boolean =
+        remote == installed || Regex("(?<![0-9A-Za-z.])" + Regex.escape(installed) + "(?![0-9A-Za-z]|\\.[0-9])").containsMatchIn(remote)
+
     /** Forever first, then a generic file, then Classic; installable files win within that order. */
     private fun bestFile(remote: RemoteAddon): Pair<AddonFlavor, RemoteFile>? {
         val ordered = listOf(AddonFlavor.FOREVER, AddonFlavor.OTHER, AddonFlavor.CLASSIC)
             .mapNotNull { flavor -> remote.latest[flavor]?.let { flavor to it } }
-        return ordered.firstOrNull { it.second.installable } ?: ordered.firstOrNull()
+        // A Forever file wins even when it is not downloadable from here: it is resolved, taken from the author's other release or
+        // downloaded on the website; installing the Classic build instead would give the player the wrong addon.
+        return ordered.firstOrNull { it.first == AddonFlavor.FOREVER } ?: ordered.firstOrNull { it.second.installable } ?: ordered.firstOrNull()
     }
 
     private suspend fun fetchRemotes(records: List<InstalledAddon>): Map<Pair<String, String>, RemoteAddon> {
@@ -308,7 +332,11 @@ class AddonManager(
             if (syncDb().any { it.source?.provider == dep.provider && it.source.projectId == dep.projectId }) continue
             val provider = providers.firstOrNull { it.id == dep.provider && it.enabled } ?: continue
             val depRemote = provider.get(dep.projectId) ?: continue
-            installLocked(depRemote, visiting)
+            try {
+                installLocked(depRemote, visiting)
+            } catch (e: NeedsWebsiteDownload) {
+                pendingWebsiteDownloads += e   // the page offers it after the addon itself is installed
+            }
         }
 
         val folders = downloadAndExtract(file.downloadUrl)
@@ -334,8 +362,9 @@ class AddonManager(
         val newFolders = record.folders.toSet()
         val replaced = records.filter { it.id == record.id || newFolders.containsAll(it.folders) }
         val kept = records - replaced.toSet()
-        val owned = kept.flatMap { it.folders }.toSet() + newFolders
-        replaced.flatMap { it.folders }.filter { it !in owned }.distinct().forEach { deleteFolder(it) }
+        // Shared storage is case-insensitive: "Questie" replaced by "questie" is the same folder and must not be deleted.
+        val owned = (kept.flatMap { it.folders } + newFolders).map { it.lowercase() }.toSet()
+        replaced.flatMap { it.folders }.filter { it.lowercase() !in owned }.distinct().forEach { deleteFolder(it) }
         db.save(kept + record)
         return record
     }
@@ -348,7 +377,10 @@ class AddonManager(
         lock.withLock {
             // https only (a loopback http host is the test server).
             val loopback = Regex("^http://(localhost|127\\.0\\.0\\.1)(:\\d+)?/").containsMatchIn(url)
-            require(url.startsWith("https://") || loopback) { "not a download link: $url" }
+            // Only a file from CurseForge itself: an ad or another link the page fires must not be installed as this addon.
+            val host = runCatching { java.net.URI(url).host.orEmpty().lowercase() }.getOrDefault("")
+            val curseForge = listOf("forgecdn.net", "curseforge.com").any { host == it || host.endsWith(".$it") }
+            require((url.startsWith("https://") && curseForge) || loopback) { "not a CurseForge download: $url" }
             val folders = downloadAndExtract(url, headers)
             commit(InstalledAddon(
                 id = "${remote.provider}:${remote.projectId}",
@@ -369,7 +401,10 @@ class AddonManager(
             val request = Request.Builder().url(url).apply { headers.forEach { (k, v) -> header(k, v) } }.build()
             http.newCall(request).consumeCancellable { response ->
                 if (!response.isSuccessful) throw IOException("download failed: HTTP ${response.code}")
-                tmp.outputStream().use { out -> response.body.byteStream().copyTo(out) }
+                if (response.body.contentLength() > AddonArchive.MAX_DOWNLOAD_BYTES) throw AddonArchive.downloadTooLarge()
+                tmp.outputStream().use { out ->
+                    AddonArchive.copyLimited(response.body.byteStream(), out, AddonArchive.MAX_DOWNLOAD_BYTES, AddonArchive::downloadTooLarge)
+                }
             }
             // A cancelled install stops here, before anything in AddOns changes; once started the install runs to its end.
             ensureActive()

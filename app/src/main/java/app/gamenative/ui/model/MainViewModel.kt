@@ -164,7 +164,21 @@ class MainViewModel @Inject constructor(
 
             delay(100)
             if (!isActive) return@launch
-            apiJob.await()
+            try {
+                apiJob.await()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Review 2026-11-13: an unreadable container used to crash the app here. The splash goes, the launcher resets
+                // (ForceCloseApp, nothing runs yet) and the reason stays visible.
+                bootingSplashTimeoutJob?.cancel()
+                bootingSplashTimeoutJob = null
+                setShowBootingSplash(false)
+                PluviaApp.events.emit(AndroidEvent.ClearBootingSplash)
+                PluviaApp.events.emit(AndroidEvent.ForceCloseApp)
+                app.gamenative.ui.util.SnackbarManager.show(e.message ?: e.javaClass.simpleName)
+                return@launch
+            }
             if (!isActive) return@launch
             app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.18f, 0.24f, 1500)
             _uiEvent.send(MainUiEvent.LaunchApp)

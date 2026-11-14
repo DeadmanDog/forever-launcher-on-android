@@ -1,7 +1,6 @@
 package app.gamenative.ui.screen.wow
 
 import android.content.Context
-import android.util.Base64
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -24,9 +23,9 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import app.gamenative.Crypto
 import app.gamenative.PluviaApp
 import app.gamenative.PrefManager
+import app.gamenative.SecretStore
 import app.gamenative.externaldisplay.IMEInputReceiver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,43 +41,50 @@ object BattleNetSignIn {
         override fun toString() = "Login(email=$email, password=***)"
     }
 
+    /** The saved login, or null. An e-mail saved unsealed by an older version is sealed on this first read (see [SecretStore]). */
     fun load(context: Context): Login? {
         val prefs = prefs(context)
-        val email = prefs.getString(KEY_EMAIL, null) ?: return null
-        val sealed = prefs.getString(KEY_PASSWORD, null) ?: return null
-        return try {
-            Login(email, String(Crypto.decrypt(Base64.decode(sealed, Base64.NO_WRAP))))
-        } catch (e: Exception) {
-
+        val sealedPassword = prefs.getString(KEY_PASSWORD, null) ?: return null
+        if (prefs.getString(KEY_EMAIL_SEALED, null) == null && prefs.getString(KEY_EMAIL, null) == null) return null
+        val email = SecretStore.get(prefs, KEY_EMAIL_SEALED, KEY_EMAIL)
+        val password = SecretStore.openString(sealedPassword)
+        if (email.isNullOrEmpty() || password == null) {
             forget(context)
-            null
+            return null
         }
+        return Login(email, password)
     }
 
     fun hasSaved(context: Context): Boolean {
         val prefs = prefs(context)
-        return prefs.getString(KEY_EMAIL, null) != null && prefs.getString(KEY_PASSWORD, null) != null
+        return (prefs.getString(KEY_EMAIL_SEALED, null) != null || prefs.getString(KEY_EMAIL, null) != null) &&
+            prefs.getString(KEY_PASSWORD, null) != null
     }
 
+    /** Saves the login with both the e-mail and the password sealed; throws when the device cannot seal them (nothing is saved then). */
     fun save(context: Context, login: Login) {
-        val sealed = Base64.encodeToString(Crypto.encrypt(login.password.toByteArray()), Base64.NO_WRAP)
-        prefs(context).edit().putString(KEY_EMAIL, login.email).putString(KEY_PASSWORD, sealed).apply()
+        val sealer = SecretStore.sealer() ?: throw IllegalStateException("the Android KeyStore is not available")
+        val password = SecretStore.sealToString(login.password, sealer) ?: throw IllegalStateException("cannot seal the password")
+        val email = SecretStore.sealToString(login.email, sealer) ?: throw IllegalStateException("cannot seal the e-mail")
+        prefs(context).edit().putString(KEY_EMAIL_SEALED, email).remove(KEY_EMAIL).putString(KEY_PASSWORD, password).apply()
     }
 
     fun forget(context: Context) {
         prefs(context).edit().clear().apply()
     }
 
+    /** Fills in WoW's login form and signs in (Enter at the end). */
     suspend fun typeInto(receiver: IMEInputReceiver, login: Login, passwordOnly: Boolean = false) {
         val centerX = receiver.screenWidth / 2
         val emailY = (receiver.screenHeight * 0.505f).toInt()
         val passwordY = (receiver.screenHeight * 0.648f).toInt()
+        val end = "\n"
 
         if (passwordOnly) {
             // "Remember Account" already filled in the e-mail: just the password.
             receiver.clickAt(centerX, passwordY)
             delay(100)
-            receiver.typeText(login.password + "\n")
+            receiver.typeText(login.password + end)
             delay(KEY_SETTLE_MS)
             receiver.movePointerTo(centerX, receiver.screenHeight / 2)
             return
@@ -90,7 +96,7 @@ object BattleNetSignIn {
         delay(200)
         receiver.typeText(login.email + "\t")
         delay(KEY_SETTLE_MS)
-        receiver.typeText(login.password + "\n")
+        receiver.typeText(login.password + end)
         delay(KEY_SETTLE_MS)
         receiver.movePointerTo(centerX, receiver.screenHeight / 2)
     }
@@ -98,7 +104,9 @@ object BattleNetSignIn {
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     private const val PREFS = "battle_net_login"
+    /** Where versions before the sealed e-mail kept it unsealed; read once for the migration, then removed. */
     private const val KEY_EMAIL = "email"
+    private const val KEY_EMAIL_SEALED = "email_sealed"
     private const val KEY_PASSWORD = "password"
     private const val KEY_SETTLE_MS = 300L
 }
@@ -119,15 +127,16 @@ fun BattleNetCredentialDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Battle.net login") },
+        title = { Text(tx("Battle.net login", "Battle.net belépés")) },
         text = {
             Column {
-                Text("Saved encrypted on this device only. Select WoW's email field before signing in.")
+                Text(tx("Saved encrypted on this device only. Select WoW's email field before signing in.",
+                    "Titkosítva, csak ezen az eszközön tárolódik. Belépés előtt válaszd ki a WoW e-mail mezőjét."))
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    label = { Text("Email") },
+                    label = { Text(tx("Email", "E-mail")) },
                     singleLine = true,
                     modifier = Modifier.focusRequester(emailFocus),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -135,7 +144,7 @@ fun BattleNetCredentialDialog(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password") },
+                    label = { Text(tx("Password", "Jelszó")) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -146,9 +155,9 @@ fun BattleNetCredentialDialog(
             TextButton(
                 enabled = email.isNotBlank() && password.isNotEmpty(),
                 onClick = { onConfirm(BattleNetSignIn.Login(email.trim(), password)) },
-            ) { Text("Save & sign in") }
+            ) { Text(tx("Save & sign in", "Mentés és belépés")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tx("Cancel", "Mégse")) } },
     )
 }
 
@@ -164,6 +173,9 @@ fun BattleNetSignInHost(
     var showDialog by remember { mutableStateOf(false) }
     val tr = rememberTx()
 
+    // Closed for good after the first sign-in of this session (from the menu or automatic), see AutoSignInGate.
+    val gate = remember { AutoSignInGate() }
+
     // passwordOnlyHint: known from the frame the auto sign-in just recognised; null = look at the screen now.
     fun signIn(login: BattleNetSignIn.Login, delayMs: Long = MENU_CLOSE_MS, passwordOnlyHint: Boolean? = null) {
         val receiver = PluviaApp.imeInputReceiver ?: run {
@@ -171,13 +183,14 @@ fun BattleNetSignInHost(
             android.util.Log.w("WowAutoSignIn", "cannot sign in: the game input receiver is not ready")
             return
         }
+        gate.stop()
         onBeforeTyping()
         scope.launch {
             if (delayMs > 0) delay(delayMs)
             val passwordOnly = passwordOnlyHint ?: run {
                 val view = gameView()
                 view != null && LoginScreenCapture.withFrame(view) { frame ->
-                    frame != null && (LoginScreenDetector.matches(frame) || LoginScreenDetector.looksLikeLogin(frame)) &&
+                    frame != null && (LoginScreenDetector.matches(frame) || LoginScreenDetector.looksLikeLoginForm(frame)) &&
                         LoginScreenDetector.emailFieldHasText(frame)
                 }
             }
@@ -191,13 +204,9 @@ fun BattleNetSignInHost(
         }
     }
 
-    // Auto sign-in: once per game session, only when the login screen is really on screen (see LoginScreenDetector).
+    // Auto sign-in: once per game session, only on the login form itself (exact colours and the form's shape; see AutoSignInGate and
+    // LoginScreenDetector). It stops for good after the first sign-in, or once the login form has been seen and then gone.
     LaunchedEffect(Unit) {
-        var matchedPolls = 0
-        var softPolls = 0
-        var softSince = 0L
-        var loosePolls = 0
-        var looseSince = 0L
         var lastLoggedShape = false
         var lastLogged = -2
         var lastLoggedSoft = false
@@ -208,11 +217,12 @@ fun BattleNetSignInHost(
         var announced = false
         var finished = false
         val startedAt = System.currentTimeMillis()
-        while (System.currentTimeMillis() - startedAt < AUTO_TIMEOUT_MS) {
+        while (System.currentTimeMillis() - startedAt < AUTO_TIMEOUT_MS && !gate.closed) {
             // Rarely while the feature is off or has no saved login (it only reads two settings then); slow while the screen is
             // clearly something else (and slower still after a few minutes: each look copies the live game picture, which must not go
             // on for long during play); quick once the login form is showing up (most areas match, or the kind-based test does).
             delay(autoPollDelayMs(enabled, lastScore, lastKind, System.currentTimeMillis() - startedAt))
+            if (gate.closed) break
             val on = PrefManager.bnetAutoSignIn
             val saved = BattleNetSignIn.hasSaved(context)
             enabled = on && saved
@@ -222,56 +232,57 @@ fun BattleNetSignInHost(
                 android.util.Log.w("WowAutoSignIn", "armed: switch=$on savedLogin=$saved gameView=${gameView() != null}")
             }
             if (!enabled) {
-                matchedPolls = 0; softPolls = 0; loosePolls = 0
+                gate.reset()
                 continue
             }
             val view = gameView() ?: continue
             val look = LoginScreenCapture.withFrame(view) { frame ->
-                if (frame == null) ScreenLook(-1, false) else {
+                if (frame == null) ScreenLook(LoginScreenDetector.Look(-1, false, false, false)) else {
                     // One pass over the six areas. The text for the log is built only when the log line will really be written.
                     val seen = LoginScreenDetector.look(frame)
                     val logDue = System.currentTimeMillis() - lastLogAt >= LOG_GAP_MS &&
                         (seen.score != lastLogged || seen.kindOfLogin != lastLoggedSoft || seen.shape != lastLoggedShape)
                     val details = when {
                         !logDue -> ""
-                        seen.kindOfLogin && !seen.shape -> LoginScreenDetector.shapeDetails(frame)    // kinds match, shape does not: show why
+                        (seen.exact || seen.kindOfLogin) && !seen.shape -> LoginScreenDetector.shapeDetails(frame)    // colours match, shape does not: show why
                         !seen.exact && !seen.kindOfLogin && seen.score >= 2 -> LoginScreenDetector.details(frame)
                         else -> ""
                     }
-                    ScreenLook(seen.score, seen.exact, (seen.exact || seen.kindOfLogin) && LoginScreenDetector.emailFieldHasText(frame),
-                        seen.kindOfLogin, seen.formLike, details)
+                    ScreenLook(seen, (seen.exact || seen.kindOfLogin) && LoginScreenDetector.emailFieldHasText(frame), details)
                 }
             }
-            val score = look.score
-            lastScore = score
-            lastKind = look.kindOfLogin
+            val seen = look.seen
+            lastScore = seen.score
+            lastKind = seen.kindOfLogin
             val now = System.currentTimeMillis()
-            if ((score != lastLogged || look.kindOfLogin != lastLoggedSoft || look.formLike != lastLoggedShape) && now - lastLogAt >= LOG_GAP_MS) {
-                lastLogged = score; lastLoggedSoft = look.kindOfLogin; lastLoggedShape = look.formLike; lastLogAt = now
-                android.util.Log.w("WowAutoSignIn", "capture=${LoginScreenCapture.lastResult} matchedAreas=$score/${LoginScreenDetector.regions.size} " +
-                    "kindOfLogin=${look.kindOfLogin} formShape=${look.formLike}" + if (look.details.isNotEmpty()) " ${look.details}" else "")
+            if ((seen.score != lastLogged || seen.kindOfLogin != lastLoggedSoft || seen.shape != lastLoggedShape) && now - lastLogAt >= LOG_GAP_MS) {
+                lastLogged = seen.score; lastLoggedSoft = seen.kindOfLogin; lastLoggedShape = seen.shape; lastLogAt = now
+                android.util.Log.w("WowAutoSignIn", "capture=${LoginScreenCapture.lastResult} matchedAreas=${seen.score}/${LoginScreenDetector.regions.size} " +
+                    "kindOfLogin=${seen.kindOfLogin} formShape=${seen.shape}" + if (look.details.isNotEmpty()) " ${look.details}" else "")
             }
-            matchedPolls = if (look.loginScreen) matchedPolls + 1 else 0
-            if (look.formLike) { if (softPolls == 0) softSince = now; softPolls++ } else softPolls = 0
-            if (look.kindOfLogin) { if (loosePolls == 0) looseSince = now; loosePolls++ } else loosePolls = 0
-            // The exact values need 3 looks in a row. Colours of the right kinds AND the shape of the form need 4 looks over at least half a
-            // second (quick: the shape is what keeps a lookalike out). Colours of the right kinds alone, when the shape test does not
-            // agree (another resolution or UI scale can change how the text is drawn), still count - as in 1.3.19 - but slowly: 6 looks
-            // over at least 2 seconds. The shape numbers of such a frame are in the log line above.
-            val stable = matchedPolls >= AUTO_STABLE_POLLS ||
-                (softPolls >= AUTO_SOFT_STABLE_POLLS && now - softSince >= AUTO_SOFT_STABLE_MS) ||
-                (loosePolls >= AUTO_LOOSE_STABLE_POLLS && now - looseSince >= AUTO_LOOSE_STABLE_MS)
-            if (stable) {
-                val login = BattleNetSignIn.load(context) ?: break
-                val passwordOnly = look.passwordOnly
-                android.util.Log.w("WowAutoSignIn", "login screen recognised (exact=${look.loginScreen}); signing in (passwordOnly=$passwordOnly)")
-                app.gamenative.ui.util.SnackbarManager.show(tr("Battle.net auto-login…", "Battle.net automatikus belépés…"))
-                finished = true
-                signIn(login, delayMs = 0L, passwordOnlyHint = passwordOnly)
-                break
+            when (gate.observe(seen, now)) {
+                AutoSignInGate.Decision.WAIT -> Unit
+                AutoSignInGate.Decision.STOP -> {
+                    finished = true
+                    android.util.Log.w("WowAutoSignIn", "the login form was seen and is gone: auto sign-in is off for this session")
+                }
+                AutoSignInGate.Decision.SIGN_IN -> {
+                    finished = true
+                    val login = BattleNetSignIn.load(context)
+                    if (login == null) {
+                        android.util.Log.w("WowAutoSignIn", "login screen recognised but the saved login could not be read")
+                        break
+                    }
+                    android.util.Log.w("WowAutoSignIn", "login screen recognised (exact=${seen.exact} formShape=${seen.shape}); signing in (passwordOnly=${look.passwordOnly})")
+                    app.gamenative.ui.util.SnackbarManager.show(tr("Battle.net auto-login…", "Battle.net automatikus belépés…"))
+                    signIn(login, delayMs = 0L, passwordOnlyHint = look.passwordOnly)
+                }
             }
         }
-        if (enabled && !finished) android.util.Log.w("WowAutoSignIn", "gave up: no login screen was recognised within ${AUTO_TIMEOUT_MS / 60000} minutes")
+        if (enabled && !finished && !gate.closed) {
+            android.util.Log.w("WowAutoSignIn", "gave up: no login screen was recognised within ${AUTO_TIMEOUT_MS / 60000} minutes")
+        }
+        gate.stop()
     }
 
     LaunchedEffect(requested) {
@@ -312,14 +323,11 @@ internal fun autoPollDelayMs(enabled: Boolean, lastScore: Int, lastKind: Boolean
     else -> AUTO_POLL_MS
 }
 
-/** What one look at the game view found: how many login-form areas matched, whether it is the login screen, and whether the e-mail is already filled in. */
+/** What one look at the game view found, plus whether the e-mail is already filled in and the numbers for the diagnostics log. */
 private class ScreenLook(
-    val score: Int, val loginScreen: Boolean, val passwordOnly: Boolean = false,
-    /** Not the exact colours, but the kind-based test says login screen. */
-    val kindOfLogin: Boolean = false,
-    /** ... and the frame also has the shape of the form. */
-    val formLike: Boolean = false,
-    /** Region averages of a partly matching frame (or the shape numbers of a kind match), for the diagnostics. */
+    val seen: LoginScreenDetector.Look,
+    val passwordOnly: Boolean = false,
+    /** Region averages of a partly matching frame (or the shape numbers of a colour match), for the diagnostics. */
     val details: String = "",
 )
 
@@ -329,11 +337,7 @@ private const val AUTO_POLL_FAST_MS = 200L
 private const val AUTO_POLL_OFF_MS = 3000L
 private const val AUTO_POLL_LATE_MS = 2500L
 private const val AUTO_SLOW_AFTER_MS = 3 * 60 * 1000L
-private const val AUTO_STABLE_POLLS = 3
-private const val AUTO_SOFT_STABLE_POLLS = 4
-private const val AUTO_SOFT_STABLE_MS = 500L
-private const val AUTO_LOOSE_STABLE_POLLS = 6
-private const val AUTO_LOOSE_STABLE_MS = 2000L
 private const val LOG_GAP_MS = 5000L
+/** The login screen comes up within the first minutes of a session; the detector does not watch the game for longer than this. */
 private const val AUTO_TIMEOUT_MS = 10 * 60 * 1000L
 private const val DIALOG_SETTLE_MS = 300L

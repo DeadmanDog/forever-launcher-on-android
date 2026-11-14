@@ -53,8 +53,7 @@ def main():
         ("Csak FIFO-val. Sima (alapértelmezett): a kockák", "Csak FIFO-val. Sima: a kockák"),
         ("Legalacsonyabb (kísérleti): minden alkalommal", "Legalacsonyabb (alapértelmezett): minden alkalommal")])
     test = target / "app/src/test/java/app/gamenative/ui/screen/wow/WowRuntimeTuningTest.kt"
-    replace_once(test, [("        assertFalse(WowRuntimeTuning.fifoLowLatency(context)) // the smooth FIFO queue unless the player lowers it\n"
-                         "        assertEquals(0, WowRuntimeTuning.fifoDrainMode(context))\n",
+    replace_once(test, [("        assertEquals(0, WowRuntimeTuning.fifoDrainMode(context))\n",
                          "        assertEquals(2, WowRuntimeTuning.fifoDrainMode(context)) // release: the lowest drain by default\n")])
     print(f"release tree ready: {target}")
 

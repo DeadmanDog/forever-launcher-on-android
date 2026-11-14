@@ -1,0 +1,120 @@
+// Appended by run_scanout_release_regressions.py to the stub part of RenderScanoutLifetimeTest.cpp.in (with the optional
+// SurfaceControl entry points switched on) and the production scanout code.
+static void check(bool ok, const char* m) { if (!ok) { fprintf(stderr, "FAIL %s\n", m); exit(2); } }
+static std::mutex tokMutex; static std::vector<int64_t> handedBack;
+static bool back(int64_t t) { std::lock_guard<std::mutex> l(tokMutex); for (auto v : handedBack) if (v == t) return true; return false; }
+static size_t backCount() { std::lock_guard<std::mutex> l(tokMutex); return handedBack.size(); }
+static void waitBack(int64_t t, int ms) { for (int i = 0; i < ms / 5 && !back(t); i++) std::this_thread::sleep_for(std::chrono::milliseconds(5)); }
+static void sleepMs(int ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
+// Runs every completion applied so far with [stats].
+static void fireCompletions(FakeStats* stats) {
+    std::vector<std::pair<void*, OnCompleteFn>> run;
+    { std::lock_guard<std::mutex> l(cbMutex); run.swap(appliedCallbacks); }
+    for (auto& c : run) c.second(c.first, stats);
+}
+
+int main(int argc, char** argv) {
+    int which = argc > 1 ? atoi(argv[1]) : 0;
+    VulkanRendererContext c; ANativeWindow win{}; c.window = &win;
+    c.idleSink = [](const std::vector<int64_t>& t) { std::lock_guard<std::mutex> l(tokMutex); handedBack.insert(handedBack.end(), t.begin(), t.end()); };
+    c.initScanout(); check(c.scanoutActive.load(), "scanout starts");
+    AHardwareBuffer* frame = new AHardwareBuffer; frame->w = 64; frame->h = 64;
+    void* gameSC = c.scanoutGameSC; void* cursorSC = c.scanoutCursorSC;
+
+    if (which == 0) {
+        // The replaced buffer is handed back only after the transaction that replaced it completed and its release fence signalled.
+        check(c.scanoutSetBuffer(frame, 0, 0, 64, 64, -1, 1), "the renderer hands the tokens back itself");
+        check(c.scanoutSetBuffer(frame, 0, 0, 64, 64, -1, 2), "second frame");
+        sleepMs(30);
+        check(!back(1), "not while the layer may still show it (it used to be handed back right here)");
+        int p[2]; check(pipe(p) == 0, "pipe");
+        FakeStats stats{{gameSC}, p[0]};
+        fireCompletions(&stats);
+        sleepMs(30);
+        check(!back(1), "not before the release fence signalled");
+        check(write(p[1], "x", 1) == 1, "signal");
+        waitBack(1, 1000);
+        check(back(1) && !back(2), "token 1 back after its fence; the shown buffer (2) is kept");
+        close(p[0]); close(p[1]);
+    }
+    if (which == 1) {
+        // A completion whose stats do not list the layer: no fence is asked for (the platform aborts on that), handed back at once.
+        c.scanoutSetBuffer(frame, 0, 0, 64, 64, -1, 1); c.scanoutSetBuffer(frame, 0, 0, 64, 64, -1, 2);
+        FakeStats stats{{cursorSC}, -1};
+        fireCompletions(&stats);
+        waitBack(1, 1000);
+        check(back(1), "handed back without a fence");
+    }
+    if (which == 2) {
+        // Teardown: both layers leave the tree (reparent to null) before their handles are released, and the last shown buffer is
+        // handed back once that transaction completed.
+        c.scanoutSetBuffer(frame, 0, 0, 64, 64, -1, 5);
+        c.destroyScanout();
+        { std::lock_guard<std::mutex> l(cbMutex); check(reparentedNull.count(gameSC) && reparentedNull.count(cursorSC), "both layers reparented to null"); }
+        check(!back(5), "the shown buffer is not handed back before the hiding transaction completed");
+        FakeStats stats{{}, -1};
+        fireCompletions(&stats);
+        waitBack(5, 1000);
+        check(back(5), "handed back after the layer is gone");
+    }
+    if (which == 3) {
+        // Cursor pixels: BGRA straight alpha in, RGBA premultiplied out.
+        uint32_t px[4] = {0x80FF0000u /* half-transparent red */, 0xFF0000FFu /* blue */, 0x00FFFFFFu /* transparent */, 0xFF102030u};
+        c.scanoutSetCursorImage(px, 2, 2, 2);
+        auto* buf = reinterpret_cast<AHardwareBuffer*>(c.scanoutCursorBuf);
+        check(buf && buf->px.size() >= 4, "cursor buffer");
+        check(buf->px[0] == 0x80000080u, "red lands in the R byte, multiplied by alpha");
+        check(buf->px[1] == 0xFFFF0000u, "blue lands in the B byte");
+        check(buf->px[2] == 0x00000000u, "a transparent pixel has no colour");
+        check(buf->px[3] == 0xFF302010u, "opaque pixels only swap red and blue");
+    }
+    if (which == 4) {
+        // A hotspot outside the image or a pointer far off screen: never an inverted rectangle (the platform aborts), the cursor hides.
+        uint32_t px[16] = {0xFFFFFFFFu};
+        c.scanoutSetCursorImage(px, 4, 4, 4);
+        c.scanoutSetCursorPos(0, 0, 0, 0); c.applyScanoutBuffer();
+        check(visibility(cursorSC) == 1, "a normal cursor is shown");
+        c.scanoutSetCursorPos(0, 0, 200, 200); c.applyScanoutBuffer();
+        check(visibility(cursorSC) == 0, "a cursor whose rectangle lies off screen is hidden");
+        c.scanoutSetCursorPos(-30000, -30000, 0, 0); c.applyScanoutBuffer();
+        check(visibility(cursorSC) == 1, "a pointer past the edge is clamped onto the screen and shown");
+        c.scanoutSetCursorPos(30000, 30000, 1, 1); c.applyScanoutBuffer();
+        check(visibility(cursorSC) == 1, "clamped at the far edge too");
+        check(misuse.load() == 0, "no invalid rectangle was ever passed");
+    }
+    if (which == 5) {
+        // The X cursor hidden by the game hides the scanout cursor layer; shown again it comes back.
+        uint32_t px[16] = {0xFFFFFFFFu};
+        c.scanoutSetCursorImage(px, 4, 4, 4); c.applyScanoutBuffer();
+        check(visibility(cursorSC) == 1, "shown with an image");
+        c.scanoutSetCursorVisible(false);
+        check(visibility(cursorSC) == 0, "hidden at once");
+        c.scanoutSetCursorImage(px, 4, 4, 4); c.applyScanoutBuffer();
+        check(visibility(cursorSC) == 0, "a new image does not show a hidden cursor");
+        c.scanoutSetCursorVisible(true);
+        check(visibility(cursorSC) == 1, "shown again");
+    }
+    if (which == 6) {
+        // No completion ever comes: every token is still handed back (by the deadline), and after a few the renderer gives up on
+        // completions and lets the caller hand back at once again.
+        for (int i = 1; i <= 9; i++) check(c.scanoutSetBuffer(frame, 0, 0, 64, 64, -1, i), "managed while completions may come");
+        { std::lock_guard<std::mutex> l(cbMutex); appliedCallbacks.clear(); }   // they never arrive (their contexts leak in this case only)
+        for (int i = 0; i < 200 && backCount() < 8; i++) sleepMs(5);
+        check(backCount() == 8, "the 8 replaced buffers come back by the deadline");
+        check(!c.scanoutSetBuffer(frame, 0, 0, 64, 64, -1, 10), "then the caller hands back itself");
+        check(back(9), "the buffer shown until then is handed back as well");
+    }
+    if (which == 7) {
+        // Without the completion entry points: the old behaviour (the caller hands back), nothing kept natively.
+        c.fnSTSetOnComplete = nullptr;
+        check(!c.scanoutSetBuffer(frame, 0, 0, 64, 64, -1, 1), "caller hands back");
+        check(c.scanoutShownToken == 0, "nothing kept");
+    }
+    c.destroyScanout();
+    if (c.scanoutReleaser) c.scanoutReleaser->stop();
+    { FakeStats none{{}, -1}; fireCompletions(&none); }   // the platform runs every completion once; so does the test
+    check(misuse.load() == 0, "no misuse at the end");
+    for (auto& kv : alive) delete[] (char*)kv.first;
+    AHardwareBuffer_release(frame);
+    puts("PASS scanout release");
+}

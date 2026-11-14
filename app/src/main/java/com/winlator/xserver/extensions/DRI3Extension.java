@@ -126,7 +126,8 @@ public class DRI3Extension implements Extension {
     private void pixmapFromBuffers(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         int pixmapId = inputStream.readInt();
         int windowId = inputStream.readInt();
-        inputStream.skip(4);
+        int numBuffers = inputStream.readUnsignedByte();
+        inputStream.skip(3);
         short width = inputStream.readShort();
         short height = inputStream.readShort();
         int stride = inputStream.readInt();
@@ -137,6 +138,9 @@ public class DRI3Extension implements Extension {
         long modifiers = inputStream.readLong();
 
         int fd = inputStream.getAncillaryFd();
+        // Planes 1..3 travel as descriptors of their own: only plane 0 is imported, but every one of them must leave the
+        // per-socket queue, or the next descriptor-carrying request takes one of them as its own.
+        closeFds(inputStream, numBuffers - 1);
         try {
             validateTarget(client, pixmapId, windowId);
             if (modifiers != 1255 && modifiers != 1274) throw new BadImplementation();
@@ -148,6 +152,25 @@ public class DRI3Extension implements Extension {
             if (fd >= 0) XConnectorEpoll.closeFd(fd);
         }
     }
+
+    /** Pops [count] descriptors this request carried but nothing imports, and closes them. */
+    private static void closeFds(XInputStream inputStream, int count) {
+        for (int i = 0; i < count; i++) XConnectorEpoll.closeFd(inputStream.getAncillaryFd());
+    }
+
+    /** How many descriptors a DRI3 request without an import here carries (DRI3 1.0-1.4: FenceFromFD, ImportSyncobj). */
+    static int fdsCarriedBy(int opcode) {
+        switch (opcode) {
+            case FENCE_FROM_FD:
+            case IMPORT_SYNCOBJ:
+                return 1;
+            default:
+                return 0;
+        }
+    }
+
+    private static final int FENCE_FROM_FD = 4;
+    private static final int IMPORT_SYNCOBJ = 10;
 
     private void validateTarget(XClient client, int pixmapId, int windowId) throws XRequestError {
         if (client.xServer.windowManager.getWindow(windowId) == null) throw new BadWindow(windowId);
@@ -255,6 +278,8 @@ public class DRI3Extension implements Extension {
                 }
                 break;
             default:
+                // Unsupported, but its descriptors must still leave the queue (and not leak).
+                closeFds(inputStream, fdsCarriedBy(opcode));
                 throw new BadImplementation();
         }
     }

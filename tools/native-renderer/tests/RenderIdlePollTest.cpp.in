@@ -13,6 +13,7 @@ struct VulkanRendererContext {
  std::mutex renderMutex;
  VkFence inFlightFences[MAX_FRAMES_IN_FLIGHT]{1,2};
  std::vector<WinTex> submittedRetirements[MAX_FRAMES_IN_FLIGHT];
+ std::vector<WinTex> deleteQueue,pendingRetirements;
  std::vector<int64_t> idleReleased;
  int freed[MAX_FRAMES_IN_FLIGHT]{0,0};
  void freeRetiredTextures(std::vector<WinTex>&v){for(auto&t:v)if(t.idleToken)idleReleased.push_back(t.idleToken);v.clear();}

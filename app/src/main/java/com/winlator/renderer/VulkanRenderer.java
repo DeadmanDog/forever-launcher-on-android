@@ -129,7 +129,6 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     private boolean cursorResend = false;
     private boolean xRenderingPausedForScanout = false;
 
-    private volatile ArrayList<RenderableWindow> renderableWindows = new ArrayList<>();
     private static final java.util.concurrent.atomic.AtomicLong ID_GEN =
         new java.util.concurrent.atomic.AtomicLong(1);
     // Retain identities until their native imports have explicitly retired.
@@ -184,7 +183,13 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     private native void nativeDetachSurface(long handle);
     private native boolean nativeReattachSurface(long handle, android.view.Surface surface);
     private native void nativeDestroyScanout(long handle);
-    private native void nativeScanoutSetBuffer(long handle, long ahbPtr, int x, int y, int w, int h, int fenceFd);
+    /** True: the renderer hands [idleToken]'s predecessor back itself, once SurfaceFlinger no longer shows it (false: the caller does). */
+    private native boolean nativeScanoutSetBuffer(long handle, long ahbPtr, int x, int y, int w, int h, int fenceFd, long idleToken);
+    /** Hands back at once the Present hold of the buffer the scanout layer shows (its frames went back to the compositor). */
+    private native void nativeScanoutDropShownToken(long handle);
+    private native void nativeScanoutSetCursorVisible(long handle, boolean visible);
+    /** False once the native render thread has stopped for good (see recoverDeadRenderer). */
+    private native boolean nativeIsAlive(long handle);
     private native void nativeScanoutSetCursorImage(long handle, java.nio.ByteBuffer pixels, short w, short h, short stride);
     private native void nativeScanoutSetCursorPos(long handle, short x, short y, short hotX, short hotY);
     private native void nativeSetSchedulingHints(long handle, boolean priority, boolean adpf, long targetNs);
@@ -293,16 +298,19 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
         initExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
         initExecutor.execute(() -> {
             // 1. A context that already exists is attached to the new surface (short; under the locks as before).
+            boolean droppedDead = false;
             synchronized (lock) {
                 synchronized (nativeLifetimeLock) {
                     // A worker that was slow to start (the UI thread only waits SURFACE_INIT_WAIT_MS for it) must not attach a surface that
                     // was destroyed or replaced meanwhile: its generation is no longer the current one.
                     if (disposed || generation != surfaceGeneration.get()) return;
                     if (nativeHandle != 0) {
+                        // False also for a context whose render thread has stopped: it is replaced by a new one below.
                         boolean ok = nativeReattachSurface(nativeHandle, surface);
                         if (!ok) {
                             nativeDestroy(nativeHandle);
                             nativeHandle = 0;
+                            droppedDead = true;
                         } else {
                             initComplete = true;
                             xServerView.queueEvent(this::updateScene);
@@ -311,6 +319,8 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                     }
                 }
             }
+            // Holds of the context just thrown away would only end by the 2 s stall limit: nothing of it draws any more.
+            if (droppedDead) idleHolds.releaseAll();
             // 2. A new context is created WITHOUT holding either lock: this is the long part, and a surface callback on the UI
             //    thread must never have to wait for it (it used to queue up behind the lock for as long as the driver needed).
             final long created = nativeInit(surface, xServer.screenInfo.width, xServer.screenInfo.height, driverPath, driverLibraryName, nativeLibDir);
@@ -341,42 +351,9 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                         updateTransform();
                         nativeSetCursorVisible(nativeHandle, cursorVisible);
                         if (nativeMode && !effectsRequireCompositor) {
-                            xServerView.post(() -> {
-                                if (disposed || !nativeMode || !foreground) return;
-                                releaseScanoutSurfaces();
-                                if (android.os.Build.VERSION.SDK_INT >= 29) {
-                                    try {
-                                        android.view.SurfaceControl xsc = xServerView.getSurfaceControl();
-                                        scanoutGameSC = new android.view.SurfaceControl.Builder()
-                                            .setParent(xsc).setName("winlator_game").setOpaque(true).build();
-                                        scanoutGameSurface = new android.view.Surface(scanoutGameSC);
-                                        scanoutCursorSC = new android.view.SurfaceControl.Builder()
-                                            .setParent(xsc).setName("winlator_cursor").setFormat(1).build();
-                                        scanoutCursorSurface = new android.view.Surface(scanoutCursorSC);
-                                        try (android.view.SurfaceControl.Transaction setup = new android.view.SurfaceControl.Transaction()) {
-                                            setup.setLayer(scanoutGameSC,   1)
-                                                .setLayer(scanoutCursorSC, 2)
-                                                .setVisibility(scanoutGameSC,   true)
-                                                .setVisibility(scanoutCursorSC, true)
-                                                .apply();
-                                        }
-                                        applyScanoutFrameRateHint();
-                                        applyScanoutSwapTransform();
-                                        synchronized (lock) {
-                                            if (nativeHandle != 0) {
-                                                nativeSetScanoutWindow(nativeHandle, scanoutGameSurface, scanoutCursorSurface);
-                                                updateTransform();
-                                            }
-                                        }
-                                    } catch (Exception e) {
-                                        synchronized (lock) {
-                                            if (nativeHandle != 0) nativeInitScanout(nativeHandle);
-                                        }
-                                    }
-                                } else {
-                                    synchronized (lock) { if (nativeHandle != 0) nativeInitScanout(nativeHandle); }
-                                }
-                            });
+                            // Checked again on the UI thread, at the start and where native scanout is switched on.
+                            final long epoch = scanoutEpoch.get();
+                            xServerView.post(() -> attachScanoutLayers(epoch));
                         }
                     }
                 }
@@ -461,7 +438,6 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                     nativeDestroyScanout(handle);
                     nativeDestroy(handle);
                 }
-                renderableWindows = new ArrayList<>();
                 synchronized (drawableIds) { drawableIds.clear(); }
                 hudRef = null;
             }
@@ -471,6 +447,16 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     }
 
     private void releaseScanoutSurfaces() {
+        // Out of the layer tree first: release() alone drops this process's handle but leaves the layer attached to the view's
+        // surface, so every scanout on/off cycle left two layers behind.
+        if (android.os.Build.VERSION.SDK_INT >= 29 && (scanoutGameSC != null || scanoutCursorSC != null)) {
+            try (android.view.SurfaceControl.Transaction detach = new android.view.SurfaceControl.Transaction()) {
+                if (scanoutGameSC   != null && scanoutGameSC.isValid())   detach.reparent(scanoutGameSC,   null);
+                if (scanoutCursorSC != null && scanoutCursorSC.isValid()) detach.reparent(scanoutCursorSC, null);
+                detach.apply();
+            } catch (RuntimeException ignored) {
+            }
+        }
         if (scanoutGameSurface   != null) { scanoutGameSurface.release();   scanoutGameSurface   = null; }
         if (scanoutCursorSurface != null) { scanoutCursorSurface.release(); scanoutCursorSurface = null; }
         if (scanoutGameSC        != null) { scanoutGameSC.release();        scanoutGameSC        = null; }
@@ -553,14 +539,46 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                 xServer.windowManager.rootWindow.getY());
             collectStaleDrawableIds(retiredIds);
         }
+        boolean dead;
         synchronized (lock) {
             synchronized (nativeLifetimeLock) {
                 if (nativeHandle != 0)
                     for (long id : retiredIds) nativeRemoveWindow(nativeHandle, id);
             }
-            renderableWindows = newList;
             pushRenderList(newList);
+            dead = nativeHandle != 0 && !nativeIsAlive(nativeHandle);
         }
+        if (dead) recoverDeadRenderer();
+    }
+
+    private final java.util.concurrent.atomic.AtomicBoolean recoveryQueued = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicInteger recoveries = new java.util.concurrent.atomic.AtomicInteger();
+    private static final int MAX_RECOVERIES = 5;
+    private volatile long lastAliveCheckMs;
+
+    /**
+     * The native render thread stopped for good (device lost, a swapchain that could not be rebuilt): nothing would ever be drawn
+     * again, and the surface callbacks that normally rebuild the renderer do not come while the surface stays. The current surface
+     * gets a new renderer the way a new surface would (onSurfaceCreated: the dead context refuses the reattach and is replaced).
+     */
+    private void recoverDeadRenderer() {
+        if (disposed || !recoveryQueued.compareAndSet(false, true)) return;
+        xServerView.post(() -> {
+            recoveryQueued.set(false);
+            if (disposed) return;
+            android.view.Surface surface = xServerView.getHolder().getSurface();
+            if (surface == null || !surface.isValid()) return;   // a new surface brings a new renderer anyway
+            boolean dead;
+            synchronized (lock) { dead = nativeHandle != 0 && !nativeIsAlive(nativeHandle); }
+            if (!dead) return;
+            int n = recoveries.incrementAndGet();
+            if (n > MAX_RECOVERIES) {
+                if (n == MAX_RECOVERIES + 1) android.util.Log.e("VulkanRenderer", "Render thread keeps stopping; no further rebuild");
+                return;
+            }
+            android.util.Log.e("VulkanRenderer", "Render thread stopped; rebuilding the renderer (" + n + ")");
+            onSurfaceCreated(surface);
+        });
     }
 
     // Called while DRAWABLE_MANAGER is locked. A window keeps its X id when
@@ -618,7 +636,10 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
             boolean ahb = rw.content.getTexture() instanceof GPUImage
                 && ((GPUImage)rw.content.getTexture()).getHardwareBufferPtr() != 0;
             reason = ScanoutEligibility.reason(experimentalScanout, scanoutBlocked,
-                    effectsRequireCompositor, hudRef != null && hudRef.getVisibility() == android.view.View.VISIBLE, foreground,
+                    // hudRef is the invisible FrameRating frame counter (never in a layout), not the performance HUD: it is set
+                    // VISIBLE once the game window is tracked, so it kept every frame on the compositor even with scanout chosen
+                    // (2026-11-12 review). The real HUD is drawn above the game layer and does not need the compositor either.
+                    effectsRequireCompositor, false, foreground,
                     1, rw.rootX, rw.rootY, rw.content.width, rw.content.height,
                     screenW, screenH, ahb);
             if (reason == null) candidate = rw.content;
@@ -631,6 +652,26 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
             if (candidate != null) candidate.setDirectScanout(true);
         }
         setNativeMode(candidate != null);
+        if (!nativeMode) {
+            // Backstop: native scanout must never stay on while Java has left scanout mode (the compositor's frames would never
+            // reach the screen: black for good). Only a lost race could get here; see attachScanoutLayers.
+            boolean stale;
+            synchronized (nativeLifetimeLock) {
+                stale = nativeHandle != 0 && nativeIsScanoutActive(nativeHandle);
+                if (stale) nativeDestroyScanout(nativeHandle);
+            }
+            if (stale) {
+                android.util.Log.w("VulkanRenderer", "Scanout was still on without scanout mode; switched off");
+                long held = scanoutIdle.take();
+                if (held != 0) idleHolds.release(held);
+                final long epoch = scanoutEpoch.get();
+                xServerView.post(() -> {
+                    if (scanoutEpoch.get() != epoch || nativeMode) return;
+                    xServer.setRenderingEnabled(true);
+                    releaseScanoutSurfaces();
+                });
+            }
+        }
         boolean delivered;
         synchronized (nativeLifetimeLock) {
             delivered = nativeMode && nativeHandle != 0 && nativeIsGameFrameDelivered(nativeHandle);
@@ -679,6 +720,9 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
             cd = cursor.cursorImage; hotX = (short)cursor.hotSpotX; hotY = (short)cursor.hotSpotY;
         } else { cd = rootCursorDrawable; }
         nativeSetCursorVisible(nativeHandle, effVis);
+        // The scanout cursor layer follows the X cursor too: a cursor the game hides (or an invisible RENDER cursor) used to stay
+        // on that layer.
+        if (nativeMode) nativeScanoutSetCursorVisible(nativeHandle, effVis);
         if (effVis && cd != null && cd.getBuffer() != null) {
             synchronized (cd.renderLock) {
                 nativeUpdateCursorImage(nativeHandle, cd.getBuffer(), cd.width, cd.height, hotX, hotY);
@@ -726,6 +770,12 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
         synchronized (pixmap.renderLock) {
             synchronized (nativeLifetimeLock) {
                 if (disposed || nativeHandle == 0) return false;
+                // A render thread that stopped is noticed even while no scene change comes (about once a second, one JNI call).
+                long nowMs = android.os.SystemClock.uptimeMillis();
+                if (nowMs - lastAliveCheckMs >= 1000) {
+                    lastAliveCheckMs = nowMs;
+                    if (!nativeIsAlive(nativeHandle)) recoverDeadRenderer();
+                }
                 Texture texture = pixmap.getTexture();
                 if (texture instanceof GPUImage) {
                     GPUImage g = (GPUImage) texture;
@@ -740,11 +790,18 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                             // 1.2.1: this buffer stays on screen until the next one replaces it; only then may the game draw into it
                             // again (it used to be told at once, see ScanoutIdleHand).
                             long idleToken = (idleRelease != null && presentIdleTracking && initComplete) ? idleHolds.hold(idleRelease) : 0;
-                            nativeScanoutSetBuffer(nativeHandle, ahbPtr,
-                                rx, ry, pixmap.width, pixmap.height, fenceFd);
+                            boolean nativeHandsBack = nativeScanoutSetBuffer(nativeHandle, ahbPtr,
+                                rx, ry, pixmap.width, pixmap.height, fenceFd, idleToken);
                             if (cpuMapped) g.lock();
-                            long replaced = scanoutIdle.replace(idleToken);
-                            if (replaced != 0) idleHolds.release(replaced);
+                            if (nativeHandsBack) {
+                                // The renderer hands the replaced buffer back once SurfaceFlinger has let go of it (its release
+                                // fence), and this one when it is replaced in turn. A buffer held here from before is not shown.
+                                long javaHeld = scanoutIdle.take();
+                                if (javaHeld != 0) idleHolds.release(javaHeld);
+                            } else {
+                                long replaced = scanoutIdle.replace(idleToken);
+                                if (replaced != 0) idleHolds.release(replaced);
+                            }
                             ScanoutStats.scanoutFrame();
                             // The first direct buffer changes what the compositor draws.
                             if (!wasDelivered && nativeIsGameFrameDelivered(nativeHandle)) queueSceneUpdate();
@@ -755,6 +812,8 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                             if (!nativeMode || targetDrawable == scanoutCandidate) {
                                 long scanoutHeld = scanoutIdle.take();
                                 if (scanoutHeld != 0) idleHolds.release(scanoutHeld);
+                                // The same for a buffer the renderer holds: a game with two buffers would otherwise wait for it.
+                                if (nativeMode) nativeScanoutDropShownToken(nativeHandle);
                             }
                             // The hold is registered first: the render thread may hand the buffer back at any moment after the call.
                             // Only while a surface is attached: without one (the app in the background) no frame is drawn, so nothing
@@ -817,7 +876,7 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                             boolean cpuMapped = g.getVirtualData() != null;
                             int fenceFd = g.unlock();
                             nativeScanoutSetBuffer(handle, ahbPtr,
-                                rx, ry, drawable.width, drawable.height, fenceFd);
+                                rx, ry, drawable.width, drawable.height, fenceFd, 0L);
                             if (cpuMapped) g.lock();
                             boolean delivered = nativeIsGameFrameDelivered(handle);
                             if (!xRenderingPausedForScanout && !wasDelivered && delivered) {
@@ -924,7 +983,11 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     public void setCursorVisible(boolean visible) {
         cursorVisible = visible;
         synchronized (lock) {
-            if (nativeHandle != 0) { nativeSetCursorVisible(nativeHandle, visible); if (visible) sendCursorToNative(lastCursor); }
+            if (nativeHandle != 0) {
+                nativeSetCursorVisible(nativeHandle, visible);
+                if (visible) sendCursorToNative(lastCursor);
+                else if (nativeMode) nativeScanoutSetCursorVisible(nativeHandle, false);
+            }
         }
     }
 
@@ -951,56 +1014,95 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
         xRenderingPausedForScanout = false;
         xServer.setRenderingEnabled(true);
         final long epoch = scanoutEpoch.get();
-        xServerView.post(() -> {
-            if (disposed || !nativeMode || scanoutEpoch.get() != epoch || !foreground) return;
-            if (android.os.Build.VERSION.SDK_INT >= 29) {
-                try {
-                    releaseScanoutSurfaces();
-                    android.view.SurfaceControl xsc = xServerView.getSurfaceControl();
-                    scanoutGameSC = new android.view.SurfaceControl.Builder()
-                        .setParent(xsc).setName("winlator_game").setOpaque(true).build();
-                    scanoutGameSurface = new android.view.Surface(scanoutGameSC);
-                    scanoutCursorSC = new android.view.SurfaceControl.Builder()
-                        .setParent(xsc).setName("winlator_cursor").setFormat(1).build();
-                    scanoutCursorSurface = new android.view.Surface(scanoutCursorSC);
-                    try (android.view.SurfaceControl.Transaction scTxn = new android.view.SurfaceControl.Transaction()) {
-                        scTxn.setLayer(scanoutGameSC,   1)
-                            .setLayer(scanoutCursorSC, 2)
-                            .setVisibility(scanoutGameSC,   true)
-                            .setVisibility(scanoutCursorSC, true);
-                        scTxn.apply();
-                    }
-                    applyScanoutFrameRateHint();
-                    applyScanoutSwapTransform();
-                    synchronized (lock) {
-                        if (nativeHandle != 0) {
-                            nativeSetScanoutWindow(nativeHandle,
-                                scanoutGameSurface, scanoutCursorSurface);
-                            updateTransform();
-                        }
-                    }
-                } catch (Exception e) {
-                    synchronized (lock) {
-                        if (nativeHandle != 0) nativeInitScanout(nativeHandle);
+        xServerView.post(() -> attachScanoutLayers(epoch));
+    }
+
+    /** Scanout is still wanted by the request that posted [epoch]. */
+    private boolean scanoutStillWanted(long epoch) {
+        return !disposed && nativeMode && foreground && scanoutEpoch.get() == epoch;
+    }
+
+    /**
+     * UI thread: builds the scanout layers and switches native scanout on, unless scanout was switched off meanwhile. The check is
+     * repeated under [lock] right where native scanout starts: setNativeMode(false) on the event thread can run while the layers are
+     * being built, and attaching after it left native scanout on with Java out of scanout mode - a black screen for good.
+     */
+    private void attachScanoutLayers(long epoch) {
+        if (!scanoutStillWanted(epoch)) return;
+        if (android.os.Build.VERSION.SDK_INT >= 29) {
+            boolean abandoned = false;
+            try {
+                releaseScanoutSurfaces();
+                android.view.SurfaceControl xsc = xServerView.getSurfaceControl();
+                scanoutGameSC = new android.view.SurfaceControl.Builder()
+                    .setParent(xsc).setName("winlator_game").setOpaque(true).build();
+                scanoutGameSurface = new android.view.Surface(scanoutGameSC);
+                scanoutCursorSC = new android.view.SurfaceControl.Builder()
+                    .setParent(xsc).setName("winlator_cursor").setFormat(1).build();
+                scanoutCursorSurface = new android.view.Surface(scanoutCursorSC);
+                try (android.view.SurfaceControl.Transaction scTxn = new android.view.SurfaceControl.Transaction()) {
+                    scTxn.setLayer(scanoutGameSC,   1)
+                        .setLayer(scanoutCursorSC, 2)
+                        .setVisibility(scanoutGameSC,   true)
+                        .setVisibility(scanoutCursorSC, true);
+                    scTxn.apply();
+                }
+                applyScanoutFrameRateHint();
+                applyScanoutSwapTransform();
+                synchronized (lock) {
+                    if (nativeHandle != 0 && scanoutStillWanted(epoch)) {
+                        nativeSetScanoutWindow(nativeHandle, scanoutGameSurface, scanoutCursorSurface);
+                        updateTransform();
+                        resendCursorToScanout();
+                    } else {
+                        abandoned = true;
                     }
                 }
-            } else {
-                synchronized (lock) { if (nativeHandle != 0) nativeInitScanout(nativeHandle); }
+            } catch (Exception e) {
+                synchronized (lock) {
+                    if (nativeHandle != 0 && scanoutStillWanted(epoch)) {
+                        nativeInitScanout(nativeHandle);
+                        resendCursorToScanout();
+                    }
+                }
             }
-        });
+            // Layers built for a request that is no longer wanted: gone again (the teardown that cancelled it may have run first).
+            if (abandoned && !nativeMode) releaseScanoutSurfaces();
+        } else {
+            synchronized (lock) {
+                if (nativeHandle != 0 && scanoutStillWanted(epoch)) {
+                    nativeInitScanout(nativeHandle);
+                    resendCursorToScanout();
+                }
+            }
+        }
+    }
+
+    /**
+     * Under [lock], right after native scanout started: its cursor layer starts empty (the buffers of an earlier scanout were freed)
+     * and an image is otherwise sent only when the cursor changes, so the pointer stayed invisible until then.
+     */
+    private void resendCursorToScanout() {
+        if (nativeHandle == 0) return;
+        sendCursorToNative(lastCursor);
+        Cursor cursor = lastCursor;
+        nativeScanoutSetCursorPos(nativeHandle, xServer.pointer.getX(), xServer.pointer.getY(),
+            cursor != null ? (short) cursor.hotSpotX : 0, cursor != null ? (short) cursor.hotSpotY : 0);
     }
 
     // Tears down the scanout path and resumes compositor (X) rendering so that
     // window.frag-based effects and scaling take effect again.
     private void tearDownScanout() {
         xRenderingPausedForScanout = false;
-        long scanoutHeld = scanoutIdle.take();
-        if (scanoutHeld != 0) idleHolds.release(scanoutHeld);
+        // The layer is hidden first (the renderer hands its own last buffer back once that is on screen); a buffer held here is
+        // released only after that, not while the layer may still show it.
         synchronized (lock) {
             synchronized (nativeLifetimeLock) {
                 if (nativeHandle != 0) nativeDestroyScanout(nativeHandle);
             }
         }
+        long scanoutHeld = scanoutIdle.take();
+        if (scanoutHeld != 0) idleHolds.release(scanoutHeld);
         final long epoch = scanoutEpoch.get();
         xServerView.post(() -> {
             if (scanoutEpoch.get() != epoch || nativeMode) return;

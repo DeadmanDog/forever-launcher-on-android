@@ -226,7 +226,6 @@ class WowRuntimeTuningTest {
         val prefs = context.getSharedPreferences(WowLaunchPolicy.PREFS, 0)
         prefs.edit().clear().commit()
         assertTrue(WowRuntimeTuning.presentIsDefault(context)); assertEquals("fifo", WowRuntimeTuning.selected(context, "present"))
-        assertFalse(WowRuntimeTuning.fifoLowLatency(context)) // the smooth FIFO queue unless the player lowers it
         assertEquals(0, WowRuntimeTuning.fifoDrainMode(context))
         prefs.edit().putString("fifolatency", "low").commit(); assertEquals(1, WowRuntimeTuning.fifoDrainMode(context))
         prefs.edit().putString("fifolatency", "lowest").commit(); assertEquals(2, WowRuntimeTuning.fifoDrainMode(context))

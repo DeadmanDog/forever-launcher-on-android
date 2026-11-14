@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -123,6 +124,12 @@ fun BootingSplash(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // Review 2026-11-13: the splash covers the game (or the launcher) underneath, which must not get the touches made on
+                // it. Its own back button still works: a child sees each touch before this parent consumes it.
+                .pointerInput(Unit) {
+                    awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+                }
+                .testTag("bootingSplashTouchShield")
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
