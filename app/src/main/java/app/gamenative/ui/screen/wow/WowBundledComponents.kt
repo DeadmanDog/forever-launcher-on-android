@@ -15,17 +15,17 @@ internal object WowBundledComponents {
     /** Reported in English; the launcher shows it through localizedStatus. */
     private val SESSION_ACTIVE = "Bundled components cannot be installed during an active game session." to
         "A beépített komponensek nem telepíthetők futó játék közben."
-    const val PROTON_NAME = "proton-11.0-90639.34-arm64ec"
-    /** The only bundled/default DXVK: Vegas r63 on upstream 3.1.1, including the cache, bind-skip and pipeline-handle fixes. */
-    const val DXVK_NAME = "Vegas-3.1.1-wow-arm64-hybrid-gamenative-r63"
-    /** The only bundled driver: TurnRIP 1.1.14 + community A8xx fixes (1.1.15) + 1.1.16 + 1.1.17 + 1.1.18 (A830 check) + 1.1.19 (wait-any mixed list, unsorted binding flags) + 1.1.20 (no diagnostic counter atomics without TU_STATS_FILE) + 1.1.21 (Gamescope pacing threads no longer steer the wait boost) + 1.1.22 (TU_KGSL_WAITBOOST_PRESENT_STEERS for DX12 under Gamescope) + 1.1.24 (TU_KGSL_WAITBOOST_VKD3D_STEERS: VKD3D waits steer under DX12 latency 1; helper_ms stats) + 1.1.25 (TU_KGSL_WAITBOOST_FRAME_STEER) + 1.1.26 (frame steering holds the GPU-wait share at 60-80% of the frame: only the clock the frame rate needs) + 1.1.27 (a single late frame, WoW's own CPU hitch, no longer raises it) + 1.1.28 (TU_FPS_FILE: a limit changed in the running game retargets ADPF and frame steering) + 1.1.29 (the panel refresh in TU_FPS_FILE: frames on the vsync grid are not late) + 1.1.30 (opt-in GPU profile: TU_PROFILE_SAMPLE_MS samples u_trace, per-second API counters in TU_STATS_FILE) + 1.1.31 (WoW: GMEM or sysmem measured per render pass instead of the DX driconf prefer_sysmem; redundancy counters) + 1.1.32 (a descriptor bind that changes nothing is skipped: 98% of WoW DX12's binds) + 1.1.33 (shader caches survive driver updates: keyed on the shader epoch, not the build id; desc_why counters) + 1.1.34 (push reuse, removed in 1.1.35: 0.05% hit) + 1.1.35 (compute shader statistics with diagnostics; its disassembly crashed: black screen) + 1.1.36 (raw instruction words instead). */
-    const val DRIVER_NAME = "TurnRIP A840 Performance v1.1.36"
+    const val PROTON_NAME = "proton-11.0-90639.35-arm64ec"
+    /** The only bundled/default DXVK: Vegas r64 on upstream 3.1.1 (cache, bind-skip and pipeline-handle fixes; r64: UMA non-local budget and ARM64 NEON bit utilities from DXVK master; r65: the frame limiter spins only as long as the measured sleep error needs; r66: that measurement is kept when two threads sleep at once). */
+    const val DXVK_NAME = "Vegas-3.1.1-wow-arm64-hybrid-gamenative-r66"
+    /** The only bundled driver: TurnRIP 1.1.14 + community A8xx fixes (1.1.15) + 1.1.16 + 1.1.17 + 1.1.18 (A830 check) + 1.1.19 (wait-any mixed list, unsorted binding flags) + 1.1.20 (no diagnostic counter atomics without TU_STATS_FILE) + 1.1.21 (compositor pacing threads no longer steer the wait boost) + 1.1.22 (TU_KGSL_WAITBOOST_PRESENT_STEERS for DX12 under Gamescope) + 1.1.24 (TU_KGSL_WAITBOOST_VKD3D_STEERS: VKD3D waits steer under DX12 latency 1; helper_ms stats) + 1.1.25 (TU_KGSL_WAITBOOST_FRAME_STEER) + 1.1.26 (frame steering holds the GPU-wait share at 60-80% of the frame: only the clock the frame rate needs) + 1.1.27 (a single late frame, WoW's own CPU hitch, no longer raises it) + 1.1.28 (TU_FPS_FILE: a limit changed in the running game retargets ADPF and frame steering) + 1.1.29 (the panel refresh in TU_FPS_FILE: frames on the vsync grid are not late) + 1.1.30 (opt-in GPU profile: TU_PROFILE_SAMPLE_MS samples u_trace, per-second API counters in TU_STATS_FILE) + 1.1.31 (WoW: GMEM or sysmem measured per render pass instead of the DX driconf prefer_sysmem; redundancy counters) + 1.1.32 (a descriptor bind that changes nothing is skipped: 98% of WoW DX12's binds) + 1.1.33 (shader caches survive driver updates: keyed on the shader epoch, not the build id; desc_why counters) + 1.1.34 (push reuse, removed in 1.1.35: 0.05% hit) + 1.1.35 (compute shader statistics with diagnostics; its disassembly crashed: black screen) + 1.1.36 (raw instruction words instead) + 1.1.37 (Balanced follows the frame rate first: no lower clock while frames miss the target) + 1.1.38 (only the clock steps that shorten the frames; never trades frame rate) + 1.1.39 (WoW CPU hitches no longer pull it to the maximum) + 1.1.40 (upstream Mesa: autotune memory ordering, A8xx LRZ fast-clear; its occlusion-query change undone in 1.1.41) + 1.1.42 (A8xx double threadsize off) + 1.1.43 (= 1.1.40 again: the band and flicker are WoW's CMAA2, not the driver) + 1.1.44 (a frame signalled by two threads is counted once: atomic frame dedupe) + 1.1.45 (an out-of-order frame time no longer resets frame steering) + 1.1.46 (a GPU wait that ended before the current window is counted in it, not as a false idle window) + 1.1.47 (Balanced keeps the frame rate in heavy and vsync-stepped scenes: five fixes from a Balanced-vs-maximum sweep) + 1.1.48 (a heavy scene gets a first raise as large as its frames are slow) + 1.1.49 (Balanced: a hold ends on a heavier scene, a new limit forgets the old floor, 60 FPS on 144 Hz no longer saws the clock, CPU jitter steps the hold up) + 1.1.50 (CPU-bound scenes: longer holds instead of re-probing the maximum every 8.5 s; a reference for the hold after a futile jump). */
+    const val DRIVER_NAME = "TurnRIP A840 Performance v1.1.50"
     /** The only bundled VKD3D: r2 + one fallback pipeline compile per PSO (r3) + fence/query/OOM fixes (r4) + swapchain OOM/cleanup fixes (r5) + fallback variants compiled in parallel (r6) + disk-cache merge recovery, worker wait and short-write fixes (r7) + no busy retry when the worker cannot grow its queue (r8) + upstream WoW MSAA workaround (also for Wow-ARM64.exe / Wow-ARM64.exe), no CPU fence waits on the shared Turnip queue, racy fence signal order (r9) + depth/stencil barrier fusion, disjoint copy rectangles, sparse-fallback leak (r10) + VKD3D_REPORT_DISCRETE: the GPU reported as not UMA, for WoW's DX12 render scale above 100% (r11) + with it the dedicated-GPU heap layout accepted (r12). */
-    const val VKD3D_NAME = "VKD3D-Proton-3.0.1-ARM64-r12"
-    const val VKD3D_VERSION_CODE = 12
-    /** r34: r33 + the event pool hardened against stale handles (DUPLICATE_CLOSE_SOURCE of a pooled event fails, a stale entry is dropped). r33: r32 + a duplicated event (DuplicateHandle without DUPLICATE_CLOSE_SOURCE) is never reused by the event pool. r32: r31 + event reuse in ntdll (WINE_EVENT_POOL, see WowRuntimeTuning.EVENT_POOL): WoW's post-login Net Queue/TACT ping-pong no longer floods the wineserver. r31: r30 without the DirectX modules WoW never loads (Wine D3D10, DirectComposition, DXVA2, DirectWrite, XAudio2). r30: r29 + the wineserver request statistics + spin cap and cached tid in ntsync. */
-    const val PROTON_VERSION_CODE = 34
-    const val DXVK_VERSION_CODE = 63
+    const val VKD3D_NAME = "VKD3D-Proton-3.0.1-ARM64-r15"
+    const val VKD3D_VERSION_CODE = 15
+    /** r35: r34 without the 243 Wine modules WoW never loads (599 phone sessions checked, import closure kept, docs/runtime-archive/20261121-proton-r35-unused-dll-trim) and without the unused MSXML/OLE DB copies in the prefix; zstd -22. r34: r33 + the event pool hardened against stale handles (DUPLICATE_CLOSE_SOURCE of a pooled event fails, a stale entry is dropped). r33: r32 + a duplicated event (DuplicateHandle without DUPLICATE_CLOSE_SOURCE) is never reused by the event pool. r32: r31 + event reuse in ntdll (WINE_EVENT_POOL, see WowRuntimeTuning.EVENT_POOL): WoW's post-login Net Queue/TACT ping-pong no longer floods the wineserver. r31: r30 without the DirectX modules WoW never loads (Wine D3D10, DirectComposition, DXVA2, DirectWrite, XAudio2). r30: r29 + the wineserver request statistics + spin cap and cached tid in ntsync. */
+    const val PROTON_VERSION_CODE = 35
+    const val DXVK_VERSION_CODE = 66
     const val PROTON_ID = "$PROTON_NAME-$PROTON_VERSION_CODE"
     const val DXVK_VERSION = "$DXVK_NAME-$DXVK_VERSION_CODE"
     const val DXVK_ID = "dxvk-$DXVK_VERSION"
@@ -34,14 +34,14 @@ internal object WowBundledComponents {
                       val experimental: Boolean = false)
 
     val bundles = listOf(
-        Bundle("VKD3D-Proton-ARM64-r12.wcp", VKD3D_NAME, "0681f7bb882ec298b66cab45c9cacbabd1f12b0eac6dc6c27a0029bd35633fea", ContentProfile.ContentType.CONTENT_TYPE_VKD3D),
-        Bundle("proton-11.0-90639.34-arm64ec-r34.wcp", PROTON_NAME,
-            "a99eb0850b402d4ea1c4fc9ab5d9cc15aa62163ce91c3eb1ff800a1f72ec6cc5", ContentProfile.ContentType.CONTENT_TYPE_PROTON),
-        Bundle("Vegas-3.1.1-wow-arm64-hybrid-gamenative-r63.wcp", DXVK_NAME,
-            "e2d75a833298943794055e17ead33cfc17c3d6fe0b84ee476972adb7f6195477", ContentProfile.ContentType.CONTENT_TYPE_DXVK,
+        Bundle("VKD3D-Proton-ARM64-r15.wcp", VKD3D_NAME, "7cef4d83f2ba3a44c5e146c476ee7b6bd74b9c89533b9439d3d8c99cf3bb6a93", ContentProfile.ContentType.CONTENT_TYPE_VKD3D),
+        Bundle("proton-11.0-90639.35-arm64ec-r35.wcp", PROTON_NAME,
+            "d6d26e7c35c75c0ee8c35cac151d3a960823716e166631ddf97edd0c40605ffa", ContentProfile.ContentType.CONTENT_TYPE_PROTON),
+        Bundle("Vegas-3.1.1-wow-arm64-hybrid-gamenative-r66.wcp", DXVK_NAME,
+            "096eedcac5b75f615131457a4434affb8437da9ba5060ac03d413452a609096d", ContentProfile.ContentType.CONTENT_TYPE_DXVK,
             DXVK_VERSION_CODE),
-        Bundle("TurnRIP-A840-Performance-v1.1.36.zip", DRIVER_NAME,
-            "ebaa5597783ef1e5caade38380caca5ef432242e011cc12656724b39c6a172e4", null),
+        Bundle("TurnRIP-A840-Performance-v1.1.50.zip", DRIVER_NAME,
+            "108ea39be11203768ef9d8f11af2aa611bdd2c9b7043961cad936eedbde394d8", null),
     )
     val protectedNames = bundles.map { it.name }.toSet()
 
@@ -57,7 +57,7 @@ internal object WowBundledComponents {
     fun supersededProton(id: String): Boolean =
         bundledProton.matchEntire(id)?.let { it.groupValues[1].toInt() < PROTON_VERSION_CODE } ?: false
 
-    /** An earlier bundled Vegas 3.1.1 build (r60 .. r62) replaced by the current default; imported DXVKs are kept. */
+    /** An earlier bundled Vegas 3.1.1 build (r60 .. r65) replaced by the current default; imported DXVKs are kept. */
     fun supersededDxvk(id: String): Boolean =
         bundledDxvk3.matchEntire(id)?.let { it.groupValues[1].toInt() < DXVK_VERSION_CODE } ?: false
 
@@ -65,9 +65,9 @@ internal object WowBundledComponents {
     fun supersededDefaultDxvk(id: String): Boolean =
         bundledDxvk2.matchEntire(id)?.let { it.groupValues[1].toInt() <= 51 } ?: false
 
-    /** An earlier bundled TurnRIP (1.1.14 .. 1.1.35, and Codex's import-only 1.1.23 test) that 1.1.36 replaces; other imported drivers are kept. */
+    /** An earlier bundled TurnRIP (1.1.14 .. 1.1.49, and Codex's import-only 1.1.23 test) that 1.1.50 replaces; other imported drivers are kept. */
     fun supersededDriver(id: String): Boolean =
-        bundledDriver.matchEntire(id)?.let { it.groupValues[1].toInt() < 36 } ?: false
+        bundledDriver.matchEntire(id)?.let { it.groupValues[1].toInt() < 50 } ?: false
 
     /** An earlier bundled VKD3D, or any build under the old package name (the same r10 included), that this build's VKD3D replaces. */
     fun supersededVkd3d(id: String): Boolean = legacyVkd3d.matches(id) ||
@@ -164,9 +164,34 @@ internal object WowBundledComponents {
         return removed
     }
 
+    /**
+     * 1.2.7 (user: "vedd ki"): the Gamescope display backend is gone. Removes what an earlier build unpacked for it (about 70 MB
+     * under files/gamescope, its staging and previous copies, the cached archive and the ".gsc" path alias) and the container's
+     * backend choice. Safe to call every time: nothing left, nothing done.
+     */
+    internal fun removeGamescope(context: Context) {
+        val files = context.filesDir
+        for (name in listOf("gamescope", "gamescope.staging", "gamescope.previous")) {
+            val dir = File(files, name)
+            if (java.nio.file.Files.isSymbolicLink(dir.toPath())) dir.delete() else if (dir.exists()) dir.deleteRecursively()
+        }
+        context.cacheDir.listFiles { f -> f.name.startsWith("gamescope-gamenative-") }?.forEach { it.delete() }
+        val alias = File(files.absoluteFile.parentFile, ".gsc")
+        if (java.nio.file.Files.isSymbolicLink(alias.toPath())) alias.delete()
+        runCatching {
+            val manager = com.winlator.container.ContainerManager(context)
+            val container = manager.getContainerById(WowContainerProfile.CONTAINER_ID)
+            if (container != null && container.getExtra("wowDisplayBackend").isNotEmpty()) {
+                container.putExtra("wowDisplayBackend", null)
+                container.saveData()
+            }
+        }
+    }
+
     /** Deletes the older bundled builds after [upgradeSuperseded] moved the container off them. Call on IO; never blocks the game. */
     fun removeSuperseded(context: Context, onStatus: (String) -> Unit = {}, isSessionActive: () -> Boolean = { PluviaApp.keepAlive }): List<String> {
         if (isSessionActive()) return emptyList()
+        removeGamescope(context)
         val drivers = runCatching { WowDeveloperComponents.drivers(context) }.getOrDefault(emptyList())
         val dxvks = runCatching { WowDxvkSelector.installedProfiles(context) }.getOrDefault(emptyList())
         val vkd3ds = runCatching { WowVkd3dComponents.profiles(context) }.getOrDefault(emptyList())

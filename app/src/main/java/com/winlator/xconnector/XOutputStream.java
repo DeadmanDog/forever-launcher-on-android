@@ -21,9 +21,23 @@ public class XOutputStream {
 
     /** One flush that the socket could not take yet: its remaining bytes and the descriptor that travels with its first byte. */
     private static final class Pending {
-        final ByteBuffer data;
+        ByteBuffer data;
         int ancillaryFd;
         Pending(ByteBuffer data, int ancillaryFd) { this.data = data; this.ancillaryFd = ancillaryFd; }
+
+        /** Appends [src] behind the unsent bytes (one later write instead of one per flush); grows by doubling. */
+        void append(ByteBuffer src) {
+            int length = src.remaining();
+            if (data.capacity() - data.limit() < length) {
+                ByteBuffer grown = ByteBuffer.allocateDirect(Math.max(data.remaining() + length, data.capacity() * 2)).order(data.order());
+                grown.put(data).flip();
+                data = grown;
+            }
+            int position = data.position(), limit = data.limit();
+            data.limit(limit + length).position(limit);
+            data.put(src);
+            data.position(position);
+        }
     }
 
     /** Where bytes go when the output must never block (null = the classic blocking write). */
@@ -191,12 +205,19 @@ public class XOutputStream {
             if (buffer.hasRemaining()) {
                 long length = buffer.remaining();
                 if (pendingBytes + length > maxPendingBytes) throw new IOException("X client is not reading: output queue limit reached");
-                ByteBuffer copy = ByteBuffer.allocateDirect(buffer.remaining()).order(buffer.order());
-                copy.put(buffer).flip();
-                pending.add(new Pending(copy, fdToSend));
+                boolean wasEmpty = pending.isEmpty();
+                Pending tail = pending.peekLast();
+                // Output without a descriptor joins the queued bytes: the socket gets one write for the whole backlog.
+                if (tail != null && fdToSend == -1) tail.append(buffer);
+                else {
+                    ByteBuffer copy = ByteBuffer.allocateDirect(buffer.remaining()).order(buffer.order());
+                    copy.put(buffer).flip();
+                    pending.add(new Pending(copy, fdToSend));
+                }
                 pendingBytes += length;
                 hasPendingOutput = true;
-                if (pendingListener != null) pendingListener.run();
+                // The writable interest only has to be armed when the queue starts; it stays until drainPending empties it.
+                if (wasEmpty && pendingListener != null) pendingListener.run();
             }
         } catch (IOException error) {
             // A prefix may already be on the wire. Never replay it on this stream.
@@ -229,9 +250,9 @@ public class XOutputStream {
                         if (sent == -2) return false;
                         if (sent < 0 || sent > head.data.remaining()) throw new IOException("Socket write made invalid progress: " + sent);
                         head.data.position(head.data.position() + sent);
+                        pendingBytes -= sent;
                         if (sent > 0) head.ancillaryFd = -1;
                     }
-                    pendingBytes -= head.data.capacity();
                     pending.removeFirst();
                 }
                 hasPendingOutput = false;

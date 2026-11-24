@@ -193,5 +193,4 @@ public class RenderExtension implements Extension {
         }
     }
 
-    int pictureCount() { synchronized (pictures) { return pictures.size(); } }
 }

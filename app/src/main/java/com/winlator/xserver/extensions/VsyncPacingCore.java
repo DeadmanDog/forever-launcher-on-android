@@ -59,7 +59,14 @@ final class VsyncPacingCore<T> {
         WindowState<T> state = windows.computeIfAbsent(windowId, id -> new WindowState<>());
         // A window that had nothing pending starts over: its first buffer goes on the next vsync,
         // the following ones keep the pattern (no back-to-back release after an idle stretch).
-        if (state.pending.isEmpty()) state.budget = Math.min(state.budget, Math.max(0.0, 1.0 - perVsync()));
+        // 1.2.25: only after a real idle stretch (nothing pending for a whole frame of the limit), for a caller that ticks onVsync
+        // on every refresh even with nothing pending (VsyncIdleClampTest). 1.2.26 correction: VsyncFramePacer stops its callback
+        // while the queue is empty and counts the skipped refreshes at the next one, so there the cut never removed credit and the
+        // 1.2.24 pacer already released 60 FPS on 144 Hz 2,3,2,2,3 apart; the 1.2.25 note claiming 57.6 FPS came from a model
+        // that ticked every refresh. Same releases either way.
+        double perVsync = perVsync();
+        if (state.pending.isEmpty() && state.idleVsyncs * perVsync >= 1.0 - 1e-6)
+            state.budget = Math.min(state.budget, Math.max(0.0, 1.0 - perVsync));
         List<T> now = Collections.emptyList();
         if (eagerRelease && !state.pending.isEmpty()) {
             now = new ArrayList<>(state.pending);
@@ -157,14 +164,24 @@ final class VsyncPacingCore<T> {
         return Math.abs(delta - nearestMultiple) <= nearestMultiple / 50;
     }
 
-    /** Vsync timestamps arrive in whole refreshes; the smallest recent delta is the panel period. */
+    /**
+     * The panel period from the recent vsync deltas. 1.2.21: their MEDIAN, not their minimum: vsync timestamps jitter a little, and
+     * the smallest delta is always shorter than the real period. With a limit that does not divide the refresh (60 FPS on the
+     * player's 144 Hz panel) the release rate is limit x period, so 50 us of jitter made it 59.4 FPS and 200 us 57.6 (each missing
+     * release a longer frame); at 60 Hz 200 us even broke the snap (55.4 FPS). The median ignores the jitter; a missed callback is
+     * divided by the refreshes it spans. No allocation: a fixed scratch array.
+     */
     private void learnPeriod(long delta) {
         if (delta < MIN_PERIOD_NS) return;
         deltas[deltaIndex] = delta;
         deltaIndex = (deltaIndex + 1) % PERIOD_SAMPLES;
         if (deltaCount < PERIOD_SAMPLES) deltaCount++;
+        // Each delta is first taken as whole refreshes of the smallest one (a missed callback spans two or three), then the median.
         long min = Long.MAX_VALUE;
         for (int i = 0; i < deltaCount; i++) min = Math.min(min, deltas[i]);
-        periodNs = min;
+        for (int i = 0; i < deltaCount; i++) sorted[i] = deltas[i] / Math.max(1, Math.round((double) deltas[i] / min));
+        java.util.Arrays.sort(sorted, 0, deltaCount);
+        periodNs = deltaCount % 2 == 1 ? sorted[deltaCount / 2] : (sorted[deltaCount / 2 - 1] + sorted[deltaCount / 2]) / 2;
     }
+    private final long[] sorted = new long[PERIOD_SAMPLES];
 }

@@ -18,9 +18,9 @@ class Vkd3dSteerTest {
         val two = EnvVars().apply { put("VKD3D_SWAPCHAIN_LATENCY_FRAMES", "2") }
         WowRuntimeTuning.applyVkd3dSteer(two, EnvVars(), xserverDx12 = true)
         assertFalse(two.has("TU_KGSL_WAITBOOST_VKD3D_STEERS"))
-        val gamescopeOrDx11 = EnvVars().apply { put("VKD3D_SWAPCHAIN_LATENCY_FRAMES", "1") }
-        WowRuntimeTuning.applyVkd3dSteer(gamescopeOrDx11, EnvVars(), xserverDx12 = false)
-        assertFalse(gamescopeOrDx11.has("TU_KGSL_WAITBOOST_VKD3D_STEERS"))
+        val notDx12 = EnvVars().apply { put("VKD3D_SWAPCHAIN_LATENCY_FRAMES", "1") }
+        WowRuntimeTuning.applyVkd3dSteer(notDx12, EnvVars(), xserverDx12 = false)
+        assertFalse(notDx12.has("TU_KGSL_WAITBOOST_VKD3D_STEERS"))
         val saved = EnvVars().apply { put("VKD3D_SWAPCHAIN_LATENCY_FRAMES", "1"); put("TU_KGSL_WAITBOOST_VKD3D_STEERS", "0") }
         WowRuntimeTuning.applyVkd3dSteer(saved, EnvVars().apply { put("TU_KGSL_WAITBOOST_VKD3D_STEERS", "0") }, xserverDx12 = true)
         assertEquals("0", saved.get("TU_KGSL_WAITBOOST_VKD3D_STEERS"))

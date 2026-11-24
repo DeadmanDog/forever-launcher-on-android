@@ -453,7 +453,12 @@ private:
     VkDescriptorSetLayout dsLayout    = VK_NULL_HANDLE;
     VkPipelineLayout      pipeLayout  = VK_NULL_HANDLE;
 
-    VkPipeline            pipeline    = VK_NULL_HANDLE;
+    VkPipeline            pipeline    = VK_NULL_HANDLE;   // alpha blending: the cursor
+    // 1.2.22: the same shaders without blending, for windows. Their shader always writes alpha 1, so blending gave the same picture
+    // but made the GPU read every pixel of the target back (the full-screen game picture, every frame).
+    VkPipeline            opaquePipeline = VK_NULL_HANDLE;
+    // 1.2.22: the same pass without the clear, used when one opaque window covers the whole target (CompositorCover.h).
+    VkRenderPass          renderPassNoClear = VK_NULL_HANDLE;
 
     VkCommandPool                cmdPool = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> cmdBufs;
@@ -544,6 +549,10 @@ private:
     static constexpr int kRefillWatchWindows = 20;
     int refillWatchWindows = 0;
     bool refilled = false;
+    // 1.2.23: a hitch during the check after a skip refills the queue the skip had emptied; the check then saw no drop, called
+    // the skip useless and raised the floor by a whole refresh for good (one more queued frame was never taken out again). A
+    // check with a hitch in it now decides nothing.
+    bool drainHoldDirty = false;
     void latencyWindowDone(int64_t medianNs, int64_t refreshNs, bool dirty, bool slow);
     bool drainQueuedFrame();
     bool holdDrainedContent();
@@ -563,6 +572,8 @@ private:
     static constexpr uint64_t kAcquireTimeoutNs = 100000000;   // 100 ms, see renderFrame
     bool recreateBackoff = false;
     int recreateFailures = 0;
+    // Review 3 (9): 0x0-window retries are counted on their own for the log (recreateFailures stays 0 for them, so every retry logged).
+    int zeroExtentRetries = 0;
     static constexpr int kRecreateFailureLimit = 50;   // ~5 s of failures that are not a 0x0 window: the renderer stops (Java rebuilds it)
     std::mutex        renderMutex;
     RenderWakeSignal renderWake;

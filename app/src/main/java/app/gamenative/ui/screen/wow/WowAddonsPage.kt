@@ -199,6 +199,10 @@ internal class WowAddonsController(gameRoot: File, private val scope: CoroutineS
         if (others.isNotEmpty()) throw java.io.IOException("not updated: " + others.joinToString(", "))
     }
     fun installFromUrl(url: String) = act("Installing from link" to "Telepítés linkről") { manager.installFromUrl(url.trim()) }
+    /** A .zip picked on the phone (jaredgei 0489788). [open] opens the picked file; it runs on the IO thread. */
+    fun installFromZip(open: () -> java.io.InputStream?) = act("Installing from file" to "Telepítés fájlból") {
+        manager.installFromZip(open() ?: throw java.io.IOException("cannot open the file"))
+    }
 
     private fun act(label: Pair<String, String>, block: suspend () -> Unit) {
         // One write at a time for the whole app: each page instance has its own AddonManager (and lock), so the shared count is the gate.
@@ -248,6 +252,10 @@ internal fun WowAddonsPage(onBack: () -> Unit) {
     val idle = WowAddonJobs.running == 0
     LaunchedEffect(c, idle) { if (ready && idle) c.refreshInstalled() }
     var linkDialog by remember { mutableStateOf(false) }
+    // Any document type: some file managers label a .zip application/octet-stream; a file that is no zip fails with a message.
+    val zipPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) c.installFromZip { context.contentResolver.openInputStream(uri) } }
     var keyDialog by remember { mutableStateOf(false) }
     var hasKey by remember { mutableStateOf(CurseForgeKey.load(context.applicationContext).isNotBlank()) }
     var removing by remember { mutableStateOf<InstalledAddon?>(null) }
@@ -291,6 +299,9 @@ internal fun WowAddonsPage(onBack: () -> Unit) {
                         AddonAction(tx("Update all", "Mindet frissít") + " ($updates)", primary = true, enabled = !c.busy, onClick = c::updateAll)
                     }
                     AddonAction(tx("From link", "Linkről"), enabled = !c.busy) { linkDialog = true }
+                    AddonAction(tx("From file (.zip)", "Fájlból (.zip)"), enabled = !c.busy) {
+                        runCatching { zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }
+                    }
                     AddonAction(tx("CurseForge key", "CurseForge-kulcs"), enabled = !c.busy) { keyDialog = true }
                 }
                 if (c.mode == WowAddonsController.Mode.BROWSE && hasKey && !typing) {

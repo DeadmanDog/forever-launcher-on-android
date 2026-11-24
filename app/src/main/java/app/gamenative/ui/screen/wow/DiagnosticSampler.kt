@@ -43,7 +43,6 @@ internal class DiagnosticSampler(val directory: File, detailed: Boolean) : AutoC
             finally { logcatWriter.close() }
         } }
         com.winlator.renderer.ScanoutStats.reset()
-        app.gamenative.display.GamescopeFrameLog.reset()
         com.winlator.renderer.FrameTrace.set(true)
         executor.scheduleWithFixedDelay({
             try {
@@ -63,7 +62,7 @@ internal class DiagnosticSampler(val directory: File, detailed: Boolean) : AutoC
     }
     /**
      * Whole-phone draw from the battery (|current| x voltage), like the HUD's PWR; "N/A" when unreadable. Only meaningful while
-     * not charging (battery_status), so power A/B tests (XServer vs Gamescope, settings) can be compared from the logs.
+     * not charging (battery_status), so power A/B tests (settings) can be compared from the logs.
      */
     private fun powerMilliwatts(): String {
         val ua = read("/sys/class/power_supply/battery/current_now").toLongOrNull() ?: return "N/A"
@@ -74,7 +73,6 @@ internal class DiagnosticSampler(val directory: File, detailed: Boolean) : AutoC
     @Synchronized private fun line(value:String) { val b=(value+"\n").toByteArray();writer.append(b,b.size) }
     @Synchronized private fun frameLine(value:String) { val b=(value+"\n").toByteArray();frameWriter.append(b,b.size) }
     private fun writeFrameLog() {
-        writeGamescopeFrameLog()
         val rows = com.winlator.renderer.VulkanRenderer.takeFrameLog()
         if (rows.isEmpty()) return
         val text = StringBuilder(rows.size * 12)
@@ -84,20 +82,6 @@ internal class DiagnosticSampler(val directory: File, detailed: Boolean) : AutoC
             text.append(rows[i]).append(',').append(kind).append(',').append(rows[i + 2]).append(',').append(rows[i + 3]).append(',')
                 .append(rows[i + 4]).append(',').append(rows[i + 5]).append(',').append(rows[i + 6]).append(',').append(rows[i + 7] / 1000).append('\n')
             i += 8
-        }
-        val bytes = text.toString().toByteArray()
-        synchronized(this) { frameWriter.append(bytes, bytes.size) }
-    }
-    /** Gamescope sessions: one "produced" row per game frame (content_ns = when it was produced); the display columns stay 0
-     *  because the panel latch happens in the bridge's own presenter. */
-    private fun writeGamescopeFrameLog() {
-        val rows = app.gamenative.display.GamescopeFrameLog.take()
-        if (rows.isEmpty()) return
-        val text = StringBuilder(rows.size * 20)
-        var i = 0
-        while (i + 1 < rows.size) {
-            text.append(rows[i]).append(",produced,0,0,").append(rows[i + 1]).append(",0,0,0\n")
-            i += 2
         }
         val bytes = text.toString().toByteArray()
         synchronized(this) { frameWriter.append(bytes, bytes.size) }

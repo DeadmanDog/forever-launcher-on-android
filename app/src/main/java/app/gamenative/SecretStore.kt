@@ -66,6 +66,26 @@ object SecretStore {
     }
 
     /**
+     * Review 3 (9): whether opening [sealed] failed for good (the value or its key is invalid: wrong tag, invalidated or missing key,
+     * damaged text), as opposed to a passing KeyStore error or no KeyStore at all. Only a definite failure may delete a saved secret.
+     */
+    fun openFailsForGood(sealed: String, sealer: Sealer? = sealer()): Boolean {
+        if (sealer == null) return false
+        return try {
+            sealer.open(Base64.getDecoder().decode(sealed))
+            false
+        } catch (e: Exception) {
+            definite(e)
+        }
+    }
+
+    internal fun definite(e: Throwable): Boolean = when (e) {
+        is IllegalArgumentException, is javax.crypto.AEADBadTagException, is javax.crypto.BadPaddingException,
+        is java.security.UnrecoverableKeyException, is java.security.KeyStoreException -> true
+        else -> e.javaClass.simpleName == "KeyPermanentlyInvalidatedException" || (e.cause?.let(::definite) ?: false)
+    }
+
+    /**
      * Writes [value] sealed into [sealedKey] and removes [plainKey]. Without a working KeyStore it is written into [plainKey] instead
      * (and [sealedKey] removed). An empty value removes both. Returns the commit result.
      */

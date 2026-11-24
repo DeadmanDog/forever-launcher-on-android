@@ -59,10 +59,10 @@ class Review6LatencyTest {
     }
 
     @Test fun eachSwitchIsGreyedOutUnderTheOtherApi() {
-        assertEquals(SwitchNeeds.DX11, switchNeeds("lowlatency", dx12 = true, gamescope = false))
-        assertNull(switchNeeds("lowlatency", dx12 = false, gamescope = true))
-        assertEquals(SwitchNeeds.DX12, switchNeeds("lowlatency12", dx12 = false, gamescope = false))
-        assertNull(switchNeeds("lowlatency12", dx12 = true, gamescope = true))
+        assertEquals(SwitchNeeds.DX11, switchNeeds("lowlatency", dx12 = true))
+        assertNull(switchNeeds("lowlatency", dx12 = false))
+        assertEquals(SwitchNeeds.DX12, switchNeeds("lowlatency12", dx12 = false))
+        assertNull(switchNeeds("lowlatency12", dx12 = true))
     }
 
     // VKD3D r11: WoW's DX12 caps render scale at 100% on a UMA GPU; since 1.3.6 DX12 always reports a dedicated GPU (no switch).

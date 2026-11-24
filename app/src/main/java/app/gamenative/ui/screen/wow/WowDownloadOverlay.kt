@@ -46,10 +46,12 @@ fun WowDownloadOverlay() {
         val uid = Process.myUid()
         var lastBytes = TrafficStats.getUidRxBytes(uid)
         var lastTime = SystemClock.elapsedRealtime()
+        val poll = DownloadProgressPoll({ WowGameData.cachedTotal(context, root) }, { WowGameData.downloaded(root) })
         while (true) {
-            progress = withContext(Dispatchers.IO) { runCatching { WowGameData.progress(context, root) }.getOrNull() }
-            if (progress?.complete != false) { delay(30_000); continue }
-            delay(2_000)
+            progress = withContext(Dispatchers.IO) { runCatching { poll.poll() }.getOrNull() }
+            val wait = DownloadProgressPoll.nextDelayMs(progress) ?: break
+            if (progress == null) { delay(wait); continue }
+            delay(wait)
             val bytes = TrafficStats.getUidRxBytes(uid)
             val now = SystemClock.elapsedRealtime()
             if (bytes >= 0 && lastBytes >= 0 && now > lastTime) speed = (bytes - lastBytes) / 1048576.0 / ((now - lastTime) / 1000.0)

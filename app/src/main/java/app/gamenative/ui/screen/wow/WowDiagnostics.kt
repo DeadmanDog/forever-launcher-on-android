@@ -101,11 +101,6 @@ internal object WowDiagnostics {
         val active=sampler ?: return
         active.frames.frame(SystemClock.elapsedRealtimeNanos())
     }
-    /** A frame the Gamescope session produced (the game's own acquire, from the bridge's producer reports). */
-    @JvmStatic fun gamescopeFrame() {
-        val active=sampler ?: return
-        active.frames.frame(SystemClock.elapsedRealtimeNanos(), DiagnosticFrames.Source.GAMESCOPE_PRODUCED)
-    }
     @JvmStatic fun presentFrame() {
         val active=sampler ?: return
         active.frames.frame(SystemClock.elapsedRealtimeNanos(), DiagnosticFrames.Source.X_PRESENT_REQUEST)
@@ -215,7 +210,6 @@ internal object WowDiagnostics {
             File(session, "session.txt").writeText(
                 "Wine/DXVK diagnostic log; 2 MiB per file with one previous file per output stream.\n" +
                 "Started wall_ms: ${System.currentTimeMillis()} elapsed_ms: ${SystemClock.elapsedRealtime()}\nDetailed: ${detailed(context)}\nAudio debug: ${audioDebug(context)}\nAndroid version: ${android.os.Build.VERSION.RELEASE}\nAPK: ${app.gamenative.BuildConfig.VERSION_NAME} (${app.gamenative.BuildConfig.VERSION_CODE})\nWine: ${container.wineVersion}\nDXVK: ${container.dxWrapper}\n" +
-                "Display backend: ${container.getExtra(app.gamenative.display.WowDisplayBackend.KEY, app.gamenative.display.WowDisplayBackend.XSERVER)}\nGamescope payload: ${if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) app.gamenative.display.WowGamescopePayload.ARCHIVE else "off"}\n" +
                 "Driver: ${container.graphicsDriverVersion}\nRenderer: ${container.displayRenderer}\nVirtual display: ${container.screenSize}\n" +
                 "Graphics API: ${WowVkd3dComponents.api(container)}\nVKD3D: ${container.getExtra(WowVkd3dComponents.PROFILE_KEY).ifBlank { "none" }}\n" +
                 "Stats files: TU_STATS_FILE=${env.get("TU_STATS_FILE").ifBlank { "off" }} WINE_REQ_STATS=${env.get("WINE_REQ_STATS").ifBlank { "off" }}\n" +
@@ -225,7 +219,7 @@ internal object WowDiagnostics {
                 "NTSYNC_WAKE_HANDOFF: ${env.get("NTSYNC_WAKE_HANDOFF").ifBlank { "0 (default)" }}\n" +
                 "Low input latency: DX11 (frame latency 1) ${WowLaunchPolicy.enabled(context, WowRuntimeTuning.LOW_LATENCY)}, DX12 (swapchain latency 1) ${WowLaunchPolicy.enabled(context, WowRuntimeTuning.LOW_LATENCY_DX12)}\nScanout: ${WowLaunchPolicy.enabled(context, "scanout")}\nExec shim: libwowexec (own)\nDisplay priority: ${WowLaunchPolicy.enabled(context, "priority")}\nADPF compositor: ${WowLaunchPolicy.enabled(context, "adpf")}\n" +
                 "TU_DEBUG: ${env.get("TU_DEBUG")}\n" +
-                "Frame pacing: ${if (WowRuntimeTuning.gamescopeOwnsFifoPacing(context, container)) "Gamescope FIFO vblank limiter" else if (!WowRuntimeTuning.appPacing(context, container)) "DXVK/VKD3D API limiter" else if (WowRuntimeTuning.phaseAlign(context)) "app Present limiter (vsync-locked, phase-aligned)" else if (WowRuntimeTuning.vsyncPacing(context)) "app Present limiter (vsync-locked)" else "app Present limiter (timer)"}\n" +
+                "Frame pacing: ${if (!WowRuntimeTuning.appPacing(context, container)) "DXVK/VKD3D API limiter" else if (WowRuntimeTuning.phaseAlign(context)) "app Present limiter (vsync-locked, phase-aligned)" else if (WowRuntimeTuning.vsyncPacing(context)) "app Present limiter (vsync-locked)" else "app Present limiter (timer)"}\n" +
                 "Active limiter: ${WowRuntimeTuning.effectiveLimiter(context, container, env)}\n" +
                 "FIFO latency: ${when (WowRuntimeTuning.fifoDrainMode(context)) { 1 -> "lower, one step (drain on)"; 2 -> "lowest, probing (drain on)"; else -> "smooth (drain off)" }}\n" +
                 "Swapchain latency: ${env.get("VKD3D_SWAPCHAIN_LATENCY_FRAMES").ifBlank { "driver default" }}\nSwapchain images: ${env.get("VKD3D_SWAPCHAIN_IMAGES").ifBlank { "driver default" }}\nDXVK_ASYNC: ${env.get("DXVK_ASYNC")}\n" +
@@ -241,7 +235,6 @@ internal object WowDiagnostics {
                 "CPU cores (sysfs capacity / max kHz): ${coreSysfs()}\n" +
                 "GPU identity: DXVK_VEGAS_PERSONA='${env.get("DXVK_VEGAS_PERSONA")}' DXVK_CONFIG='${env.get("DXVK_CONFIG")}'\n" +
                 "Non-blocking X11 output (xnonblock): ${if (WowLaunchPolicy.enabled(context, "xnonblock")) "on" else "off"}\n" +
-                "Gamescope direct scanout: ${if (WowLaunchPolicy.enabled(context, app.gamenative.display.GamescopeWindowPolicy.DIRECT_SCANOUT)) "on (no --force-composition)" else "off"}\n" +
                 "Event reuse (WINE_EVENT_POOL): ${if (WowLaunchPolicy.enabled(context, WowRuntimeTuning.EVENT_POOL)) "on" else "off (0)"}\n" +
                 "Base prefix fallback: ${com.winlator.container.BasePrefix.fallbackNotice() ?: "none"}\n" +
                 "Safe Present buffer hand-back (presentidle): ${if (WowLaunchPolicy.enabled(context, "presentidle")) "on" else "off"}\n" +

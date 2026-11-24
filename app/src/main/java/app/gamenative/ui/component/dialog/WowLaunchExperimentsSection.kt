@@ -57,8 +57,6 @@ internal fun fifoLatencyUnavailable(inputs: WowQuickPresentInputs, uiChoice: Str
 
 @Composable private fun onlyDx11() = tx("Only with DX11 (DXVK): the game runs DX12 now.", "Csak DX11-gyel (DXVK) érhető el: most DX12 fut.")
 @Composable private fun onlyDx12() = tx("Only with DX12 (VKD3D): the game runs DX11 now.", "Csak DX12-vel (VKD3D) érhető el: most DX11 fut.")
-@Composable internal fun xserverOnly() = tx("Available with XServer. Gamescope uses its own compositor.",
-    "XServer módban érhető el. A Gamescope saját kompozitort használ.")
 
 /** The saved container values the next launch resolves the present mode from, together with the Quick tab choice. */
 internal data class WowQuickPresentInputs(val savedEnvironment: String = "", val driverMode: String = "", val rendererMode: String = "") {
@@ -97,7 +95,7 @@ internal fun WowGameChoicesSection(blocked: Boolean) {
 
 /** Everyday launch choices for the Settings "Quick" tab. Applied on the next Play. */
 @Composable
-internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, dx12: Boolean, presentInputs: WowQuickPresentInputs, gamescope: Boolean) {
+internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, dx12: Boolean, presentInputs: WowQuickPresentInputs) {
     val context = LocalContext.current.applicationContext
     var error by remember { mutableStateOf<String?>(null) }
     var present by remember { mutableStateOf(WowRuntimeTuning.selected(context, "present")) }
@@ -111,8 +109,7 @@ internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, d
             tx("Who holds the frame rate to the limit. App, vsync-aligned (recommended): the app releases frames in step with the display's refresh and shifts them a few milliseconds so they finish mid-refresh, so they stay evenly spaced. DXVK / VKD3D: the graphics layer limits with its own timer, which can make motion judder; a fallback. A limiter typed into Environment Variables always uses DXVK / VKD3D.",
                 "Ki tartja a képkockasebességet a limiten. App, vsync-hez igazított (ajánlott): az app a kijelző frissítésével lépésben engedi tovább a képkockákat, és néhány ezredmásodperccel a frissítés közepére igazítja őket, így egyenletes marad a ritmus. DXVK / VKD3D: a grafikus réteg saját időzítővel limitál, ez ránghatóvá teheti a mozgást; tartalék megoldás. A környezeti változókba kézzel beírt limiter mindig a DXVK / VKD3D utat használja."),
             listOf("" to tx("App, vsync-aligned (recommended)", "App, vsync-hez igazított (ajánlott)"),
-                "api" to "DXVK / VKD3D"), blocked, { error = it },
-            unavailable = if (gamescope) xserverOnly() else null)
+                "api" to "DXVK / VKD3D"), blocked, { error = it })
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         TuningChoice("async", tx("DX11 shader compilation", "DX11 shaderfordítás"),
             tx("How DX11 shaders are compiled while you play. Hybrid (default): skips a draw only while its shader compiles; with \"Hybrid keeps GPL\" (Advanced) it also links pipelines quickly. GPL: links pipelines quickly and never skips a draw. Async: the older background mode.",
@@ -135,7 +132,7 @@ internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, d
                 "Csak FIFO-val. Sima (alapértelmezett): a kockák úgy állnak sorba, ahogy jönnek, 60 Hz-en kb. 60 ms a kockától a képig, soha nincs kihagyott kocka. Alacsonyabb (kísérleti): akadás után az app kivesz egy beragadt kockát (egy kihagyás), és az első működő szinten megáll (kb. 43 ms). Legalacsonyabb (kísérleti): minden alkalommal megpróbál még egy lépést lejjebb; ha az nem tart, az még egy apró akadás, utána a tartós szinten marad."),
             listOf("" to tx("Smooth (default)", "Sima (alapértelmezett)"), "low" to tx("Lower (experimental)", "Alacsonyabb (kísérleti)"),
                 "lowest" to tx("Lowest (experimental)", "Legalacsonyabb (kísérleti)")), blocked, { error = it },
-            unavailable = if (gamescope) xserverOnly() else fifoLatencyUnavailable(presentInputs, present))
+            unavailable = fifoLatencyUnavailable(presentInputs, present))
         Text(tx("A value typed in Environment Variables always overrides these choices.",
             "A környezeti változókba kézzel beírt érték mindig felülírja ezeket."), style = MaterialTheme.typography.bodySmall)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -144,7 +141,7 @@ internal fun WowQuickTuningSection(blocked: Boolean, hybridAvailable: Boolean, d
 
 /** Experimental and diagnostic launch switches for the Settings "Advanced" tab. */
 @Composable
-internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String, legacyTuDefault: Boolean, dx12: Boolean, gamescope: Boolean) {
+internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String, legacyTuDefault: Boolean, dx12: Boolean) {
     val context = LocalContext.current.applicationContext
     var memory by remember { mutableStateOf(WowLaunchPolicy.memory(context)) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -188,9 +185,6 @@ internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String
             Triple(WowRuntimeTuning.CPU_CLASSES, tx("Report big/little CPU cores (experimental)", "Nagy/kis CPU-magok jelzése (kísérleti)"),
                 tx("Tells the game which cores are the fastest ones (the phone's prime cores) the way a hybrid laptop CPU does, so WoW's own logs show Hybrid:true and it may place its busiest threads on them. On by default. Off = all cores look equal. Changes how WoW schedules threads.",
                     "Jelzi a játéknak, melyek a leggyorsabb magok (a telefon prime magjai), mint egy hibrid laptop-CPU-nál, így a WoW naplója Hybrid:true-t mutat, és a legterheltebb szálait ezekre teheti. Alapból bekapcsolva. Ki = minden mag egyformának látszik. Megváltoztatja, hogyan ütemez a WoW.")),
-            Triple(app.gamenative.display.GamescopeWindowPolicy.DIRECT_SCANOUT, tx("Gamescope direct scanout (experimental)", "Gamescope közvetlen kijelzés (kísérleti)"),
-                tx("Gamescope only. Gamescope hands the game's own frame to the display instead of redrawing it on the GPU every frame, which saves power. It falls back to redrawing by itself when that is not possible (effects, a refused frame). If the picture flickers or goes black, turn it off. Takes effect from the next launch.",
-                    "Csak Gamescope-pal. A Gamescope a játék saját képkockáját adja a kijelzőnek, ahelyett hogy minden képkockánál újrarajzolná a GPU-n, így kevesebbet fogyaszt. Ha ez nem lehetséges (effektek, visszautasított képkocka), magától visszavált az újrarajzolásra. Ha villog vagy fekete a kép, kapcsold ki. A következő indítástól él.")),
             Triple(WowRuntimeTuning.GAME_GPU_WAIT, tx("DX12: wait for the GPU before showing a frame", "DX12: a GPU megvárása a kép megjelenítése előtt"),
                 tx("XServer with DX12 only. The game's frame reaches the screen only once the GPU has finished drawing it. Without this the screen could sometimes show the previous picture (the loading bar jumping back, stutter while the GPU is busy). The FPS limit and frame pacing stay as they are. Takes effect from the next launch.",
                     "Csak XServer + DX12 esetén. A játék képe csak akkor kerül a kijelzőre, amikor a GPU már befejezte a rajzolását. Enélkül a képernyőn néha az előző kép jelenhetett meg (a betöltőcsík visszaugrik, rángás, amikor a GPU terhelt). Az FPS-limit és a képütemezés nem változik. A következő indítástól él.")),
@@ -216,10 +210,7 @@ internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String
                 tx("Tells Android how long each frame of the compositor takes, so it can raise CPU clocks before frames run late.",
                     "Jelzi az Androidnak, mennyi ideig tart a compositor egy képkockája, hogy időben emelhesse a CPU órajelét.")))) {
             var enabled by remember(key) { mutableStateOf(WowLaunchPolicy.enabled(context, key)) }
-            val unavailable = when (switchNeeds(key, dx12, gamescope)) {
-                SwitchNeeds.XSERVER -> xserverOnly()
-                SwitchNeeds.GAMESCOPE -> tx("Available with Gamescope. XServer uses the app's own compositor.",
-                    "Gamescope módban érhető el. Az XServer az app saját kompozitorát használja.")
+            val unavailable = when (switchNeeds(key, dx12)) {
                 SwitchNeeds.DX11 -> onlyDx11()
                 SwitchNeeds.DX12 -> onlyDx12()
                 null -> null
@@ -241,12 +232,10 @@ internal fun WowAdvancedTuningSection(blocked: Boolean, savedEnvironment: String
 }
 
 /** What an Advanced-tab switch needs to act; the switch is greyed out with the reason while the next launch lacks it. */
-internal enum class SwitchNeeds { DX11, DX12, XSERVER, GAMESCOPE }
+internal enum class SwitchNeeds { DX11, DX12 }
 
-/** Null when the switch acts on the next launch with this API and display backend. */
-internal fun switchNeeds(key: String, dx12: Boolean, gamescope: Boolean): SwitchNeeds? = when {
-    gamescope && key in xserverOnlySettings -> SwitchNeeds.XSERVER
-    !gamescope && key in gamescopeOnlySettings -> SwitchNeeds.GAMESCOPE
+/** Null when the switch acts on the next launch with this API. */
+internal fun switchNeeds(key: String, dx12: Boolean): SwitchNeeds? = when {
     dx12 && key in dx11Only -> SwitchNeeds.DX11
     !dx12 && key in dx12Only -> SwitchNeeds.DX12
     else -> null
@@ -254,7 +243,5 @@ internal fun switchNeeds(key: String, dx12: Boolean, gamescope: Boolean): Switch
 
 /** Switches that only act on the DX11 path (DXVK / Vegas); 1.1.7: Low input latency is the DX11 one, DX12 has LOW_LATENCY_DX12. */
 private val dx11Only = setOf(WowRuntimeTuning.LOW_LATENCY, WowRuntimeTuning.HYBRID_GPL, WowRuntimeTuning.VEGAS_BINDSKIP)
-/** WowLaunchEnvironment applies the GPU wait only for XServer + DX12; since 1.1.7 DX12 has its own low-latency switch. */
+/** WowLaunchEnvironment applies the GPU wait only for DX12; since 1.1.7 DX12 has its own low-latency switch. */
 private val dx12Only = setOf(WowRuntimeTuning.LOW_LATENCY_DX12, WowRuntimeTuning.GAME_GPU_WAIT)
-private val xserverOnlySettings = setOf("scanout", "xnonblock", "presentidle", "priority", "adpf", WowRuntimeTuning.GAME_GPU_WAIT)
-private val gamescopeOnlySettings = setOf(app.gamenative.display.GamescopeWindowPolicy.DIRECT_SCANOUT)

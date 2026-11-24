@@ -283,7 +283,9 @@ void main() {
         // FXAA smooths the source; whatever the base effect (FSR, DLS, Natural, ...) added to the source colour is kept on top of it,
         // instead of being thrown away by a second pass that only reads the original samples.
         if (hasEffect(EFFECT_MASK_FXAA)) rgb = clamp(applyFXAA(uv) + (rgb - src.rgb), 0.0, 1.0);
-        rgb = applyColorAdjustments(rgb);
+        // 1.2.22: neutral brightness/contrast/gamma (the default) change nothing; skipping them saves three pow() per pixel of
+        // every frame (a uniform branch, the same for the whole draw).
+        if (pc.brightness != 0.0 || pc.contrast != 0.0 || pc.gamma != 1.0) rgb = applyColorAdjustments(rgb);
         if (hasEffect(EFFECT_MASK_TOON))  rgb = applyToon(rgb);
         if (hasEffect(EFFECT_MASK_VIVID)) rgb = applyVivid(rgb);
         if (hasEffect(EFFECT_MASK_CRT))   rgb = applyCRTOverlay(uv, rgb);

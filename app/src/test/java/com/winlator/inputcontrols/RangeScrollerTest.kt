@@ -16,15 +16,17 @@ import java.util.concurrent.atomic.AtomicReference
 class RangeScrollerTest {
     @Test
     fun `queued long press is ignored after touch cancellation`() {
-        verifyQueuedLongPressIsIgnored { it.cancelTouch() }
+        verifyQueuedLongPressIsIgnored(presses = 0, releases = 1) { it.cancelTouch() }
     }
 
+    // 1.2.26: a lift handled at 200 ms while the long press was still queued on the UI thread is a tap (it used to send only a
+    // release: the action-bar key was lost). The queued long press still adds nothing; the tap's release comes 30 ms later.
     @Test
     fun `queued long press is ignored after normal touch up`() {
-        verifyQueuedLongPressIsIgnored { it.handleTouchUp() }
+        verifyQueuedLongPressIsIgnored(presses = 1, releases = 0) { it.handleTouchUp() }
     }
 
-    private fun verifyQueuedLongPressIsIgnored(endTouch: (RangeScroller) -> Unit) {
+    private fun verifyQueuedLongPressIsIgnored(presses: Int, releases: Int, endTouch: (RangeScroller) -> Unit) {
         val currentTime = AtomicLong(0L)
         val scheduledLongPress = AtomicReference<Runnable>()
         val postedCallback = AtomicReference<Runnable>()
@@ -52,7 +54,8 @@ class RangeScrollerTest {
         scheduledLongPress.get().run()
         postedCallback.get().run()
 
-        verify(exactly = 0) { view.handleInputEvent(Binding.KEY_A, true) }
-        verify(exactly = 1) { view.handleInputEvent(Binding.KEY_A, false) }
+        verify(exactly = presses) { view.handleInputEvent(Binding.KEY_A, true) }
+        verify(exactly = releases) { view.handleInputEvent(Binding.KEY_A, false) }
+        if (presses > 0) verify(exactly = 1) { view.postDelayed(any(), 30) }
     }
 }

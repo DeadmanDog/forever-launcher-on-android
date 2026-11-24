@@ -8,9 +8,10 @@ def method(m):
  while d:d+=(s[i]=='{')-(s[i]=='}');i+=1
  return s[start:i]
 methods=['private long did(', 'private void collectWindows(', 'public void onUnmapWindow(', 'public void onDestroyWindow(', 'public void queueSceneUpdate(', 'public boolean onUpdateWindowContentDirect(']
-j=a.out/'VulkanWindowRegression.java';j.write_text(Path(__file__).with_name('VulkanWindowRegression.java.in').read_text().replace('/* PRODUCTION */','\n'.join(method(m) for m in methods)))
+g=(a.source_root/'app/src/main/java/com/winlator/renderer/ScanoutFrameGuard.java').read_text();g=g[g.index('final class ScanoutFrameGuard'):].replace('final class ScanoutFrameGuard','static final class ScanoutFrameGuard',1)
+j=a.out/'VulkanWindowRegression.java';j.write_text(Path(__file__).with_name('VulkanWindowRegression.java.in').read_text().replace('/* PRODUCTION */','\n'.join(method(m) for m in methods)).replace('/* GUARD */',g))
 jdk=Path(os.environ['JAVA_HOME'])/'bin';subprocess.run([str(jdk/'javac'),str(j)],check=True);results=[]
-for n in range(8):
+for n in range(9):
  r=subprocess.run([str(jdk/'java'),'-cp',str(a.out),'VulkanWindowRegression',str(n)],capture_output=True,text=True,timeout=10);results.append(dict(case=n,passed=r.returncode==0,output=r.stdout+r.stderr))
 report=dict(sourceSha256=hashlib.sha256(src.read_bytes()).hexdigest(),passed=sum(r['passed'] for r in results),total=len(results),results=results);(a.out/'result.json').write_text(json.dumps(report,indent=2));print(json.dumps(report))
 if not a.baseline and report['passed']!=report['total']:raise SystemExit(1)

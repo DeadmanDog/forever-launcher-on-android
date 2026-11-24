@@ -124,10 +124,12 @@ fun BootingSplash(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                // Review 2026-11-13: the splash covers the game (or the launcher) underneath, which must not get the touches made on
-                // it. Its own back button still works: a child sees each touch before this parent consumes it.
+                // The splash covers the game (or the launcher) underneath, which must not get the touches made on it: a pointer
+                // input here is enough (Compose does not pass a touch on to siblings below the node that takes it). It must NOT
+                // consume: the back arrow's click is cancelled when a parent consumes the small move of a real finger tap
+                // (1.2.0: the arrow often did nothing; review 2026-11-15).
                 .pointerInput(Unit) {
-                    awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } }
+                    awaitPointerEventScope { while (true) awaitPointerEvent() }
                 }
                 .testTag("bootingSplashTouchShield")
                 .background(

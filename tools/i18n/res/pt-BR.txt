@@ -1,0 +1,214 @@
+cancel|Cancelar
+delete|Excluir
+copy|Copiar
+edit|Editar
+add|Adicionar
+copy_from|Copiar de
+ok|OK
+game_executable_not_found_title|Não foi possível iniciar
+game_executable_not_found|Não foi possível escolher o executável automaticamente. Defina o caminho nas configurações do contêiner.
+save|Salvar
+discard|Descartar
+resume_game|Retomar jogo
+extra|Extra
+clear_search|Limpar pesquisa
+face_buttons_category|Botões frontais
+shoulder_buttons_category|Botões de ombro
+menu_buttons_category|Botões de menu
+thumbstick_buttons_category|Botões dos analógicos
+left_stick|Analógico esquerdo
+right_stick|Analógico direito
+dpad_category|Direcional
+dpad_up|Direcional para cima
+dpad_down|Direcional para baixo
+dpad_left|Direcional para a esquerda
+dpad_right|Direcional para a direita
+bind_button|Atribuir: %1$s
+current_binding|Atual: %1$s
+search_placeholder|Pesquisar…
+category|Categoria
+mouse|Mouse
+gamepad|Controle
+binding_none|Nenhuma
+clear_binding|Limpar atribuição
+no_bindings_found|Nenhuma atribuição encontrada
+edit_element|Editar %1$s
+element_position_size|Posição: (%1$d, %2$d) • Tamanho: %3$.2fx
+appearance|Aparência
+label_text|Texto do rótulo
+label_text_subtitle|Texto personalizado para este botão
+element_type|Tipo de elemento
+element_type_subtitle|Alterar o tipo deste controle
+shape|Formato
+shape_subtitle|Aparência visual
+shape_restricted|%1$s só pode ter o formato %2$s
+bindings|Atribuições
+bindings_auto_generated|Atribuições (automáticas)
+bindings_auto_generated_subtitle|As atribuições do botão de intervalo são geradas automaticamente
+range_button_settings|Configurações do botão de intervalo
+range_type|Intervalo de teclas
+range_type_subtitle|Quais teclas percorrer
+range_orientation|Orientação
+range_orientation_subtitle|Direção do botão de intervalo
+range_orientation_horizontal|Horizontal
+range_orientation_vertical|Vertical
+range_visible_segments|Segmentos visíveis
+range_visible_segments_subtitle|Teclas mostradas de uma vez: %1$d
+range_lock_scrolling|Travar rolagem
+range_lock_scrolling_subtitle|Impede rolar pelo intervalo
+button_toggleable|Alternável
+button_toggleable_subtitle|Toque para ativar, toque de novo para desativar
+control_appearance|Aparência do controle
+button_color|Cor do controle
+button_color_subtitle|Cor hex do contorno, ícone e texto
+button_active_color|Cor ao pressionar
+button_active_color_subtitle|Cor enquanto pressionado ou ativo
+button_opacity|Opacidade do controle
+button_opacity_inherited|%1$d%% (padrão global)
+control_stroke_width|Espessura da linha
+control_stroke_width_subtitle|Espessura do contorno e dos divisores
+control_stroke_width_thin|Fina
+control_stroke_width_default|Padrão
+control_stroke_width_thick|Grossa
+control_stroke_width_extra_thick|Extra grossa
+button_look_through|Arrastar através
+button_look_through_subtitle|Pressione e arraste a partir deste botão para controlar também o movimento ou a câmera. Indisponível no modo tela sensível ao toque.
+preview|Prévia
+active|Ativo
+apply_all|Aplicar a todos
+copy_appearance_from_button|Copiar aparência de outro controle
+toast_no_buttons_to_copy_appearance|Nenhum outro controle para copiar a aparência
+toast_copied_button_appearance|Aparência copiada
+toast_applied_button_appearance|Aparência aplicada a todos os controles
+primary_action|Ação principal
+secondary_action|Ação secundária
+direction_up|Cima
+direction_right|Direita
+direction_down|Baixo
+direction_left|Esquerda
+mouse_suffix| (mouse)
+slot_number|Espaço %1$d
+button_slots_help|Os botões aceitam até 2 atribuições: principal (pressionar) e secundária (pressionar e segurar)
+properties|Propriedades
+position|Posição
+position_value|X: %1$d, Y: %2$d
+unsaved_changes|Alterações não salvas
+unsaved_changes_message|Há alterações não salvas. Deseja salvá-las ou descartá-las?
+adjust_size|Ajustar tamanho
+reset|Redefinir
+done|Concluído
+copy_size_from_element|Copiar tamanho de outro elemento
+toast_no_elements_to_copy|Nenhum outro elemento para copiar o tamanho
+toast_copied_size|Tamanho copiado: %.2fx
+quick_presets|Predefinições rápidas
+preset_arrows|Setas
+preset_mouse|Mouse
+preset_dpad|Direcional
+preset_left_stick|Analógico esquerdo
+preset_right_stick|Analógico direito
+physical_controller_config|Atribuições do controle físico
+button_a|Botão A
+button_b|Botão B
+button_x|Botão X
+button_y|Botão Y
+button_start|Start / Options
+button_select|Select / View / Share
+button_l3|L3 (clique do analógico esquerdo)
+button_r3|R3 (clique do analógico direito)
+left_stick_up|Analógico esquerdo para cima
+left_stick_down|Analógico esquerdo para baixo
+left_stick_left|Analógico esquerdo para a esquerda
+left_stick_right|Analógico esquerdo para a direita
+right_stick_up|Analógico direito para cima
+right_stick_down|Analógico direito para baixo
+right_stick_left|Analógico direito para a esquerda
+right_stick_right|Analógico direito para a direita
+button_home|Home / Guide / PS
+not_set|Não definido
+toast_controls_reset|Controles redefinidos
+size|Tamanho
+close|Fechar
+gesture_section_single_finger|Um dedo
+gesture_section_two_finger|Dois dedos
+gesture_section_three_finger|Três dedos
+gesture_section_other|Outros
+gesture_tap|Tocar
+gesture_drag|Arrastar o dedo
+gesture_hold_mouse_button_while_touching|Manter o botão do mouse enquanto toca
+gesture_mouse_button_label|Botão do mouse
+gesture_long_press|Toque longo
+gesture_long_press_delay|Atraso do toque longo (ms)
+gesture_double_tap|Toque duplo
+gesture_double_tap_subtitle|Clique esquerdo duplo
+gesture_double_tap_delay|Atraso do toque duplo (ms)
+gesture_two_finger_drag|Arrastar com dois dedos
+gesture_pinch|Pinçar
+gesture_two_finger_tap|Tocar com dois dedos
+gesture_action_left_click|Clique esquerdo
+gesture_action_right_click|Clique direito
+gesture_action_middle_click|Clique do meio
+gesture_pan_middle_mouse|Mover com botão do meio
+gesture_pan_inverted_middle_mouse|Mover invertido com botão do meio
+gesture_pan_inverted_wasd|WASD invertido
+gesture_pan_arrow_keys|Setas do teclado
+gesture_pan_inverted_arrow_keys|Setas do teclado invertidas
+gesture_pan_left_click_drag|Arrastar com clique esquerdo
+gesture_pan_right_click_drag|Arrastar com clique direito
+gesture_zoom_scroll_wheel|Roda do mouse
+gesture_zoom_plus_minus|Teclas +/-
+gesture_zoom_page_up_down|Page Up/Down
+gesture_action_label|Ação
+gesture_action_show_keyboard|Mostrar teclado
+gesture_mouse_behavior_label|Comportamento do mouse
+gesture_mouse_behavior_click|Clicar
+gesture_mouse_behavior_hold|Segurar
+gesture_header_special|Especial
+gesture_header_mouse|Mouse
+gesture_header_common_game|Teclas de jogo comuns
+gesture_header_navigation_editing|Navegação / Edição
+gesture_header_symbols|Símbolos
+gesture_header_letters|Letras A–Z
+gesture_header_numbers|Números 0–9
+gesture_header_numpad|Teclado numérico
+gesture_header_function_keys|Teclas de função
+gesture_header_modifiers_locks|Modificadores / Travas
+gesture_two_finger_hold|Segurar com dois dedos
+gesture_two_finger_hold_delay|Atraso de segurar com dois dedos (ms)
+gesture_three_finger_tap|Tocar com três dedos
+gesture_three_finger_drag|Arrastar com três dedos
+gesture_three_finger_hold|Segurar com três dedos
+gesture_three_finger_hold_delay|Atraso de segurar com três dedos (ms)
+gesture_threshold|Limite dos gestos (px)
+gesture_mouse_drag_movement|Movimento do mouse ao arrastar
+gesture_mouse_drag_movement_subtitle|Direto funciona na maioria dos jogos. Use Relativo se arrastar causar problemas com a câmera ou o cursor
+gesture_mouse_drag_movement_direct|Direto
+gesture_mouse_drag_movement_relative|Relativo
+gesture_show_click_highlight|Destacar cliques
+gesture_show_click_highlight_subtitle|Mostra um círculo no local do toque
+gesture_show_debug_overlay|Camada de depuração de gestos
+gesture_show_debug_overlay_subtitle|Rótulos temporários dos gestos no topo central
+gesture_show_cursor_touchscreen_mode|Mostrar cursor no modo de toque
+gesture_show_cursor_touchscreen_mode_subtitle|O cursor fica visível enquanto os gestos de toque estão ativos
+main_installing_bionic|Instalando componentes Bionic...
+download_failed_title|Falha no download
+install_failed_title|Falha na instalação
+install_failed_message|Não foi possível instalar os arquivos do sistema. Tente novamente. Se o problema continuar, tente outra rede ou uma VPN.
+back|Voltar
+radial_menu_settings_title|Menu radial
+radial_menu_cancel|Cancelar
+radial_menu_slot_count|Espaços
+radial_menu_slot_count_subtitle|%1$d espaços ativos
+radial_menu_decrease_slots|Menos espaços
+radial_menu_increase_slots|Mais espaços
+radial_menu_slots|Espaços da roda
+radial_menu_slot_title|Espaço %1$d
+radial_menu_slot_label_hint|Rótulo
+radial_menu_slot_binding|Atribuição do espaço %1$d
+radial_menu_slot_binding_summary|Atribuição: %1$s
+radial_menu_preset_common|Comum
+radial_menu_preset_weapons|Armas
+gesture_action_open_radial_menu|Abrir menu radial
+binding_mode_simultaneous|Simultâneo
+binding_mode_sequence|Sequência
+binding_sequence_delay_ms|Atraso da sequência (ms)
+binding_sequence_current_format|%1$s (%2$d ms)

@@ -1,0 +1,214 @@
+cancel|취소
+delete|삭제
+copy|복사
+edit|편집
+add|추가
+copy_from|다음에서 복사
+ok|확인
+game_executable_not_found_title|실행할 수 없음
+game_executable_not_found|실행 파일을 자동으로 선택하지 못했습니다. 컨테이너 설정에서 경로를 지정하세요.
+save|저장
+discard|버리기
+resume_game|게임 계속하기
+extra|추가
+clear_search|검색 지우기
+face_buttons_category|페이스 버튼
+shoulder_buttons_category|숄더 버튼
+menu_buttons_category|메뉴 버튼
+thumbstick_buttons_category|스틱 버튼
+left_stick|왼쪽 스틱
+right_stick|오른쪽 스틱
+dpad_category|방향 패드
+dpad_up|방향 패드 위
+dpad_down|방향 패드 아래
+dpad_left|방향 패드 왼쪽
+dpad_right|방향 패드 오른쪽
+bind_button|할당: %1$s
+current_binding|현재: %1$s
+search_placeholder|검색…
+category|카테고리
+mouse|마우스
+gamepad|게임패드
+binding_none|없음
+clear_binding|할당 지우기
+no_bindings_found|할당을 찾을 수 없음
+edit_element|%1$s 편집
+element_position_size|위치: (%1$d, %2$d) • 크기: %3$.2fx
+appearance|모양
+label_text|라벨 텍스트
+label_text_subtitle|이 버튼의 사용자 지정 텍스트
+element_type|요소 유형
+element_type_subtitle|이 컨트롤의 유형 변경
+shape|형태
+shape_subtitle|시각적 모양
+shape_restricted|%1$s은(는) %2$s 형태만 가능합니다
+bindings|할당
+bindings_auto_generated|할당 (자동 생성)
+bindings_auto_generated_subtitle|범위 버튼의 할당은 자동으로 생성됩니다
+range_button_settings|범위 버튼 설정
+range_type|키 범위
+range_type_subtitle|순환할 키 세트
+range_orientation|방향
+range_orientation_subtitle|범위 버튼의 배치 방향
+range_orientation_horizontal|가로
+range_orientation_vertical|세로
+range_visible_segments|표시 구간
+range_visible_segments_subtitle|한 번에 표시되는 키 수: %1$d
+range_lock_scrolling|스크롤 잠금
+range_lock_scrolling_subtitle|범위 스크롤 방지
+button_toggleable|토글
+button_toggleable_subtitle|탭하면 켜지고 다시 탭하면 꺼집니다
+control_appearance|컨트롤 모양
+button_color|컨트롤 색상
+button_color_subtitle|외곽선, 아이콘, 텍스트의 16진수 색상
+button_active_color|누른 상태 색상
+button_active_color_subtitle|누르고 있거나 활성 상태일 때의 색상
+button_opacity|컨트롤 불투명도
+button_opacity_inherited|%1$d%% (전역 기본값)
+control_stroke_width|선 두께
+control_stroke_width_subtitle|컨트롤 외곽선과 구분선 두께 조정
+control_stroke_width_thin|얇게
+control_stroke_width_default|기본값
+control_stroke_width_thick|두껍게
+control_stroke_width_extra_thick|매우 두껍게
+button_look_through|드래그 연동
+button_look_through_subtitle|이 버튼에서 누른 채 드래그하면 이동이나 카메라도 조작할 수 있습니다. 터치스크린 모드에서는 사용할 수 없습니다.
+preview|미리 보기
+active|활성
+apply_all|모두 적용
+copy_appearance_from_button|다른 컨트롤의 모양 복사
+toast_no_buttons_to_copy_appearance|모양을 복사할 다른 컨트롤이 없습니다
+toast_copied_button_appearance|컨트롤 모양을 복사했습니다
+toast_applied_button_appearance|모든 컨트롤에 모양을 적용했습니다
+primary_action|기본 동작
+secondary_action|보조 동작
+direction_up|위
+direction_right|오른쪽
+direction_down|아래
+direction_left|왼쪽
+mouse_suffix| (마우스)
+slot_number|슬롯 %1$d
+button_slots_help|버튼에는 최대 2개의 할당이 가능합니다: 기본(누르기)과 보조(길게 누르기)
+properties|속성
+position|위치
+position_value|X: %1$d, Y: %2$d
+unsaved_changes|저장되지 않은 변경 사항
+unsaved_changes_message|저장되지 않은 변경 사항이 있습니다. 저장하시겠습니까, 아니면 버리시겠습니까?
+adjust_size|크기 조정
+reset|초기화
+done|완료
+copy_size_from_element|다른 요소의 크기 복사
+toast_no_elements_to_copy|크기를 복사할 다른 요소가 없습니다
+toast_copied_size|크기 복사됨: %.2fx
+quick_presets|빠른 프리셋
+preset_arrows|방향키
+preset_mouse|마우스
+preset_dpad|방향 패드
+preset_left_stick|왼쪽 스틱
+preset_right_stick|오른쪽 스틱
+physical_controller_config|실제 컨트롤러 할당 편집
+button_a|A 버튼
+button_b|B 버튼
+button_x|X 버튼
+button_y|Y 버튼
+button_start|Start / Options
+button_select|Select / View / Share
+button_l3|L3 (왼쪽 스틱 누르기)
+button_r3|R3 (오른쪽 스틱 누르기)
+left_stick_up|왼쪽 스틱 위
+left_stick_down|왼쪽 스틱 아래
+left_stick_left|왼쪽 스틱 왼쪽
+left_stick_right|왼쪽 스틱 오른쪽
+right_stick_up|오른쪽 스틱 위
+right_stick_down|오른쪽 스틱 아래
+right_stick_left|오른쪽 스틱 왼쪽
+right_stick_right|오른쪽 스틱 오른쪽
+button_home|Home / Guide / PS
+not_set|설정 안 됨
+toast_controls_reset|컨트롤이 초기화되었습니다
+size|크기
+close|닫기
+gesture_section_single_finger|한 손가락
+gesture_section_two_finger|두 손가락
+gesture_section_three_finger|세 손가락
+gesture_section_other|기타
+gesture_tap|탭
+gesture_drag|손가락 드래그
+gesture_hold_mouse_button_while_touching|터치하는 동안 마우스 버튼 누르기
+gesture_mouse_button_label|마우스 버튼
+gesture_long_press|길게 누르기
+gesture_long_press_delay|길게 누르기 지연 (ms)
+gesture_double_tap|두 번 탭
+gesture_double_tap_subtitle|왼쪽 더블 클릭
+gesture_double_tap_delay|두 번 탭 지연 (ms)
+gesture_two_finger_drag|두 손가락 드래그
+gesture_pinch|핀치 인/아웃
+gesture_two_finger_tap|두 손가락 탭
+gesture_action_left_click|왼쪽 클릭
+gesture_action_right_click|오른쪽 클릭
+gesture_action_middle_click|가운데 클릭
+gesture_pan_middle_mouse|가운데 버튼으로 이동
+gesture_pan_inverted_middle_mouse|가운데 버튼으로 반전 이동
+gesture_pan_inverted_wasd|반전 WASD
+gesture_pan_arrow_keys|방향키
+gesture_pan_inverted_arrow_keys|반전 방향키
+gesture_pan_left_click_drag|왼쪽 클릭 드래그
+gesture_pan_right_click_drag|오른쪽 클릭 드래그
+gesture_zoom_scroll_wheel|스크롤 휠
+gesture_zoom_plus_minus|+/- 키
+gesture_zoom_page_up_down|Page Up/Down
+gesture_action_label|동작
+gesture_action_show_keyboard|키보드 표시
+gesture_mouse_behavior_label|마우스 동작
+gesture_mouse_behavior_click|클릭
+gesture_mouse_behavior_hold|누르고 있기
+gesture_header_special|특수
+gesture_header_mouse|마우스
+gesture_header_common_game|자주 쓰는 게임 키
+gesture_header_navigation_editing|탐색 / 편집
+gesture_header_symbols|기호
+gesture_header_letters|문자 A–Z
+gesture_header_numbers|숫자 0–9
+gesture_header_numpad|숫자 키패드
+gesture_header_function_keys|기능 키
+gesture_header_modifiers_locks|보조 키 / 잠금 키
+gesture_two_finger_hold|두 손가락 누르고 있기
+gesture_two_finger_hold_delay|두 손가락 누르고 있기 지연 (ms)
+gesture_three_finger_tap|세 손가락 탭
+gesture_three_finger_drag|세 손가락 드래그
+gesture_three_finger_hold|세 손가락 누르고 있기
+gesture_three_finger_hold_delay|세 손가락 누르고 있기 지연 (ms)
+gesture_threshold|제스처 임계값 (px)
+gesture_mouse_drag_movement|드래그 시 마우스 이동
+gesture_mouse_drag_movement_subtitle|대부분의 게임에서는 직접 방식이 잘 작동합니다. 드래그 시 카메라나 커서 문제가 생기면 상대 방식을 사용하세요
+gesture_mouse_drag_movement_direct|직접
+gesture_mouse_drag_movement_relative|상대
+gesture_show_click_highlight|클릭 강조 표시
+gesture_show_click_highlight_subtitle|탭한 위치에 원 표시
+gesture_show_debug_overlay|제스처 디버그 오버레이
+gesture_show_debug_overlay_subtitle|상단 중앙에 임시 제스처 라벨 표시
+gesture_show_cursor_touchscreen_mode|터치스크린 모드에서 커서 표시
+gesture_show_cursor_touchscreen_mode_subtitle|터치 제스처가 활성인 동안 마우스 커서를 표시합니다
+main_installing_bionic|Bionic 구성 요소 설치 중...
+download_failed_title|다운로드 실패
+install_failed_title|설치 실패
+install_failed_message|시스템 파일을 설치하지 못했습니다. 다시 시도하세요. 문제가 계속되면 다른 네트워크나 VPN을 사용해 보세요.
+back|뒤로
+radial_menu_settings_title|원형 메뉴
+radial_menu_cancel|취소
+radial_menu_slot_count|슬롯
+radial_menu_slot_count_subtitle|슬롯 %1$d개 사용
+radial_menu_decrease_slots|슬롯 줄이기
+radial_menu_increase_slots|슬롯 늘리기
+radial_menu_slots|휠 슬롯
+radial_menu_slot_title|슬롯 %1$d
+radial_menu_slot_label_hint|라벨
+radial_menu_slot_binding|슬롯 %1$d 할당
+radial_menu_slot_binding_summary|할당: %1$s
+radial_menu_preset_common|일반
+radial_menu_preset_weapons|무기
+gesture_action_open_radial_menu|원형 메뉴 열기
+binding_mode_simultaneous|동시에
+binding_mode_sequence|순서대로
+binding_sequence_delay_ms|순서 지연 (ms)
+binding_sequence_current_format|%1$s (%2$d ms)

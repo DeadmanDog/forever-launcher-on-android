@@ -624,6 +624,7 @@ public class Container {
         }
     }
 
+
     public String getLC_ALL() {
         return lc_all;
     }

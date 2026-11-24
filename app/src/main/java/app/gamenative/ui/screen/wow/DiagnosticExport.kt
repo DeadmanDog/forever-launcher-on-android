@@ -47,6 +47,23 @@ internal object DiagnosticExport {
         }
     }
 
+    /** Review 3 (9): the whole archive's budget (uncompressed); there was none, only [MAX_ENTRY_BYTES] per file. */
+    const val MAX_TOTAL_BYTES = 96L * 1024 * 1024
+    const val KEEP_PREVIOUS_MS = 15L * 60 * 1000
+
+    /** The files that fit [MAX_TOTAL_BYTES], newest first (each counted at most [MAX_ENTRY_BYTES]); returned in the original order. */
+    internal fun withinBudget(files: List<File>, total: Long = MAX_TOTAL_BYTES): List<File> {
+        var used = 0L
+        val kept = HashSet<File>()
+        for (file in files.sortedByDescending { it.lastModified() }) {
+            val size = minOf(file.length(), MAX_ENTRY_BYTES)
+            if (used + size > total) continue
+            used += size
+            kept += file
+        }
+        return files.filter { it in kept }
+    }
+
     fun create(root: File, cache: File): File {
         check(root.isDirectory) { "No diagnostic logs recorded yet." }
         val base=root.canonicalFile.toPath()
@@ -54,11 +71,15 @@ internal object DiagnosticExport {
             .filter { it.isFile && !Files.isSymbolicLink(it.toPath()) && it.canonicalFile.toPath().startsWith(base) }.toList()
         check(files.isNotEmpty()) { "No diagnostic logs recorded yet." }
         check(cache.isDirectory || cache.mkdirs())
-        cache.listFiles().orEmpty().filter { it.name.startsWith("wow-diagnostics-") && it.extension=="zip" }.forEach { it.delete() }
+        // Review 3 (9): the previous export may still be read by the app it was shared to; only exports older than
+        // KEEP_PREVIOUS_MS are deleted (they used to go the moment the next one was made).
+        val now = System.currentTimeMillis()
+        cache.listFiles().orEmpty().filter { it.name.startsWith("wow-diagnostics-") && it.extension=="zip" && now - it.lastModified() > KEEP_PREVIOUS_MS }
+            .forEach { it.delete() }
         val output=File(cache,"wow-diagnostics-${UUID.randomUUID()}.zip")
         try {
             ZipOutputStream(output.outputStream().buffered()).use { zip ->
-                files.forEach { file ->
+                withinBudget(files).forEach { file ->
                     zip.putNextEntry(ZipEntry(base.relativize(file.canonicalFile.toPath()).toString().replace('\\','/')))
                     writeBounded(file, zip);zip.closeEntry()
                 }

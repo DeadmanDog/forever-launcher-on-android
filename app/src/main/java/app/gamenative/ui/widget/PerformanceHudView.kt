@@ -334,7 +334,7 @@ class PerformanceHudView(
         val cpuPercent = cpuReading?.loadPercent
         val gpuPercent = if (requested.showGpuUsage || requested.showGpuUsageGraph) gpuSampler.sample()?.percent else null
         val batterySnapshot = if (requested.showBatteryLevel || requested.showPowerDraw ||
-            requested.showBatteryRuntime || requested.showBatteryTemperature) collectBatterySnapshot() else BatterySnapshot()
+            requested.showBatteryRuntime || requested.showBatteryTemperature) collectBatterySnapshot(requested) else BatterySnapshot()
         return HudSnapshot(
             fpsValue = currentFps,
             cpuValue = cpuPercent?.toFloat(),
@@ -379,13 +379,16 @@ class PerformanceHudView(
 
     private var batteryIntent: Intent? = null
     private var batteryIntentAtMs = 0L
-    private fun collectBatterySnapshot(): BatterySnapshot {
+    private fun collectBatterySnapshot(requested: PerformanceHudConfig): BatterySnapshot {
         val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
             ?: return BatterySnapshot()
 
-        val percent = batteryManager
+        val percent = if (requested.showBatteryLevel) batteryManager
             .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            .takeIf { it in 0..100 }
+            .takeIf { it in 0..100 } else null
+        // A percentage row does not need the sticky Intent, current or charge-counter Binder calls.
+        if (!requested.showPowerDraw && !requested.showBatteryRuntime && !requested.showBatteryTemperature)
+            return BatterySnapshot(percent = percent)
 
         // The sticky ACTION_BATTERY_CHANGED intent (status, voltage, temperature) is a full system-server round trip with a
         // parcelled Intent; it changes slowly, so it is read every 10 s instead of every HUD second. Current and charge stay live.
@@ -395,8 +398,10 @@ class PerformanceHudView(
             ?: return BatterySnapshot(percent = percent)
 
         val status = statusIntent.getIntExtra(BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
-        val currentMicroAmps = abs(batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW))
-        val chargeCounterMicroAmpHours = batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+        val currentMicroAmps = if (requested.showPowerDraw || requested.showBatteryRuntime)
+            abs(batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)) else 0L
+        val chargeCounterMicroAmpHours = if (requested.showBatteryRuntime)
+            batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) else 0L
         val voltageMilliVolts = statusIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0)
         val temperatureC = statusIntent
             .getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0)
@@ -410,6 +415,7 @@ class PerformanceHudView(
         }
 
         val runtimeText = when {
+            !requested.showBatteryRuntime -> null
             status == BatteryManager.BATTERY_STATUS_CHARGING ||
                 status == BatteryManager.BATTERY_STATUS_FULL -> {
                 smoothedBatteryRuntimeHours = null

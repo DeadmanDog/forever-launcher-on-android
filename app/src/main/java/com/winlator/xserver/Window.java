@@ -302,14 +302,20 @@ public class Window extends XResource {
         return x >= 0 && y >= 0 && x < width && y < height;
     }
 
-    public short[] rootPointToLocal(short x, short y) {
+    /** Packed signed 16-bit coordinates for protocol replies: no temporary array per pointer query. */
+    public int rootPointToLocalPacked(short x, short y) {
         Window window = this;
         while (window != null) {
             x -= window.x;
             y -= window.y;
             window = window.parent;
         }
-        return new short[]{x, y};
+        return ((x & 0xffff) << 16) | (y & 0xffff);
+    }
+
+    public short[] rootPointToLocal(short x, short y) {
+        int point = rootPointToLocalPacked(x, y);
+        return new short[]{(short)(point >>> 16), (short)point};
     }
 
     public short[] localPointToRoot(short x, short y) {

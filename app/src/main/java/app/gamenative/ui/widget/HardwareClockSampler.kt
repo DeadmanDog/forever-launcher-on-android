@@ -17,6 +17,8 @@ internal class HardwareClockSampler(
         File("/sys/kernel/gpu/gpu_clock"),
     ),
 ) {
+    internal var readLong: (String) -> Long? = SystemMetricsSources::readLongFromLine
+
     // Discover once per HUD instance, including the unavailable case. Never scan on every tick.
     private val cpuPaths by lazy {
         val policies = File(cpuRoot, "cpufreq").listFiles().orEmpty()
@@ -26,7 +28,11 @@ internal class HardwareClockSampler(
         // Some firmware permits reading a known file but denies directory enumeration.
         val knownCores = (0 until Runtime.getRuntime().availableProcessors().coerceIn(1, 128))
             .map { File(cpuRoot, "cpu$it/cpufreq") }
-        (policies + cores + knownCores).distinctBy { it.path }.map { directory ->
+        // cpuN/cpufreq normally symlinks to a shared policy. Sample that policy once,
+        // not once per alias. Resolve only during discovery; denied resolution retains the old path.
+        (policies + cores + knownCores).distinctBy {
+            runCatching { it.canonicalPath }.getOrDefault(it.path)
+        }.map { directory ->
             listOf(File(directory, "cpuinfo_cur_freq"), File(directory, "scaling_cur_freq"))
         }
     }
@@ -46,7 +52,7 @@ internal class HardwareClockSampler(
         ?: fixedGpuMHz.firstNotNullOfOrNull { readMHz(it, 1L) }
 
     private fun readMHz(file: File, unitsPerMHz: Long): Int? =
-        mhz(SystemMetricsSources.readLongFromLine(file.path), unitsPerMHz)
+        mhz(readLong(file.path), unitsPerMHz)
 
     companion object {
         /** GPU clock/busy sources an app might read; Android may deny some of them (SELinux). */

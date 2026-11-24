@@ -1,0 +1,214 @@
+cancel|Отмена
+delete|Удалить
+copy|Копировать
+edit|Изменить
+add|Добавить
+copy_from|Копировать из
+ok|ОК
+game_executable_not_found_title|Не удаётся запустить
+game_executable_not_found|Не удалось автоматически выбрать исполняемый файл. Укажите путь в настройках контейнера.
+save|Сохранить
+discard|Отменить изменения
+resume_game|Продолжить игру
+extra|Дополнительно
+clear_search|Очистить поиск
+face_buttons_category|Основные кнопки
+shoulder_buttons_category|Плечевые кнопки
+menu_buttons_category|Кнопки меню
+thumbstick_buttons_category|Кнопки стиков
+left_stick|Левый стик
+right_stick|Правый стик
+dpad_category|Крестовина
+dpad_up|Крестовина вверх
+dpad_down|Крестовина вниз
+dpad_left|Крестовина влево
+dpad_right|Крестовина вправо
+bind_button|Назначить: %1$s
+current_binding|Текущее: %1$s
+search_placeholder|Поиск…
+category|Категория
+mouse|Мышь
+gamepad|Геймпад
+binding_none|Нет
+clear_binding|Сбросить назначение
+no_bindings_found|Назначения не найдены
+edit_element|Изменить %1$s
+element_position_size|Позиция: (%1$d, %2$d) • Размер: %3$.2fx
+appearance|Внешний вид
+label_text|Текст подписи
+label_text_subtitle|Свой текст для этой кнопки
+element_type|Тип элемента
+element_type_subtitle|Изменить тип этого элемента управления
+shape|Форма
+shape_subtitle|Внешний вид
+shape_restricted|%1$s может иметь только форму %2$s
+bindings|Назначения
+bindings_auto_generated|Назначения (автоматически)
+bindings_auto_generated_subtitle|Назначения кнопки диапазона создаются автоматически
+range_button_settings|Настройки кнопки диапазона
+range_type|Диапазон клавиш
+range_type_subtitle|Какие клавиши перебирать
+range_orientation|Ориентация
+range_orientation_subtitle|Направление кнопки диапазона
+range_orientation_horizontal|Горизонтально
+range_orientation_vertical|Вертикально
+range_visible_segments|Видимые сегменты
+range_visible_segments_subtitle|Клавиш показано одновременно: %1$d
+range_lock_scrolling|Заблокировать прокрутку
+range_lock_scrolling_subtitle|Запретить прокрутку диапазона
+button_toggleable|Переключатель
+button_toggleable_subtitle|Нажмите, чтобы включить, нажмите снова, чтобы выключить
+control_appearance|Вид элемента управления
+button_color|Цвет элемента
+button_color_subtitle|Hex-цвет контура, значка и текста
+button_active_color|Цвет при нажатии
+button_active_color_subtitle|Цвет при нажатии или активности
+button_opacity|Непрозрачность элемента
+button_opacity_inherited|%1$d%% (общее значение)
+control_stroke_width|Толщина линий
+control_stroke_width_subtitle|Толщина контуров и разделителей
+control_stroke_width_thin|Тонкая
+control_stroke_width_default|По умолчанию
+control_stroke_width_thick|Толстая
+control_stroke_width_extra_thick|Очень толстая
+button_look_through|Сквозное перетаскивание
+button_look_through_subtitle|Нажмите и тяните от этой кнопки, чтобы также управлять движением или камерой. Недоступно в режиме сенсорного экрана.
+preview|Предпросмотр
+active|Активно
+apply_all|Применить ко всем
+copy_appearance_from_button|Копировать вид другого элемента
+toast_no_buttons_to_copy_appearance|Нет других элементов, чей вид можно скопировать
+toast_copied_button_appearance|Вид скопирован
+toast_applied_button_appearance|Вид применён ко всем элементам
+primary_action|Основное действие
+secondary_action|Дополнительное действие
+direction_up|Вверх
+direction_right|Вправо
+direction_down|Вниз
+direction_left|Влево
+mouse_suffix| (мышь)
+slot_number|Ячейка %1$d
+button_slots_help|Кнопки поддерживают до 2 назначений: основное (нажатие) и дополнительное (долгое нажатие)
+properties|Свойства
+position|Позиция
+position_value|X: %1$d, Y: %2$d
+unsaved_changes|Несохранённые изменения
+unsaved_changes_message|Есть несохранённые изменения. Сохранить или отменить их?
+adjust_size|Изменить размер
+reset|Сбросить
+done|Готово
+copy_size_from_element|Копировать размер другого элемента
+toast_no_elements_to_copy|Нет других элементов, чей размер можно скопировать
+toast_copied_size|Размер скопирован: %.2fx
+quick_presets|Быстрые шаблоны
+preset_arrows|Стрелки
+preset_mouse|Мышь
+preset_dpad|Крестовина
+preset_left_stick|Левый стик
+preset_right_stick|Правый стик
+physical_controller_config|Назначения физического геймпада
+button_a|Кнопка A
+button_b|Кнопка B
+button_x|Кнопка X
+button_y|Кнопка Y
+button_start|Start / Options
+button_select|Select / View / Share
+button_l3|L3 (нажатие левого стика)
+button_r3|R3 (нажатие правого стика)
+left_stick_up|Левый стик вверх
+left_stick_down|Левый стик вниз
+left_stick_left|Левый стик влево
+left_stick_right|Левый стик вправо
+right_stick_up|Правый стик вверх
+right_stick_down|Правый стик вниз
+right_stick_left|Правый стик влево
+right_stick_right|Правый стик вправо
+button_home|Home / Guide / PS
+not_set|Не задано
+toast_controls_reset|Управление сброшено
+size|Размер
+close|Закрыть
+gesture_section_single_finger|Один палец
+gesture_section_two_finger|Два пальца
+gesture_section_three_finger|Три пальца
+gesture_section_other|Прочее
+gesture_tap|Касание
+gesture_drag|Перетаскивание пальцем
+gesture_hold_mouse_button_while_touching|Удерживать кнопку мыши во время касания
+gesture_mouse_button_label|Кнопка мыши
+gesture_long_press|Долгое нажатие
+gesture_long_press_delay|Задержка долгого нажатия (мс)
+gesture_double_tap|Двойное касание
+gesture_double_tap_subtitle|Двойной левый щелчок
+gesture_double_tap_delay|Задержка двойного касания (мс)
+gesture_two_finger_drag|Перетаскивание двумя пальцами
+gesture_pinch|Сведение/разведение
+gesture_two_finger_tap|Касание двумя пальцами
+gesture_action_left_click|Левый щелчок
+gesture_action_right_click|Правый щелчок
+gesture_action_middle_click|Средний щелчок
+gesture_pan_middle_mouse|Панорама средней кнопкой
+gesture_pan_inverted_middle_mouse|Инвертированная панорама средней кнопкой
+gesture_pan_inverted_wasd|Инвертированные WASD
+gesture_pan_arrow_keys|Клавиши со стрелками
+gesture_pan_inverted_arrow_keys|Инвертированные стрелки
+gesture_pan_left_click_drag|Перетаскивание левым щелчком
+gesture_pan_right_click_drag|Перетаскивание правым щелчком
+gesture_zoom_scroll_wheel|Колёсико мыши
+gesture_zoom_plus_minus|Клавиши +/-
+gesture_zoom_page_up_down|Page Up/Down
+gesture_action_label|Действие
+gesture_action_show_keyboard|Показать клавиатуру
+gesture_mouse_behavior_label|Поведение мыши
+gesture_mouse_behavior_click|Щелчок
+gesture_mouse_behavior_hold|Удержание
+gesture_header_special|Особые
+gesture_header_mouse|Мышь
+gesture_header_common_game|Частые игровые клавиши
+gesture_header_navigation_editing|Навигация / Правка
+gesture_header_symbols|Символы
+gesture_header_letters|Буквы A–Z
+gesture_header_numbers|Цифры 0–9
+gesture_header_numpad|Цифровая клавиатура
+gesture_header_function_keys|Функциональные клавиши
+gesture_header_modifiers_locks|Модификаторы / Фиксаторы
+gesture_two_finger_hold|Удержание двумя пальцами
+gesture_two_finger_hold_delay|Задержка удержания двумя пальцами (мс)
+gesture_three_finger_tap|Касание тремя пальцами
+gesture_three_finger_drag|Перетаскивание тремя пальцами
+gesture_three_finger_hold|Удержание тремя пальцами
+gesture_three_finger_hold_delay|Задержка удержания тремя пальцами (мс)
+gesture_threshold|Порог жестов (px)
+gesture_mouse_drag_movement|Движение мыши при перетаскивании
+gesture_mouse_drag_movement_subtitle|Прямое подходит для большинства игр. Выберите Относительное, если перетаскивание мешает камере или курсору
+gesture_mouse_drag_movement_direct|Прямое
+gesture_mouse_drag_movement_relative|Относительное
+gesture_show_click_highlight|Подсветка щелчков
+gesture_show_click_highlight_subtitle|Показывать круг в месте касания
+gesture_show_debug_overlay|Отладочный слой жестов
+gesture_show_debug_overlay_subtitle|Временные подписи жестов вверху по центру
+gesture_show_cursor_touchscreen_mode|Курсор в сенсорном режиме
+gesture_show_cursor_touchscreen_mode_subtitle|Курсор мыши остаётся видимым, пока активны сенсорные жесты
+main_installing_bionic|Установка компонентов Bionic...
+download_failed_title|Ошибка загрузки
+install_failed_title|Ошибка установки
+install_failed_message|Не удалось установить системные файлы. Попробуйте ещё раз. Если ошибка повторяется, используйте другую сеть или VPN.
+back|Назад
+radial_menu_settings_title|Радиальное меню
+radial_menu_cancel|Отмена
+radial_menu_slot_count|Ячейки
+radial_menu_slot_count_subtitle|Включено ячеек: %1$d
+radial_menu_decrease_slots|Меньше ячеек
+radial_menu_increase_slots|Больше ячеек
+radial_menu_slots|Ячейки колеса
+radial_menu_slot_title|Ячейка %1$d
+radial_menu_slot_label_hint|Подпись
+radial_menu_slot_binding|Назначение ячейки %1$d
+radial_menu_slot_binding_summary|Назначение: %1$s
+radial_menu_preset_common|Общее
+radial_menu_preset_weapons|Оружие
+gesture_action_open_radial_menu|Открыть радиальное меню
+binding_mode_simultaneous|Одновременно
+binding_mode_sequence|По очереди
+binding_sequence_delay_ms|Задержка последовательности (мс)
+binding_sequence_current_format|%1$s (%2$d мс)

@@ -1,0 +1,214 @@
+cancel|Abbrechen
+delete|Löschen
+copy|Kopieren
+edit|Bearbeiten
+add|Hinzufügen
+copy_from|Kopieren von
+ok|OK
+game_executable_not_found_title|Start nicht möglich
+game_executable_not_found|Die ausführbare Datei konnte nicht automatisch gewählt werden. Bitte lege den Pfad in den Container-Einstellungen fest.
+save|Speichern
+discard|Verwerfen
+resume_game|Spiel fortsetzen
+extra|Extra
+clear_search|Suche löschen
+face_buttons_category|Aktionstasten
+shoulder_buttons_category|Schultertasten
+menu_buttons_category|Menütasten
+thumbstick_buttons_category|Sticktasten
+left_stick|Linker Stick
+right_stick|Rechter Stick
+dpad_category|Steuerkreuz
+dpad_up|Steuerkreuz oben
+dpad_down|Steuerkreuz unten
+dpad_left|Steuerkreuz links
+dpad_right|Steuerkreuz rechts
+bind_button|Belegen: %1$s
+current_binding|Aktuell: %1$s
+search_placeholder|Suchen…
+category|Kategorie
+mouse|Maus
+gamepad|Controller
+binding_none|Keine
+clear_binding|Belegung löschen
+no_bindings_found|Keine Belegungen gefunden
+edit_element|%1$s bearbeiten
+element_position_size|Position: (%1$d, %2$d) • Größe: %3$.2fx
+appearance|Aussehen
+label_text|Beschriftung
+label_text_subtitle|Eigener Text für diese Taste
+element_type|Elementtyp
+element_type_subtitle|Typ dieses Steuerelements ändern
+shape|Form
+shape_subtitle|Optisches Erscheinungsbild
+shape_restricted|%1$s ist auf die Form %2$s beschränkt
+bindings|Belegungen
+bindings_auto_generated|Belegungen (automatisch)
+bindings_auto_generated_subtitle|Belegungen der Bereichstaste werden automatisch erzeugt
+range_button_settings|Einstellungen der Bereichstaste
+range_type|Tastenbereich
+range_type_subtitle|Welche Tasten durchlaufen werden
+range_orientation|Ausrichtung
+range_orientation_subtitle|Anordnung der Bereichstaste
+range_orientation_horizontal|Horizontal
+range_orientation_vertical|Vertikal
+range_visible_segments|Sichtbare Segmente
+range_visible_segments_subtitle|Gleichzeitig angezeigte Tasten: %1$d
+range_lock_scrolling|Scrollen sperren
+range_lock_scrolling_subtitle|Verhindert das Durchscrollen des Bereichs
+button_toggleable|Umschaltbar
+button_toggleable_subtitle|Tippen zum Aktivieren, erneut tippen zum Deaktivieren
+control_appearance|Aussehen des Steuerelements
+button_color|Farbe
+button_color_subtitle|Hex-Farbe für Umriss, Symbol und Text
+button_active_color|Farbe beim Drücken
+button_active_color_subtitle|Farbe, solange gedrückt oder aktiv
+button_opacity|Deckkraft
+button_opacity_inherited|%1$d%% (globaler Standard)
+control_stroke_width|Linienstärke
+control_stroke_width_subtitle|Stärke von Umrissen und Trennlinien
+control_stroke_width_thin|Dünn
+control_stroke_width_default|Standard
+control_stroke_width_thick|Dick
+control_stroke_width_extra_thick|Extra dick
+button_look_through|Durchgreifen
+button_look_through_subtitle|Von dieser Taste aus ziehen, um auch Bewegung oder Kamera zu steuern. Im Touchscreen-Modus nicht verfügbar.
+preview|Vorschau
+active|Aktiv
+apply_all|Auf alle anwenden
+copy_appearance_from_button|Aussehen von Steuerelement kopieren
+toast_no_buttons_to_copy_appearance|Kein anderes Steuerelement zum Kopieren des Aussehens vorhanden
+toast_copied_button_appearance|Aussehen kopiert
+toast_applied_button_appearance|Aussehen auf alle Steuerelemente angewendet
+primary_action|Primäre Aktion
+secondary_action|Sekundäre Aktion
+direction_up|Oben
+direction_right|Rechts
+direction_down|Unten
+direction_left|Links
+mouse_suffix| (Maus)
+slot_number|Platz %1$d
+button_slots_help|Tasten unterstützen bis zu 2 Belegungen: primär (Drücken) und sekundär (langes Drücken)
+properties|Eigenschaften
+position|Position
+position_value|X: %1$d, Y: %2$d
+unsaved_changes|Ungespeicherte Änderungen
+unsaved_changes_message|Es gibt ungespeicherte Änderungen. Speichern oder verwerfen?
+adjust_size|Größe anpassen
+reset|Zurücksetzen
+done|Fertig
+copy_size_from_element|Größe von Element kopieren
+toast_no_elements_to_copy|Kein anderes Element zum Kopieren der Größe vorhanden
+toast_copied_size|Größe kopiert: %.2fx
+quick_presets|Schnellvorlagen
+preset_arrows|Pfeile
+preset_mouse|Maus
+preset_dpad|Steuerkreuz
+preset_left_stick|Linker Stick
+preset_right_stick|Rechter Stick
+physical_controller_config|Belegung des physischen Controllers
+button_a|A-Taste
+button_b|B-Taste
+button_x|X-Taste
+button_y|Y-Taste
+button_start|Start / Options
+button_select|Select / View / Share
+button_l3|L3 (linken Stick drücken)
+button_r3|R3 (rechten Stick drücken)
+left_stick_up|Linker Stick oben
+left_stick_down|Linker Stick unten
+left_stick_left|Linker Stick links
+left_stick_right|Linker Stick rechts
+right_stick_up|Rechter Stick oben
+right_stick_down|Rechter Stick unten
+right_stick_left|Rechter Stick links
+right_stick_right|Rechter Stick rechts
+button_home|Home / Guide / PS
+not_set|Nicht festgelegt
+toast_controls_reset|Steuerung zurückgesetzt
+size|Größe
+close|Schließen
+gesture_section_single_finger|Ein Finger
+gesture_section_two_finger|Zwei Finger
+gesture_section_three_finger|Drei Finger
+gesture_section_other|Sonstiges
+gesture_tap|Tippen
+gesture_drag|Finger ziehen
+gesture_hold_mouse_button_while_touching|Maustaste während der Berührung halten
+gesture_mouse_button_label|Maustaste
+gesture_long_press|Langes Drücken
+gesture_long_press_delay|Verzögerung langes Drücken (ms)
+gesture_double_tap|Doppeltippen
+gesture_double_tap_subtitle|Doppelter Linksklick
+gesture_double_tap_delay|Verzögerung Doppeltippen (ms)
+gesture_two_finger_drag|Mit zwei Fingern ziehen
+gesture_pinch|Zusammen-/Auseinanderziehen
+gesture_two_finger_tap|Mit zwei Fingern tippen
+gesture_action_left_click|Linksklick
+gesture_action_right_click|Rechtsklick
+gesture_action_middle_click|Mittelklick
+gesture_pan_middle_mouse|Schwenken mit mittlerer Maustaste
+gesture_pan_inverted_middle_mouse|Invertiertes Schwenken mit mittlerer Maustaste
+gesture_pan_inverted_wasd|WASD invertiert
+gesture_pan_arrow_keys|Pfeiltasten
+gesture_pan_inverted_arrow_keys|Pfeiltasten invertiert
+gesture_pan_left_click_drag|Ziehen mit Linksklick
+gesture_pan_right_click_drag|Ziehen mit Rechtsklick
+gesture_zoom_scroll_wheel|Mausrad
+gesture_zoom_plus_minus|+/- Tasten
+gesture_zoom_page_up_down|Bild auf/ab
+gesture_action_label|Aktion
+gesture_action_show_keyboard|Tastatur anzeigen
+gesture_mouse_behavior_label|Mausverhalten
+gesture_mouse_behavior_click|Klicken
+gesture_mouse_behavior_hold|Halten
+gesture_header_special|Spezial
+gesture_header_mouse|Maus
+gesture_header_common_game|Häufige Spieltasten
+gesture_header_navigation_editing|Navigation / Bearbeiten
+gesture_header_symbols|Symbole
+gesture_header_letters|Buchstaben A–Z
+gesture_header_numbers|Zahlen 0–9
+gesture_header_numpad|Ziffernblock
+gesture_header_function_keys|Funktionstasten
+gesture_header_modifiers_locks|Modifikatoren / Feststelltasten
+gesture_two_finger_hold|Mit zwei Fingern halten
+gesture_two_finger_hold_delay|Verzögerung Zwei-Finger-Halten (ms)
+gesture_three_finger_tap|Mit drei Fingern tippen
+gesture_three_finger_drag|Mit drei Fingern ziehen
+gesture_three_finger_hold|Mit drei Fingern halten
+gesture_three_finger_hold_delay|Verzögerung Drei-Finger-Halten (ms)
+gesture_threshold|Gestenschwelle (px)
+gesture_mouse_drag_movement|Mausbewegung beim Ziehen
+gesture_mouse_drag_movement_subtitle|Direkt funktioniert bei den meisten Spielen. Relativ wählen, wenn Ziehen Kamera- oder Cursorprobleme verursacht
+gesture_mouse_drag_movement_direct|Direkt
+gesture_mouse_drag_movement_relative|Relativ
+gesture_show_click_highlight|Klick hervorheben
+gesture_show_click_highlight_subtitle|Kreis an der Tippstelle anzeigen
+gesture_show_debug_overlay|Gesten-Debug-Overlay
+gesture_show_debug_overlay_subtitle|Vorübergehende Gestenbeschriftungen oben in der Mitte
+gesture_show_cursor_touchscreen_mode|Cursor im Touchscreen-Modus zeigen
+gesture_show_cursor_touchscreen_mode_subtitle|Mauszeiger bleibt sichtbar, solange Touch-Gesten aktiv sind
+main_installing_bionic|Bionic-Komponenten werden installiert...
+download_failed_title|Download fehlgeschlagen
+install_failed_title|Installation fehlgeschlagen
+install_failed_message|Systemdateien konnten nicht installiert werden. Bitte erneut versuchen. Falls das Problem bleibt, ein anderes Netzwerk oder ein VPN verwenden.
+back|Zurück
+radial_menu_settings_title|Radialmenü
+radial_menu_cancel|Abbrechen
+radial_menu_slot_count|Plätze
+radial_menu_slot_count_subtitle|%1$d Plätze aktiv
+radial_menu_decrease_slots|Weniger Plätze
+radial_menu_increase_slots|Mehr Plätze
+radial_menu_slots|Radplätze
+radial_menu_slot_title|Platz %1$d
+radial_menu_slot_label_hint|Beschriftung
+radial_menu_slot_binding|Belegung Platz %1$d
+radial_menu_slot_binding_summary|Belegung: %1$s
+radial_menu_preset_common|Allgemein
+radial_menu_preset_weapons|Waffen
+gesture_action_open_radial_menu|Radialmenü öffnen
+binding_mode_simultaneous|Gleichzeitig
+binding_mode_sequence|Nacheinander
+binding_sequence_delay_ms|Verzögerung der Folge (ms)
+binding_sequence_current_format|%1$s (%2$d ms)

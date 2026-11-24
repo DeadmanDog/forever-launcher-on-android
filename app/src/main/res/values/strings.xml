@@ -1,6 +1,4 @@
 <resources>
-    <string name="home">Home</string>
-    <string name="install">Install</string>
     <string name="cancel">Cancel</string>
     <string name="delete">Delete</string>
 
@@ -8,15 +6,9 @@
 
 
     <!--Winlator-->
-    <string name="disabled">Disabled</string>
     <string name="copy">Copy</string>
-    <string name="performance">Performance</string>
 
     <!-- Winlator: Win Components -->
-    <string name="direct3d">Direct3D</string>
-    <string name="directsound">DirectSound</string>
-    <string name="directinput8">DirectInput 8</string>
-    <string name="directinput">DirectInput</string>
     <string name="edit">Edit</string>
     <string name="add">Add</string>
     <string name="copy_from">Copy From</string>
@@ -25,7 +17,6 @@
     <string name="game_executable_not_found">The executable could not be auto-selected. Please set the executable path in container settings.</string>
     <string name="save">Save</string>
     <string name="discard">Discard</string>
-    <string name="contents">Contents</string>
     <string name="task_manager">Task Manager</string>
     <string name="exit_game">Exit</string>
     <string name="keyboard">Keyboard</string>
@@ -240,8 +231,6 @@
 
 
     <!-- Library & Game Management -->
-    <string name="label">Label</string>
-    <string name="status">Status</string>
     <string name="size">Size</string>
 
 
@@ -255,15 +244,10 @@
 
 
     <!-- Container Configuration: General -->
-    <string name="name">Name</string>
-    <string name="language">Language</string>
-    <string name="show_fps">Show FPS</string>
 
 
 
     <!-- Container Configuration: Graphics -->
-    <string name="graphics_driver">Graphics Driver</string>
-    <string name="transcoder">Transcoder</string>
 
 
     <!-- Container Configuration: Input -->
@@ -336,7 +320,6 @@
 
 
     <!-- Container Configuration: Rendering -->
-    <string name="renderer">Renderer</string>
 
 
 
@@ -388,7 +371,6 @@
 
 
     <!-- System Menu -->
-    <string name="menu">Menu</string>
 
 
 

@@ -1,7 +1,10 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#include <android/api-level.h>
 #include "IdlePollPacer.h"
 #include "VulkanRendererContext.h"
+#include "FifoPresentGate.h"
+#include "CompositorCover.h"
 #include "AcquiredFrameGuard.h"
 #include "PerformanceHintCycle.h"
 #include <sys/resource.h>
@@ -26,6 +29,7 @@ VulkanRendererContext::VulkanRendererContext(ANativeWindow* win, int cW, int cH,
         createInstance(); createSurface(); pickPhysicalDevice(); createLogicalDevice();
         createSwapchain(); createRenderPass(); createDSLayout();
         createPipeline(true, pipeline);
+        createPipeline(false, opaquePipeline);
         createFramebuffers(); createCmdPool(); createSampler();
         createWinTexPool(); createCursorDS(); createCmdBufs(); createSyncObjects();
         isRunning = true;
@@ -51,14 +55,27 @@ void VulkanRendererContext::teardown(bool releaseExternal) {
     std::lock_guard<std::mutex> lk(renderMutex);
     if (device != VK_NULL_HANDLE) {
         if (vk_.DeviceWaitIdle) vk_.DeviceWaitIdle(device);
-        for (auto& [id, wt] : texMap) destroyWinTex(wt);
+        // The device is idle and the render thread has joined: no retirement queue is needed here.
+        // Enqueuing owned textures allocated memory inside this destructor; OOM then terminated the process.
+        auto releaseTexture = [this](WinTex& wt) {
+            for (auto& upload : wt.uploads) {
+                if (upload.buffer != VK_NULL_HANDLE) vk_.DestroyBuffer(device, upload.buffer, nullptr);
+                if (upload.memory != VK_NULL_HANDLE) vk_.FreeMemory(device, upload.memory, nullptr);
+            }
+            if (wt.ds != VK_NULL_HANDLE) vk_.FreeDescriptorSets(device, winTexPool, 1, &wt.ds);
+            if (wt.view != VK_NULL_HANDLE) vk_.DestroyImageView(device, wt.view, nullptr);
+            if (wt.img != VK_NULL_HANDLE) vk_.DestroyImage(device, wt.img, nullptr);
+            if (wt.mem != VK_NULL_HANDLE) vk_.FreeMemory(device, wt.mem, nullptr);
+            if (wt.stg != VK_NULL_HANDLE) {
+                vk_.DestroyBuffer(device, wt.stg, nullptr);
+                vk_.FreeMemory(device, wt.stgMem, nullptr);
+            }
+        };
+        // AHB entries in texMap borrow the cache's handles; release each import only once below.
+        for (auto& [id, wt] : texMap) if (!wt.isAHB) releaseTexture(wt);
         texMap.clear();
-        // Imported AHB textures are only owned by the cache; without this their images,
-        // memory and buffer references outlive the renderer in a long-lived process.
         for (auto& [ahb, wt] : ahbImportCache) {
-            WinTex deferred = wt;
-            deferred.isAHB = false;
-            deleteQueue.push_back(deferred);
+            releaseTexture(wt);
             AHardwareBuffer_release(ahb);
         }
         ahbImportCache.clear();
@@ -73,6 +90,7 @@ void VulkanRendererContext::teardown(bool releaseExternal) {
         vk_.DestroySampler(device, sampler, nullptr);
         vk_.DestroyDescriptorPool(device, winTexPool, nullptr);
         vk_.DestroyPipeline(device, pipeline, nullptr);
+        vk_.DestroyPipeline(device, opaquePipeline, nullptr);
         vk_.DestroyPipelineLayout(device, pipeLayout, nullptr);
         vk_.DestroyDescriptorSetLayout(device, dsLayout, nullptr);
         for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -87,6 +105,7 @@ void VulkanRendererContext::teardown(bool releaseExternal) {
         }
         vk_.DestroyCommandPool(device, cmdPool, nullptr);
         vk_.DestroyRenderPass(device, renderPass, nullptr);
+        vk_.DestroyRenderPass(device, renderPassNoClear, nullptr);
         vk_.DestroyDevice(device, nullptr);
         device = VK_NULL_HANDLE;
     }
@@ -412,6 +431,9 @@ void VulkanRendererContext::createRenderPass() {
     ci.attachmentCount=1; ci.pAttachments=&att; ci.subpassCount=1; ci.pSubpasses=&sub;
     ci.dependencyCount=1; ci.pDependencies=&dep;
     if (vk_.CreateRenderPass(device,&ci,nullptr,&renderPass)!=VK_SUCCESS) throw std::runtime_error("renderpass");
+    // Compatible with renderPass (load operations do not take part in compatibility): the same framebuffers and pipelines.
+    att.loadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    if (vk_.CreateRenderPass(device,&ci,nullptr,&renderPassNoClear)!=VK_SUCCESS) renderPassNoClear=VK_NULL_HANDLE;
 }
 
 void VulkanRendererContext::createDSLayout() {
@@ -905,6 +927,16 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, VkFramebuffer targe
     const int rotation = (int)swapchainRotation;
     VkRenderPassBeginInfo rpi{}; rpi.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     rpi.renderPass = targetRp;
+    if (targetRp == renderPass && renderPassNoClear != VK_NULL_HANDLE && opaquePipeline != VK_NULL_HANDLE) {
+        for (const auto& d : draws) {
+            if (d.ds == VK_NULL_HANDLE) continue;
+            if (CompositorCover::coversTarget((ox+(float)d.x*sx)/cw*2.f-1.f, (oy+(float)d.y*sy)/ch*2.f-1.f,
+                    (ox+(float)(d.x+d.w)*sx)/cw*2.f-1.f, (oy+(float)(d.y+d.h)*sy)/ch*2.f-1.f)) {
+                rpi.renderPass = renderPassNoClear;
+                break;
+            }
+        }
+    }
     rpi.framebuffer = targetFb;
     rpi.renderArea={{0,0},tgtExt};
     VkClearValue clr={{{0.f,0.f,0.f,1.f}}}; rpi.clearValueCount=1; rpi.pClearValues=&clr;
@@ -914,7 +946,7 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, VkFramebuffer targe
     vk_.CmdSetViewport(cb, 0, 1, &vp);
     VkRect2D sc{{0,0},tgtExt}; vk_.CmdSetScissor(cb, 0, 1, &sc);
 
-    vk_.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    vk_.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, opaquePipeline != VK_NULL_HANDLE ? opaquePipeline : pipeline);
     for (auto& d : draws) {
         if (d.ds==VK_NULL_HANDLE) continue;
         vk_.CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeLayout, 0, 1, &d.ds, 0, nullptr);
@@ -943,6 +975,7 @@ void VulkanRendererContext::recordCmdBuf(VkCommandBuffer cb, VkFramebuffer targe
     }
 
     if (cursorDrawn) {
+        if (opaquePipeline != VK_NULL_HANDLE) vk_.CmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         vk_.CmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeLayout, 0, 1, &cursorDS, 0, nullptr);
         // The image starts at pointer minus hotspot, which is negative next to the left/top edge: the scissor (the whole
         // framebuffer) cuts what lies outside. Clamping the origin instead slid the whole image inwards, so the hotspot was no
@@ -1030,8 +1063,8 @@ void VulkanRendererContext::renderLoop() {
             // FIFO while the game presents every refresh: the panel takes exactly one frame per refresh, so every extra
             // (cursor or scene-only) present stays in the queue for good and adds a refresh of latency. Such a change waits
             // for the next game frame and goes out with it; if the game stops, after two refreshes it is presented alone.
-            const int64_t refresh = refreshPeriodNs.load(std::memory_order_relaxed);
-            const int64_t until = lastGamePresentNs + 2 * (refresh > 0 ? refresh : 16666667);
+            const int64_t until = FifoPresentGate::holdUntilNs(lastGamePresentNs, refreshPeriodNs.load(std::memory_order_relaxed),
+                frameIntervalNs.load(std::memory_order_relaxed));
             const int64_t now = monotonicNs();
             if (now < until)
                 renderWake.waitFor(std::chrono::nanoseconds(until - now), [this] {
@@ -1045,8 +1078,7 @@ void VulkanRendererContext::renderLoop() {
             // after a hitch, e.g. entering the world) would otherwise each queue up, and with the game at exactly the panel rate
             // the queue never empties again: two extra frames measured as 63 instead of 25 ms to the screen for the rest of the
             // session. The newest content goes out once the refresh has passed.
-            const int64_t refresh = refreshPeriodNs.load(std::memory_order_relaxed);
-            const int64_t spacing = (refresh > 0 ? refresh : 16666667) * 3 / 4;
+            const int64_t spacing = FifoPresentGate::minSpacingNs(refreshPeriodNs.load(std::memory_order_relaxed));
             const int64_t since = monotonicNs() - lastPresentNs.load(std::memory_order_relaxed);
             if (since >= 0 && since < spacing)
                 renderWake.waitFor(std::chrono::nanoseconds(spacing - since), [this] {
@@ -1230,12 +1262,14 @@ ok=true;}catch(const SwapchainZeroExtent&){zeroExtent=true;}catch(...){}
         if (ok) {
             fbResized.store(false);
             recreateFailures = 0;
+            zeroExtentRetries = 0;
             // Under scanout the new swapchain has shown nothing yet: one black frame goes into it.
             if (scanoutActive.load()) scanoutBlackFrameDone.store(false);
         } else if (zeroExtent || ++recreateFailures < kRecreateFailureLimit) {
             // Transient (a 0x0 window) or not yet given up: keep fbResized and try again after a short wait.
-            if (recreateFailures == 1 || recreateFailures % 10 == 0)
-                RLOG_W("Swapchain recreation failed (%s, %d in a row); retrying", zeroExtent ? "0x0 window" : "error", recreateFailures);
+            const int inARow = zeroExtent ? ++zeroExtentRetries : recreateFailures;
+            if (inARow == 1 || inARow % 100 == 0)
+                RLOG_W("Swapchain recreation failed (%s, %d in a row); retrying", zeroExtent ? "0x0 window" : "error", inARow);
             recreateBackoff = true;
         } else {
             isRunning = false;
@@ -1270,7 +1304,11 @@ ok=true;}catch(const SwapchainZeroExtent&){zeroExtent=true;}catch(...){}
         std::lock_guard<std::mutex> lk(renderMutex);
         freeRetiredTextures(submittedRetirements[currentFrame]);
     }
-    drainFinishedOtherSlots();
+    // 1.2.26: Present holds retired since the last snapshot (the buffer this frame's new picture replaces) are read only by frames
+    // submitted before it: once those are done (this slot's fence above, the other slot's normally long since) the game gets the
+    // buffer back now. They used to ride THIS frame and wait for its GPU work plus an idle-poll wake-up (one per game frame;
+    // 144 Hz / 60 FPS: the Idle reached the pacer a refresh later in up to every frame). run_handback_regressions.py.
+    pollIdleTokens();
     deliverReleasedIdle();
 
     VkSemaphore acquiredSems[1]{};
@@ -1282,7 +1320,9 @@ ok=true;}catch(const SwapchainZeroExtent&){zeroExtent=true;}catch(...){}
     VkResult res = VK_SUCCESS;
     // A bounded wait: this thread holds frameMutex shared, and detachSurface (UI thread) waits for it exclusively. An endless
     // acquire on a stuck presentation engine could block the UI thread into an ANR.
-    res=vk_.AcquireNextImageKHR(device,swapchain,kAcquireTimeoutNs,imgAvailSems[currentFrame],VK_NULL_HANDLE,&imgIdx);
+    // Review 3 (9): Android 10-11 do not implement a finite acquire timeout and warn on every call; they wait without one anyway.
+    static const uint64_t acquireTimeoutNs = android_get_device_api_level() >= 31 ? kAcquireTimeoutNs : UINT64_MAX;
+    res=vk_.AcquireNextImageKHR(device,swapchain,acquireTimeoutNs,imgAvailSems[currentFrame],VK_NULL_HANDLE,&imgIdx);
     if (res==VK_TIMEOUT||res==VK_NOT_READY) {
         // Nothing was acquired and the semaphore is untouched: try again on the next pass of the loop.
         needsRender.store(true, std::memory_order_relaxed);
@@ -1346,7 +1386,8 @@ ok=true;}catch(const SwapchainZeroExtent&){zeroExtent=true;}catch(...){}
         frameDraws.clear();
         for (const auto& entry:renderList) appendWindowDraw(entry);
 
-        if (isCursorImageDirty.load() && cursorImg!=VK_NULL_HANDLE && !cursorPixels.empty()) {
+        // Keep hidden cursor updates pending: no draw samples them. The first visible frame uploads the latest image.
+        if (isCursorImageDirty.load() && cursorImg!=VK_NULL_HANDLE && !cursorPixels.empty() && curVis) {
             // The image plus a repeated right/bottom edge (what clamp-to-edge sampled when the texture had the image's size), so
             // linear/cubic filtering at the edge of the used part never reads a previous, larger cursor.
             curUpW=(short)std::min<int>(cursorW+kCursorEdgePad, cursorTexW);
@@ -1451,7 +1492,8 @@ ok=true;}catch(const SwapchainZeroExtent&){zeroExtent=true;}catch(...){}
 }
 
 bool VulkanRendererContext::frameUnchanged() {
-    if (presentedGen != sceneGen.load(std::memory_order_acquire) || isCursorImageDirty.load()) return false;
+    // A deferred hidden image is not visible work; showing it dirties the scene and uploads it before drawing.
+    if (presentedGen != sceneGen.load(std::memory_order_acquire) || (cursorVisible.load() && isCursorImageDirty.load())) return false;
     if (cursorVisible.load() && (pointerX.load() != presentedPtrX || pointerY.load() != presentedPtrY)) return false;
     std::lock_guard<std::mutex> lk(renderMutex);
     return deleteQueue.empty();
@@ -1538,7 +1580,7 @@ void VulkanRendererContext::collectPresentTimings() {
                 const int64_t expected = interval > refresh ? interval : refresh;
                 const bool slow = expected > 0 &&
                     (int64_t)shownAt - latencyWindowStartNs > (int64_t)(kLatencyWindow - 1) * expected * 10 / 9;
-                latencyWindowDone(latencySamples[kLatencyWindow / 2], refresh, latencyWindowDirty, slow);
+                latencyWindowDone(latencySamples[kLatencyWindow / 2], FifoPresentGate::drainStepNs(refresh, interval), latencyWindowDirty, slow);
                 latencyWindowDirty = false;
                 latencyWindowAppLate = false;
                 latencyCount = 0;
@@ -1599,13 +1641,14 @@ void VulkanRendererContext::latencyWindowDone(int64_t medianNs, int64_t refreshN
         state(kWindowDirty);
         // Only a compositor miss refills the emptier queue; the game's own late frames leave a frame the next skip takes out.
         if (refillWatchWindows > 0 && latencyWindowAppLate) { refilled = true; highWindows = 0; return; }
-        if (drainHoldWindows > 0) { if (drainHoldWindows > 1) --drainHoldWindows; return; }
+        if (drainHoldWindows > 0) { drainHoldDirty = true; if (drainHoldWindows > 1) --drainHoldWindows; return; }
         if (!latencyFloorNs || cleanWindows < kSettleWindows) { highWindows = 0; return; }
         highWindows = medianNs > latencyFloorNs + refreshNs * 3 / 4 ? highWindows + 1 : 0;
         if (highWindows >= 2) {
             drainOne = true;
             highWindows = 0;
             drainHoldWindows = 3;
+            drainHoldDirty = false;
             latencyBeforeDrainNs = medianNs;
             drainReachedNs = 0;
         }
@@ -1626,7 +1669,7 @@ void VulkanRendererContext::latencyWindowDone(int64_t medianNs, int64_t refreshN
             // 1.1.8: judged by the lowest window since the skip, hitch windows included: a hitch right after a working skip
             // refills the queue, and the clean check window alone called the skip useless (1.1.6 DX12 diag: 39.7 -> 24.2 -> 40.9).
             const int64_t reached = drainReachedNs ? std::min(drainReachedNs, medianNs) : medianNs;
-            if (latencyBeforeDrainNs - reached < refreshNs / 2) latencyFloorNs = medianNs;
+            if (latencyBeforeDrainNs - reached < refreshNs / 2) { if (!drainHoldDirty) latencyFloorNs = medianNs; }
             else if (mode == kDrainOneStep) latencyFloorNs = reached;
             else refillWatchWindows = kRefillWatchWindows;
         }
@@ -1641,6 +1684,7 @@ void VulkanRendererContext::latencyWindowDone(int64_t medianNs, int64_t refreshN
         drainOne = true;
         highWindows = 0;
         drainHoldWindows = 3;
+        drainHoldDirty = false;
         latencyBeforeDrainNs = medianNs;
         drainReachedNs = 0;
     }
@@ -1655,13 +1699,13 @@ bool VulkanRendererContext::drainQueuedFrame() {
     }
     // Only a new game frame is skipped (the next one shows its content); cursor or scene-only wake-ups present as usual.
     const uint64_t content = contentGen.load(std::memory_order_relaxed);
-    if (content == presentedContentGen || isCursorImageDirty.load()) return false;
+    if (content == presentedContentGen || (cursorVisible.load() && isCursorImageDirty.load())) return false;
     drainOne = false;
     // The skipped content stays in the window textures: until the next game frame no other wake-up may present it, or the
     // skip would take nothing out of the queue.
     drainedContentGen = content;
-    const int64_t refresh = refreshPeriodNs.load(std::memory_order_relaxed);
-    drainHoldUntilNs = monotonicNs() + 2 * (refresh > 0 ? refresh : 16666667);
+    drainHoldUntilNs = monotonicNs() + FifoPresentGate::drainHoldNs(refreshPeriodNs.load(std::memory_order_relaxed),
+                                                                    frameIntervalNs.load(std::memory_order_relaxed));
     // The loop must come back to wait for the hold to end even if nothing else wakes it (OPT12-05): no new game frame, no cursor.
     needsRender.store(true, std::memory_order_relaxed);
     statDrains.fetch_add(1, std::memory_order_relaxed);
@@ -2032,8 +2076,12 @@ void VulkanRendererContext::updateWindowContent(int64_t id, void* px, short w, s
         const size_t dstPitch=(size_t)w*4;
         const size_t srcPitch=(size_t)(stride>0?stride:w)*4;
         auto* source=static_cast<const uint8_t*>(px);
-        for (int row=0;row<h;++row)
-            memcpy(wt.pixels->data()+(size_t)row*dstPitch,source+(size_t)row*srcPitch,dstPitch);
+        if (srcPitch == dstPitch) {
+            memcpy(wt.pixels->data(), source, dstPitch * (size_t)h);
+        } else {
+            for (int row=0;row<h;++row)
+                memcpy(wt.pixels->data()+(size_t)row*dstPitch,source+(size_t)row*srcPitch,dstPitch);
+        }
         ++wt.revision; wt.dirty=true;
         wt.presentX=offX; wt.presentY=offY; wt.winW=winW; wt.winH=winH;
         // Codex OPT13-07: a same-size update of a window that is not drawn (fully covered, so left out of the render list) only

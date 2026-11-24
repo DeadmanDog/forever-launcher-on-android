@@ -209,6 +209,13 @@ internal object WowVkd3dComponents {
         // r51 / r63 = r50 / r62 plus the pipeline-handle snapshot fix in the D3D11 path (Codex OPT13-02); DXGI/DX12 path unchanged.
         "Vegas-2.7.3-wow-arm64-hybrid-gamenative-r51" to 51,
         "Vegas-3.1.1-wow-arm64-hybrid-gamenative-r63" to 63,
+        // r64 = r63 plus upstream DXVK master 02e2028c (DXGI QueryVideoMemoryInfo: the non-local segment reports the VRAM budget on a
+        // unified-memory GPU) and 3d584633 (ARM64 NEON bit utilities); exports unchanged.
+        "Vegas-3.1.1-wow-arm64-hybrid-gamenative-r64" to 64,
+        // r65 = r64 plus the adaptive limiter spin threshold (util_sleep.cpp); exports unchanged, DXGI code unchanged.
+        "Vegas-3.1.1-wow-arm64-hybrid-gamenative-r65" to 65,
+        // r66 = r65 plus a compare-exchange update of the measured oversleep (util_sleep.cpp); exports and DXGI code unchanged.
+        "Vegas-3.1.1-wow-arm64-hybrid-gamenative-r66" to 66,
     )
     fun validateDxgi(context: Context, profile: ContentProfile, source: String): File {
         require(isAuditedDxgi(profile)) {

@@ -708,6 +708,8 @@ object WowClientDownloader {
      * level3.ssl.blizzard.com 2.5 MB/s; Europe's cdns row lists only level3.
      */
     internal class Cdn(val hosts: List<String>, val path: String, region: String? = null) {
+        /** Hosts whose TLS handshake failed in this process; the servers mirror each other, the next one is used. */
+        private val untrustedHosts: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         private val tryHosts: List<String> =
             (if (hosts.any { it.substringBefore(':') in LOOPBACK_HOSTS }) hosts else listOfNotNull(regionalCdn(region)) + hosts).distinct()
 
@@ -727,7 +729,7 @@ object WowClientDownloader {
             var failure: IOException? = null
             var missing = false
             for (host in tryHosts) {
-                if (!HOST_PATTERN.matches(host)) continue
+                if (!HOST_PATTERN.matches(host) || host in untrustedHosts) continue
                 val scheme = if (host.substringBefore(':') in LOOPBACK_HOSTS) "http" else "https"
                 val request = Request.Builder().url("$scheme://${if (scheme == "https") httpsHost(host) else host}/$path/$kind/${base.substring(0, 2)}/${base.substring(2, 4)}/$key").head().build()
                 try {
@@ -738,6 +740,11 @@ object WowClientDownloader {
                             else -> failure = IOException("HTTP ${response.code} from $host")
                         }
                     }
+                } catch (e: javax.net.ssl.SSLException) {
+                    // A server whose TLS handshake fails (Korea's blizzard.gcdn.cloudn.co.kr: an expired self-signed certificate) is
+                    // skipped from then on instead of being tried again for every file (jaredgei efa6e70, #74).
+                    untrustedHosts += host
+                    failure = e
                 } catch (e: IOException) {
                     failure = e
                 }
@@ -781,7 +788,7 @@ object WowClientDownloader {
             var failure: IOException? = null
             var missing = false
             for (host in tryHosts) {
-                if (!HOST_PATTERN.matches(host)) continue
+                if (!HOST_PATTERN.matches(host) || host in untrustedHosts) continue
                 // Blizzard's CDN hosts all serve HTTPS; plain HTTP is kept only for loopback test servers.
                 val scheme = if (host.substringBefore(':') in LOOPBACK_HOSTS) "http" else "https"
                 val request = Request.Builder()
@@ -809,6 +816,11 @@ object WowClientDownloader {
                             else -> failure = IOException("HTTP ${response.code} from $host")
                         }
                     }
+                } catch (e: javax.net.ssl.SSLException) {
+                    // A server whose TLS handshake fails (Korea's blizzard.gcdn.cloudn.co.kr: an expired self-signed certificate) is
+                    // skipped from then on instead of being tried again for every file (jaredgei efa6e70, #74).
+                    untrustedHosts += host
+                    failure = e
                 } catch (e: IOException) {
                     failure = e
                 }

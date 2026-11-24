@@ -25,6 +25,9 @@ import java.util.List;
 import java.util.Locale;
 
 public class ControlElement {
+    private final com.winlator.math.SubpixelAccumulator trackpadRestX = new com.winlator.math.SubpixelAccumulator();
+    private final com.winlator.math.SubpixelAccumulator trackpadRestY = new com.winlator.math.SubpixelAccumulator();
+
     public static final float STICK_DEAD_ZONE = 0.15f;
     public static final float DPAD_DEAD_ZONE = 0.3f;
     public static final float STICK_SENSITIVITY = 3.0f;
@@ -1202,8 +1205,8 @@ public class ControlElement {
             else if (type == Type.TRACKPAD) {
                 final boolean[] states = {deltaY <= -TRACKPAD_MIN_SPEED, deltaX >= TRACKPAD_MIN_SPEED, deltaY >= TRACKPAD_MIN_SPEED, deltaX <= -TRACKPAD_MIN_SPEED};
                 if (handleRadialMenuDirectionalMove(pointerId, states, x, y)) return true;
-                int cursorDx = 0;
-                int cursorDy = 0;
+                float cursorMoveX = 0f, cursorMoveY = 0f;
+                boolean cursorMoved = false;
 
                 for (byte i = 0; i < 4; i++) {
                     float value = (i == 1 || i == 3 ? deltaX : deltaY);
@@ -1215,10 +1218,10 @@ public class ControlElement {
                             value *= TouchpadView.CURSOR_ACCELERATION;
                         }
                         if (mouseMoveBinding == Binding.MOUSE_MOVE_LEFT || mouseMoveBinding == Binding.MOUSE_MOVE_RIGHT) {
-                            cursorDx = Mathf.roundPoint(value);
+                            cursorMoveX = value; cursorMoved = true;
                         }
                         else {
-                            cursorDy = Mathf.roundPoint(value);
+                            cursorMoveY = value; cursorMoved = true;
                         }
                         boolean nextState = states[i];
                         if (!bindingCombo.isSingleBinding() && this.states[i] != nextState) {
@@ -1266,6 +1269,9 @@ public class ControlElement {
                     }
                 }
 
+                // 1.2.25: the fraction of a pixel is carried to the next move (SubpixelAccumulator), not rounded away from zero.
+                int cursorDx = cursorMoved ? trackpadRestX.take(cursorMoveX) : 0;
+                int cursorDy = cursorMoved ? trackpadRestY.take(cursorMoveY) : 0;
                 if (cursorDx != 0 || cursorDy != 0) inputControlsView.getXServer().injectPointerMoveDelta(cursorDx, cursorDy);
             }
             else {
@@ -1385,6 +1391,21 @@ public class ControlElement {
         }
 
         currentPointerId = -1;
+        inputControlsView.invalidate();
+        return true;
+    }
+
+    /**
+     * Lets go of a latched toggle (or an L3/R3 kept pressed after a long hold) when the element itself goes away: the controls
+     * are hidden or the profile is replaced. ACTION_CANCEL keeps the latch (cancelTouch); nothing else could release it later.
+     */
+    public boolean releaseLatchedButton() {
+        if (type != Type.BUTTON || !selected || isRadialMenuButton()) return false;
+        if (!usesToggleSwitch() && !isKeepButtonPressedAfterMinTime()) return false;
+        handleBindingInputEvent(0, false);
+        handleBindingInputEvent(1, false);
+        selected = false;
+        touchTime = null;
         inputControlsView.invalidate();
         return true;
     }

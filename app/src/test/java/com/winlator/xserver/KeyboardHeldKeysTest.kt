@@ -24,19 +24,8 @@ class KeyboardHeldKeysTest {
         val xServer = mockk<XServer>(relaxed = true)
         val keyboard = Keyboard(xServer)
         keyboard.onKeyEvent(shiftDown())
-        verify(exactly = 1) { xServer.injectKeyPress(XKeycode.KEY_SHIFT_L, any()) }
+        // 1.2.4 (jaredgei 8607f98): a hardware key press asks for no X server auto-repeat.
+        verify(exactly = 1) { xServer.injectKeyPress(XKeycode.KEY_SHIFT_L, any(), false) }
         verify(exactly = 0) { xServer.injectKeyRelease(XKeycode.KEY_SHIFT_L) }
-    }
-
-    // Gamescope: keys go to the input sink and never reached pressedKeys; the Quick Menu's release found nothing to release.
-    @Test fun keysHeldThroughTheSinkAreReleasedByTheQuickMenu() {
-        val xServer = mockk<XServer>(relaxed = true)
-        val keyboard = Keyboard(xServer)
-        keyboard.trackSinkKey(XKeycode.KEY_W.id, true)
-        keyboard.trackSinkKey(XKeycode.KEY_SHIFT_L.id, true)
-        assertEquals(true, keyboard.modifiersMask.isSet(Keyboard.getModifierFlag(XKeycode.KEY_SHIFT_L.id).toLong()))
-        keyboard.releaseAllKeys()
-        verify(exactly = 1) { xServer.injectKeyRelease(XKeycode.KEY_W) }
-        verify(exactly = 1) { xServer.injectKeyRelease(XKeycode.KEY_SHIFT_L) }
     }
 }

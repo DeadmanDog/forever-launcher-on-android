@@ -19,6 +19,8 @@ public class RangeScroller {
     private int activeIndex = -1;
     private boolean isActionDown = false;
     private boolean scrolling = false;
+    // True once the long-press press has actually been injected on the UI thread.
+    private boolean longPressDelivered = false;
     private Timer timer;
     private int touchGeneration;
 
@@ -108,6 +110,7 @@ public class RangeScroller {
 
         scrolling = false;
         isActionDown = true;
+        longPressDelivered = false;
         activeIndex = getIndexByPosition(x, y);
         binding = getBindingByIndex(activeIndex);
         touchTime = currentTimeMillis();
@@ -118,6 +121,7 @@ public class RangeScroller {
         final Binding scheduledBinding = binding;
         scheduleLongPress(() -> inputControlsView.post(() -> {
             if (generation != touchGeneration || !isActionDown || scrolling) return;
+            longPressDelivered = true;
             inputControlsView.handleInputEvent(scheduledBinding, true);
         }));
     }
@@ -153,12 +157,14 @@ public class RangeScroller {
         touchGeneration++;
         if (isActionDown) {
             destroyTimer();
-            if (isTap() && !scrolling) {
+            // Tap or hold is decided by whether the long press reached the UI thread, not by the clock: an up processed at
+            // >= 200 ms while the long-press post was still queued (or its Timer not yet fired) sent only a release.
+            if (longPressDelivered) inputControlsView.handleInputEvent(binding, false);
+            else if (!scrolling) {
                 inputControlsView.handleInputEvent(binding, true);
                 final Binding finalBinding = binding;
                 inputControlsView.postDelayed(() -> inputControlsView.handleInputEvent(finalBinding, false), 30);
             }
-            else inputControlsView.handleInputEvent(binding, false);
         }
         isActionDown = false;
         activeIndex = -1;

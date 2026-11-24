@@ -3,6 +3,7 @@ package com.winlator.winhandler;
 import com.winlator.core.StringUtils;
 
 
+
 public class ProcessInfo {
     public final int pid;
     public final String name;

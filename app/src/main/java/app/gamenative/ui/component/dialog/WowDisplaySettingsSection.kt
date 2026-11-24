@@ -40,7 +40,6 @@ internal fun WowDisplaySettingsSection(current: String, blocked: Boolean, onSave
     var saving by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        WowDisplayBackendSection(blocked || saving, onBusyChanged, onSaved)
         Text(tx("Display resolution", "Kijelzőfelbontás"), style = MaterialTheme.typography.titleMedium)
         Text(tx("Current virtual display: ", "Jelenlegi virtuális kijelző: ") + current.replace('x', '×'))
         Text(tx("The size WoW renders at. Lower = more FPS but a softer image. Saved for this container; apply while the game is stopped. WoW's own resolution is aligned on launch; its render scale stays as you set it in the game (kept separately for DX11 and DX12).",
@@ -79,7 +78,7 @@ internal fun WowDisplaySettingsSection(current: String, blocked: Boolean, onSave
 
 /** Saved launch choice; applied when the next game surface is created. 1.3.2: hardware scaling and fullscreen scanout in one. */
 @Composable
-internal fun HardwareScaleSwitch(resolution: String, blocked: Boolean, gamescope: Boolean) {
+internal fun HardwareScaleSwitch(resolution: String, blocked: Boolean) {
     val context = LocalContext.current.applicationContext
     var mode by remember { mutableStateOf(WowLaunchPolicy.displayOutput(context)) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -89,18 +88,17 @@ internal fun HardwareScaleSwitch(resolution: String, blocked: Boolean, gamescope
             else context.resources.displayMetrics.let { it.widthPixels to it.heightPixels }
         WowHardwareScale.fitsDisplay(size.first, size.second, resolution)
     }
-    Column(Modifier.alpha(if (gamescope) 0.45f else 1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(tx("Game image output", "A játék képének megjelenítése"), style = MaterialTheme.typography.titleSmall)
-        if (gamescope) Text(xserverOnly(), style = MaterialTheme.typography.labelMedium)
         Text(tx("How the game image reaches the display. Hardware scaling (default): the app puts the game, the HUD and the touch controls together and the display's own scaler enlarges the image, so the GPU has a little less work; only active when the resolution has the display's aspect ratio (the Full screen resolution) and Screen Effects use Linear or no scaling with no effect (not FSR, DLS, Natural, Nearest or CRT). App compositing: the app's GPU pass also does the scaling. Fullscreen scanout: the game image goes straight to the display without the app's GPU pass and is scaled in hardware; works with the performance HUD, but the touch controls and the quick menu must be hidden (while they show, the app composites). Applies from the next Play.",
             "Hogyan jut a játék képe a kijelzőre. Hardveres skálázás (alapértelmezett): az app rakja össze a játékot, a HUD-ot és az érintéses vezérlőket, a képet pedig a kijelző saját skálázója nagyítja fel, így a GPU-nak kicsit kevesebb a munkája; csak akkor hat, ha a felbontás képaránya megegyezik a kijelzőével (a Teljes képernyő felbontás), és a játék közbeni Screen Effects menüben Linear vagy nincs skálázás, effekt nélkül (nem FSR, DLS, Natural, Nearest vagy CRT). App általi összerakás: a nagyítást is az app GPU-s lépése végzi. Teljes képernyős scanout: a játék képe az app GPU-s lépése nélkül, közvetlenül a kijelzőre kerül, hardveres nagyítással; teljesítmény-HUD-dal működik, de az érintéses vezérlőknek és a gyorsmenünek rejtve kell lenniük (amíg látszanak, az app rakja össze a képet). A következő indítástól él."),
             style = MaterialTheme.typography.bodySmall)
         for (option in WowLaunchPolicy.DisplayOutput.entries) {
-            Row(Modifier.fillMaxWidth().selectable(selected = option == mode, enabled = !blocked && !gamescope, role = Role.RadioButton, onClick = {
+            Row(Modifier.fillMaxWidth().selectable(selected = option == mode, enabled = !blocked, role = Role.RadioButton, onClick = {
                 try { WowLaunchPolicy.saveDisplayOutput(context, option); mode = option; error = null }
                 catch (e: Exception) { error = e.message }
             }), verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = option == mode, onClick = null, enabled = !blocked && !gamescope)
+                RadioButton(selected = option == mode, onClick = null, enabled = !blocked)
                 Spacer(Modifier.width(8.dp))
                 Text(when (option) {
                     WowLaunchPolicy.DisplayOutput.HARDWARE_SCALE -> tx("Hardware scaling (default)", "Hardveres skálázás (alapértelmezett)")
@@ -109,7 +107,7 @@ internal fun HardwareScaleSwitch(resolution: String, blocked: Boolean, gamescope
                 })
             }
         }
-        if (!gamescope && mode == WowLaunchPolicy.DisplayOutput.HARDWARE_SCALE && !fitsDisplay) Text(tx("The current resolution (${resolution.replace('x', '×')}) does not match the display's aspect ratio, so this has no effect with it.",
+        if (mode == WowLaunchPolicy.DisplayOutput.HARDWARE_SCALE && !fitsDisplay) Text(tx("The current resolution (${resolution.replace('x', '×')}) does not match the display's aspect ratio, so this has no effect with it.",
             "A jelenlegi felbontás (${resolution.replace('x', '×')}) képaránya eltér a kijelzőétől, ezért ezzel nem hat."),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

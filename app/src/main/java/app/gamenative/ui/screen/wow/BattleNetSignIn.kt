@@ -49,7 +49,10 @@ object BattleNetSignIn {
         val email = SecretStore.get(prefs, KEY_EMAIL_SEALED, KEY_EMAIL)
         val password = SecretStore.openString(sealedPassword)
         if (email.isNullOrEmpty() || password == null) {
-            forget(context)
+            // Review 3 (9): a passing KeyStore error (or none available right now) kept the saved login deleted for good. Only a
+            // value that can never be opened again is forgotten; otherwise this start just goes without it.
+            val emailBroken = email == null && prefs.getString(KEY_EMAIL_SEALED, null)?.let { SecretStore.openFailsForGood(it) } == true
+            if (SecretStore.openFailsForGood(sealedPassword) || emailBroken || email == "") forget(context)
             return null
         }
         return Login(email, password)
@@ -190,7 +193,7 @@ fun BattleNetSignInHost(
             val passwordOnly = passwordOnlyHint ?: run {
                 val view = gameView()
                 view != null && LoginScreenCapture.withFrame(view) { frame ->
-                    frame != null && (LoginScreenDetector.matches(frame) || LoginScreenDetector.looksLikeLoginForm(frame)) &&
+                    frame != null && (LoginScreenDetector.matches(frame) || LoginScreenDetector.looksLikeLogin(frame)) &&
                         LoginScreenDetector.emailFieldHasText(frame)
                 }
             }

@@ -1,0 +1,214 @@
+cancel|取消
+delete|刪除
+copy|複製
+edit|編輯
+add|新增
+copy_from|複製自
+ok|確定
+game_executable_not_found_title|無法啟動
+game_executable_not_found|無法自動選擇可執行檔案。請在容器設定中設定可執行檔案路徑。
+save|儲存
+discard|放棄
+resume_game|繼續遊戲
+extra|其他
+clear_search|清除搜尋
+face_buttons_category|面部按鍵
+shoulder_buttons_category|肩鍵
+menu_buttons_category|選單鍵
+thumbstick_buttons_category|搖桿按鍵
+left_stick|左搖桿
+right_stick|右搖桿
+dpad_category|方向鍵
+dpad_up|方向鍵上
+dpad_down|方向鍵下
+dpad_left|方向鍵左
+dpad_right|方向鍵右
+bind_button|繫結：%1$s
+current_binding|當前：%1$s
+search_placeholder|搜尋…
+category|類別
+mouse|滑鼠
+gamepad|手把
+binding_none|無
+clear_binding|清除繫結
+no_bindings_found|未找到繫結
+edit_element|編輯 %1$s
+element_position_size|位置：(%1$d, %2$d) • 大小：%3$.2fx
+appearance|外觀
+label_text|標籤文字
+label_text_subtitle|此按鈕的自定義文字
+element_type|元素型別
+element_type_subtitle|更改此控制元件的型別
+shape|形狀
+shape_subtitle|視覺外觀
+shape_restricted|%1$s 僅限 %2$s 形狀
+bindings|繫結
+bindings_auto_generated|繫結（自動生成）
+bindings_auto_generated_subtitle|範圍按鈕的繫結會自動生成
+range_button_settings|範圍按鈕設定
+range_type|按鍵範圍
+range_type_subtitle|要迴圈的按鍵組
+range_orientation|方向
+range_orientation_subtitle|範圍按鈕的排列方向
+range_orientation_horizontal|水平
+range_orientation_vertical|垂直
+range_visible_segments|可見分段
+range_visible_segments_subtitle|同時顯示的按鍵數：%1$d
+range_lock_scrolling|鎖定滾動
+range_lock_scrolling_subtitle|禁止在範圍內滾動
+button_toggleable|可切換
+button_toggleable_subtitle|點選啟用，再次點選停用
+control_appearance|控制元件外觀
+button_color|控制元件顏色
+button_color_subtitle|控制元件輪廓、圖示和文字的十六進位制顏色
+button_active_color|按下時顏色
+button_active_color_subtitle|按下或啟用時的顏色
+button_opacity|控制元件不透明度
+button_opacity_inherited|%1$d%%（全域性預設）
+control_stroke_width|線條粗細
+control_stroke_width_subtitle|調整控制元件輪廓和分隔線的粗細
+control_stroke_width_thin|細
+control_stroke_width_default|預設
+control_stroke_width_thick|粗
+control_stroke_width_extra_thick|特粗
+button_look_through|穿透拖動
+button_look_through_subtitle|從此按鈕按下並拖動，可同時控制移動或視角。觸屏模式下不可用。
+preview|預覽
+active|啟用
+apply_all|全部應用
+copy_appearance_from_button|從其他控制元件複製外觀
+toast_no_buttons_to_copy_appearance|沒有可複製外觀的其他控制元件
+toast_copied_button_appearance|已複製控制元件外觀
+toast_applied_button_appearance|已將外觀應用到所有控制元件
+primary_action|主要操作
+secondary_action|次要操作
+direction_up|上
+direction_right|右
+direction_down|下
+direction_left|左
+mouse_suffix|（滑鼠）
+slot_number|槽位 %1$d
+button_slots_help|按鈕最多支援 2 個繫結：主要（按下）和次要（長按）
+properties|屬性
+position|位置
+position_value|X：%1$d，Y：%2$d
+unsaved_changes|未儲存的更改
+unsaved_changes_message|有未儲存的更改。要儲存還是放棄？
+adjust_size|調整大小
+reset|重置
+done|完成
+copy_size_from_element|從其他元素複製大小
+toast_no_elements_to_copy|沒有可複製大小的其他元素
+toast_copied_size|已複製大小：%.2fx
+quick_presets|快速預設
+preset_arrows|方向鍵
+preset_mouse|滑鼠
+preset_dpad|方向鍵
+preset_left_stick|左搖桿
+preset_right_stick|右搖桿
+physical_controller_config|實體手把繫結編輯器
+button_a|A 鍵
+button_b|B 鍵
+button_x|X 鍵
+button_y|Y 鍵
+button_start|Start / Options
+button_select|Select / View / Share
+button_l3|L3（按下左搖桿）
+button_r3|R3（按下右搖桿）
+left_stick_up|左搖桿上
+left_stick_down|左搖桿下
+left_stick_left|左搖桿左
+left_stick_right|左搖桿右
+right_stick_up|右搖桿上
+right_stick_down|右搖桿下
+right_stick_left|右搖桿左
+right_stick_right|右搖桿右
+button_home|Home / Guide / PS
+not_set|未設定
+toast_controls_reset|控制元件已重置
+size|大小
+close|關閉
+gesture_section_single_finger|單指
+gesture_section_two_finger|雙指
+gesture_section_three_finger|三指
+gesture_section_other|其他
+gesture_tap|點選
+gesture_drag|手指拖動
+gesture_hold_mouse_button_while_touching|觸控時按住滑鼠鍵
+gesture_mouse_button_label|滑鼠鍵
+gesture_long_press|長按
+gesture_long_press_delay|長按延遲（毫秒）
+gesture_double_tap|雙擊
+gesture_double_tap_subtitle|左鍵雙擊
+gesture_double_tap_delay|雙擊延遲（毫秒）
+gesture_two_finger_drag|雙指拖動
+gesture_pinch|雙指縮放
+gesture_two_finger_tap|雙指點選
+gesture_action_left_click|左鍵單擊
+gesture_action_right_click|右鍵單擊
+gesture_action_middle_click|中鍵單擊
+gesture_pan_middle_mouse|中鍵平移
+gesture_pan_inverted_middle_mouse|中鍵反向平移
+gesture_pan_inverted_wasd|反向 WASD
+gesture_pan_arrow_keys|方向鍵
+gesture_pan_inverted_arrow_keys|反向方向鍵
+gesture_pan_left_click_drag|左鍵拖動
+gesture_pan_right_click_drag|右鍵拖動
+gesture_zoom_scroll_wheel|滾輪
+gesture_zoom_plus_minus|+/- 鍵
+gesture_zoom_page_up_down|Page Up/Down
+gesture_action_label|操作
+gesture_action_show_keyboard|顯示鍵盤
+gesture_mouse_behavior_label|滑鼠行為
+gesture_mouse_behavior_click|單擊
+gesture_mouse_behavior_hold|按住
+gesture_header_special|特殊
+gesture_header_mouse|滑鼠
+gesture_header_common_game|常用遊戲按鍵
+gesture_header_navigation_editing|導航 / 編輯
+gesture_header_symbols|符號
+gesture_header_letters|字母 A–Z
+gesture_header_numbers|數字 0–9
+gesture_header_numpad|數字小鍵盤
+gesture_header_function_keys|功能鍵
+gesture_header_modifiers_locks|修飾鍵 / 鎖定鍵
+gesture_two_finger_hold|雙指按住
+gesture_two_finger_hold_delay|雙指按住延遲（毫秒）
+gesture_three_finger_tap|三指點選
+gesture_three_finger_drag|三指拖動
+gesture_three_finger_hold|三指按住
+gesture_three_finger_hold_delay|三指按住延遲（毫秒）
+gesture_threshold|手勢閾值（畫素）
+gesture_mouse_drag_movement|拖動時的滑鼠移動
+gesture_mouse_drag_movement_subtitle|“直接”適用於大多數遊戲。如果拖動導致視角或游標異常，請使用“相對”
+gesture_mouse_drag_movement_direct|直接
+gesture_mouse_drag_movement_relative|相對
+gesture_show_click_highlight|顯示點選高亮
+gesture_show_click_highlight_subtitle|在點選位置顯示圓圈
+gesture_show_debug_overlay|顯示手勢除錯層
+gesture_show_debug_overlay_subtitle|在頂部中央顯示臨時手勢標籤
+gesture_show_cursor_touchscreen_mode|觸屏模式下顯示游標
+gesture_show_cursor_touchscreen_mode_subtitle|觸屏手勢啟用時保持滑鼠游標可見
+main_installing_bionic|正在安裝 Bionic 元件...
+download_failed_title|下載失敗
+install_failed_title|安裝失敗
+install_failed_message|無法安裝系統檔案。請重試。如果問題仍然存在，請嘗試其他網路或使用 VPN。
+back|返回
+radial_menu_settings_title|輪盤選單
+radial_menu_cancel|取消
+radial_menu_slot_count|槽位
+radial_menu_slot_count_subtitle|已啟用 %1$d 個槽位
+radial_menu_decrease_slots|減少槽位
+radial_menu_increase_slots|增加槽位
+radial_menu_slots|輪盤槽位
+radial_menu_slot_title|槽位 %1$d
+radial_menu_slot_label_hint|標籤
+radial_menu_slot_binding|槽位 %1$d 繫結
+radial_menu_slot_binding_summary|繫結：%1$s
+radial_menu_preset_common|常用
+radial_menu_preset_weapons|武器
+gesture_action_open_radial_menu|開啟輪盤選單
+binding_mode_simultaneous|同時
+binding_mode_sequence|按順序
+binding_sequence_delay_ms|順序延遲（毫秒）
+binding_sequence_current_format|%1$s（%2$d 毫秒）

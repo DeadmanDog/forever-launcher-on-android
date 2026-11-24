@@ -39,7 +39,8 @@ class ForeverLauncherBrandingTest {
         // Compose painterResource accepts a bitmap file or vector XML, not a <bitmap> XML wrapper.
         val value = android.util.TypedValue()
         context.resources.getValue(R.drawable.forever_emblem_042, value, true)
-        assertTrue(value.string.toString().endsWith(".png"))
+        // 1.2.6: lossless WebP (pixel-identical to the PNG it replaced); still a bitmap file, not an XML wrapper.
+        assertTrue(value.string.toString().let { it.endsWith(".png") || it.endsWith(".webp") })
         val res = listOf(File("src/main/res"), File("app/src/main/res")).first { it.isDirectory }
         val splash = File(res.parentFile, "java/app/gamenative/ui/components/BootingSplash.kt").readText()
         assertTrue(splash.contains("ImageBitmap.imageResource(R.drawable.forever_emblem_042)"))

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "FifoPresentGate.h"
 #include <mutex>
 #include <vector>
 
@@ -74,7 +75,7 @@ struct VulkanRendererContext {
     bool holdDrainedContent();
     static constexpr int kDrainOff = 0, kDrainOneStep = 1, kDrainProbe = 2;
     std::atomic<int> fifoDrainMode{kDrainProbe};
-    static constexpr int kRefillWatchWindows = 20; int refillWatchWindows = 0; bool refilled = false;
+    static constexpr int kRefillWatchWindows = 20; int refillWatchWindows = 0; bool refilled = false; bool drainHoldDirty = false;
     void latencyWindowDone(int64_t medianNs, int64_t refreshNs, bool dirty, bool slow);
     bool drainQueuedFrame();
     bool frameUnchanged();

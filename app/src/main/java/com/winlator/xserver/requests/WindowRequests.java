@@ -282,7 +282,7 @@ public abstract class WindowRequests {
         short rootX = client.xServer.pointer.getClampedX();
         short rootY = client.xServer.pointer.getClampedY();
         Window child = window.getChildByCoords(rootX, rootY);
-        short[] localPoint = window.rootPointToLocal(rootX, rootY);
+        int localPoint = window.rootPointToLocalPacked(rootX, rootY);
 
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);
@@ -293,9 +293,9 @@ public abstract class WindowRequests {
             outputStream.writeInt(child != null ? child.id : 0);
             outputStream.writeShort(rootX);
             outputStream.writeShort(rootY);
-            outputStream.writeShort(localPoint[0]);
-            outputStream.writeShort(localPoint[1]);
-            outputStream.writeShort((short)client.xServer.inputDeviceManager.getKeyButMask().getBits());
+            outputStream.writeShort((short)(localPoint >>> 16));
+            outputStream.writeShort((short)localPoint);
+            outputStream.writeShort((short)client.xServer.inputDeviceManager.getKeyButMaskBits());
             outputStream.writePad(6);
         }
     }

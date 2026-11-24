@@ -7,10 +7,7 @@ import java.io.File
 
 /** Separate opt-in diagnostic process; failure never changes the game command. */
 internal object WowDriverProbe {
-    internal fun skipBeforeGame(gamescope: Boolean, display: String): String? = when {
-        gamescope -> "Skipped: Gamescope must create Xwayland and assign DISPLAY before any Wine client. " +
-            "The pre-launch diagnostic probe must not initialize the shared Wine display headlessly. " +
-            "Wine/Wrapper driver-ID probing is unavailable in this pre-launch Gamescope path."
+    internal fun skipBeforeGame(display: String): String? = when {
         display.isBlank() -> "Skipped: no DISPLAY is available for the pre-launch Wine diagnostic probe."
         else -> null
     }
@@ -18,7 +15,7 @@ internal object WowDriverProbe {
     @JvmStatic fun prepare(context: Context, container: Container, env: EnvVars, session: File?): File? {
         if (session == null || container.id != WowContainerProfile.CONTAINER_ID ||
             WowVkd3dComponents.api(container) != WowVkd3dComponents.DX12 || !WowDiagnostics.enabled(context)) return null
-        skipBeforeGame(app.gamenative.display.WowDisplayBackend.isGamescope(container), env.get("DISPLAY"))?.let { reason ->
+        skipBeforeGame(env.get("DISPLAY"))?.let { reason ->
             runCatching { File(session, "driver-probe-skipped.txt").writeText(reason + "\n") }
             return null
         }

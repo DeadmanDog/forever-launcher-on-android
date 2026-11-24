@@ -20,8 +20,14 @@ object AddonScanner {
             .filter { it.isDirectory && !it.name.startsWith(".") }
             .associateBy { it.name }
 
+        // Shared Android storage and Wine compare names case-insensitively. A case-only
+        // rename must keep the saved source/id instead of rediscovering an unrelated local addon.
+        // Prefer exact names; on case-sensitive disks do not guess between multiple variants.
+        val byCaseFoldedName = present.values.groupBy { it.name.lowercase() }
         val kept = known.mapNotNull { record ->
-            val folders = record.folders.filter { it in present }
+            val folders = record.folders.mapNotNull { name ->
+                present[name]?.name ?: byCaseFoldedName[name.lowercase()]?.singleOrNull()?.name
+            }.distinct()
             if (folders.isEmpty()) null else record.copy(folders = folders)
         }
         val claimed = kept.flatMap { it.folders }.toSet()

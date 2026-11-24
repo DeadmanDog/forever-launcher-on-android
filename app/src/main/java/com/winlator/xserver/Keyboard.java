@@ -23,6 +23,12 @@ public class Keyboard {
     public interface OnKeyboardListener {
         void onKeyPress(byte keycode, int keysym);
 
+        /** [autoRepeat] false: the key repeats by itself (a hardware keyboard: Android sends repeated key-downs). */
+        default void onKeyPress(byte keycode, int keysym, boolean autoRepeat) { onKeyPress(keycode, keysym); }
+
+        /** [shiftedKeysym] what the key types with Shift; 0 = the same as [keysym] (jaredgei 83cdbc9, Shift keybinds #99). */
+        default void onKeyPress(byte keycode, int keysym, int shiftedKeysym, boolean autoRepeat) { onKeyPress(keycode, keysym, autoRepeat); }
+
         void onKeyRelease(byte keycode);
     }
 
@@ -38,7 +44,7 @@ public class Keyboard {
 
     /**
      * Releases every key the guest still sees as held, e.g. when a menu takes the keyboard and their key-up would never reach it.
-     * 1.2.3: through XServer.injectKeyRelease (input lock; under Gamescope the release must reach the input sink, the guest's seat).
+     * 1.2.3: through XServer.injectKeyRelease (input lock).
      */
     public void releaseAllKeys() {
         for (Byte key : new java.util.ArrayList<>(pressedKeys)) {
@@ -46,17 +52,6 @@ public class Keyboard {
             if (xKeycode != null) xServer.injectKeyRelease(xKeycode);
             else setKeyRelease(key);
         }
-    }
-
-    /**
-     * 1.2.3: a key that went to the Gamescope input sink instead of the X server. Tracked like a real one (pressed keys, modifier
-     * mask) without notifying listeners, so releaseAllKeys and the synthetic-Shift test see it.
-     */
-    public void trackSinkKey(byte keycode, boolean pressed) {
-        if (pressed) {
-            pressedKeys.add(keycode);
-            if (isModifier(keycode)) modifiersMask.set(getModifierFlag(keycode));
-        } else if (pressedKeys.remove(keycode) && isModifier(keycode)) modifiersMask.unset(getModifierFlag(keycode));
     }
 
     private static XKeycode keycodeById(byte id) {
@@ -79,15 +74,29 @@ public class Keyboard {
     }
 
     public void setKeyPress(byte keycode, int keysym) {
-        triggerOnKeyPress(keycode, keysym);
+        setKeyPress(keycode, keysym, true);
+    }
+
+    public void setKeyPress(byte keycode, int keysym, boolean autoRepeat) {
+        setKeyPress(keycode, keysym, 0, autoRepeat);
+    }
+
+    public void setKeyPress(byte keycode, int keysym, int shiftedKeysym, boolean autoRepeat) {
+        boolean wasPressed = pressedKeys.contains(keycode);
+        triggerOnKeyPress(keycode, keysym, shiftedKeysym, autoRepeat);
         pressedKeys.add(keycode);
-        if (isModifier(keycode)) modifiersMask.set(getModifierFlag(keycode));
+        // Caps Lock is a lock: LockMask flips on each new press and stays after the release (X11; Wine's update_lock_state
+        // turns Windows' CapsLock back off whenever an event's state disagrees with it).
+        if (keycode == XKeycode.KEY_CAPS_LOCK.getId()) {
+            if (!wasPressed) modifiersMask.set(getModifierFlag(keycode), !modifiersMask.isSet(getModifierFlag(keycode)));
+        }
+        else if (isModifier(keycode)) modifiersMask.set(getModifierFlag(keycode));
     }
 
     public void setKeyRelease(byte keycode) {
         if (pressedKeys.contains(keycode)) {
             pressedKeys.remove(keycode);
-            if (isModifier(keycode)) modifiersMask.unset(getModifierFlag(keycode));
+            if (isModifier(keycode) && keycode != XKeycode.KEY_CAPS_LOCK.getId()) modifiersMask.unset(getModifierFlag(keycode));
             triggerOnKeyRelease(keycode);
         }
     }
@@ -96,9 +105,9 @@ public class Keyboard {
         onKeyboardListeners.add(onKeyboardListener);
     }
 
-    private void triggerOnKeyPress(byte keycode, int keysym) {
+    private void triggerOnKeyPress(byte keycode, int keysym, int shiftedKeysym, boolean autoRepeat) {
         for (int i = onKeyboardListeners.size()-1; i >= 0; i--) {
-            onKeyboardListeners.get(i).onKeyPress(keycode, keysym);
+            onKeyboardListeners.get(i).onKeyPress(keycode, keysym, shiftedKeysym, autoRepeat);
         }
     }
 
@@ -114,6 +123,15 @@ public class Keyboard {
                 device.getKeyboardType() == InputDevice.KEYBOARD_TYPE_ALPHABETIC;
     }
 
+    /**
+     * An external device that sends keys but is not a full keyboard, such as the number pad on the side of an MMO mouse.
+     * Android reports those as non-alphabetic keyboards, which isKeyboardDevice leaves out (jaredgei 85f5d19, #99).
+     */
+    public static boolean isExternalKeySource(InputDevice device) {
+        if (device == null || device.isVirtual() || !device.supportsSource(InputDevice.SOURCE_KEYBOARD)) return false;
+        return android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q || device.isExternal();
+    }
+
     public boolean onVirtualKeyEvent(KeyEvent event) {
         int action = event.getAction();
         if (action == KeyEvent.ACTION_DOWN || action == KeyEvent.ACTION_UP) {
@@ -126,7 +144,9 @@ public class Keyboard {
             if (action == KeyEvent.ACTION_DOWN) {
                 boolean shiftPressed = event.isShiftPressed() || keyCode == KeyEvent.KEYCODE_AT || keyCode == KeyEvent.KEYCODE_STAR || keyCode == KeyEvent.KEYCODE_POUND || keyCode == KeyEvent.KEYCODE_PLUS;
                 if (shiftPressed) xServer.injectKeyPress(XKeycode.KEY_SHIFT_L);
-                xServer.injectKeyPress(xKeycode, xKeycode != XKeycode.KEY_ENTER ? event.getUnicodeChar() : 0);
+                // A control character (Tab '\t', Enter '\n', ...) is no keysym: passing it re-mapped the key (Tab became keysym 0x09).
+                int unicodeChar = event.getUnicodeChar();
+                xServer.injectKeyPress(xKeycode, unicodeChar >= 0x20 && unicodeChar != 0x7f ? unicodeChar : 0);
             }
             else if (action == KeyEvent.ACTION_UP) {
                 xServer.injectKeyRelease(XKeycode.KEY_SHIFT_L);
@@ -149,9 +169,14 @@ public class Keyboard {
             return false;
 
         if (action == KeyEvent.ACTION_DOWN) {
+            // A hardware keyboard repeats a held key itself (Android sends repeated key-downs and stops them on release or a
+            // focus change), so the X server's own repeat stays off here: a held key was repeated twice, and a release that never
+            // reached the app (focus moved mid-press) repeated the key forever. Fix taken from jaredgei/wow-forever-android 8607f98.
             boolean syntheticShift = needsSyntheticShift(event);
-            if (syntheticShift) xServer.injectKeyPress(XKeycode.KEY_SHIFT_L);
-            xServer.injectKeyPress(xKeycode, printableKeysym(event));
+            if (syntheticShift) xServer.injectKeyPress(XKeycode.KEY_SHIFT_L, 0, false);
+            int[] levels = keyLevels(event, xKeycode);
+            if (levels != null) xServer.injectKeyPress(xKeycode, levels[0], levels[1], false);
+            else xServer.injectKeyPress(xKeycode, printableKeysym(event), false);
             if (syntheticShift) xServer.injectKeyRelease(XKeycode.KEY_SHIFT_L);
         } else if (action == KeyEvent.ACTION_UP) {
             xServer.injectKeyRelease(xKeycode);
@@ -167,6 +192,46 @@ public class Keyboard {
         // Shift_L press/release released a held Left Shift at once (Shift+click became a plain click).
         if (KeyEvent.isModifierKey(keyCode)) return false;
         return event.isShiftPressed() || keyCode == KeyEvent.KEYCODE_AT || keyCode == KeyEvent.KEYCODE_STAR || keyCode == KeyEvent.KEYCODE_POUND || keyCode == KeyEvent.KEYCODE_PLUS;
+    }
+
+    /**
+     * jaredgei 83cdbc9 + 9c4b577 (#99): what the key types without and with Shift, e.g. {'1', '!'}. Telling X both, as a real keyboard
+     * map does, keeps the key the same key while Shift is held, so Wine reports Shift+1 (action bar keybinds) rather than another key.
+     * A keypad (an MMO mouse's side buttons) often has no Shift level: it keeps what a full keyboard set for the key, else the US
+     * layout. Null when the key types no printable ASCII character without Shift.
+     */
+    int[] keyLevels(KeyEvent event, XKeycode xKeycode) {
+        try {
+            android.view.KeyCharacterMap map = event.getKeyCharacterMap();
+            int type = map.getKeyboardType();
+            if (type != android.view.KeyCharacterMap.FULL && type != android.view.KeyCharacterMap.ALPHA) {
+                int index = ((xKeycode.getId() & 0xFF) - MIN_KEYCODE) * KEYSYMS_PER_KEYCODE;
+                if (index >= 0 && keysyms[index] != 0) return new int[] {keysyms[index], keysyms[index + 1]};
+                map = android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD);
+            }
+            int base = printable(map.get(event.getKeyCode(), 0));
+            if (base == 0) return null;
+            int shifted = printable(map.get(event.getKeyCode(), KeyEvent.META_SHIFT_ON));
+            return new int[] {base, shifted != 0 ? shifted : base};
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static int printable(int unicodeChar) {
+        return unicodeChar > 32 && unicodeChar < 127 ? unicodeChar : 0;
+    }
+
+    public boolean hasKeysyms(byte keycode, int minKeysym, int majKeysym) {
+        int index = (keycode & 0xFF) - MIN_KEYCODE;
+        if (index < 0) return false;
+        return keysyms[index*KEYSYMS_PER_KEYCODE+0] == minKeysym && keysyms[index*KEYSYMS_PER_KEYCODE+1] == majKeysym;
+    }
+
+    /** jaredgei 634d1e9 (#43): the X keysym of a character; Latin-1 keysyms equal their code point, others are Unicode keysyms. */
+    public static int unicodeKeysym(int codePoint) {
+        if ((codePoint >= 0x20 && codePoint <= 0x7e) || (codePoint >= 0xa0 && codePoint <= 0xff)) return codePoint;
+        return 0x01000000 | codePoint;
     }
 
     private static int printableKeysym(KeyEvent event) {

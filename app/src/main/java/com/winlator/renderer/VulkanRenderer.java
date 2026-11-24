@@ -60,6 +60,7 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
     private volatile String scanoutBlockReason = "ui";
     private volatile boolean foreground = true;
     private volatile Drawable scanoutCandidate;
+    private final ScanoutFrameGuard scanoutFrameGuard = new ScanoutFrameGuard();
     private final java.util.concurrent.atomic.AtomicLong scanoutEpoch = new java.util.concurrent.atomic.AtomicLong();
     /** blockReason names the UI elements that keep the compositor in use; empty means none. */
     public void setExperimentalScanout(boolean requested, String blockReason) {
@@ -643,6 +644,10 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                     1, rw.rootX, rw.rootY, rw.content.width, rw.content.height,
                     screenW, screenH, ahb);
             if (reason == null) candidate = rw.content;
+            if (candidate != null && scanoutFrameGuard.blocks(candidate)) {
+                candidate = null;
+                reason = "frame";
+            }
         }
         ScanoutStats.setState(reason == null ? "eligible" : "ui".equals(reason) ? "ui:" + scanoutBlockReason : reason);
         if (scanoutCandidate != candidate) {
@@ -821,6 +826,10 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
                             long idleToken = (idleRelease != null && presentIdleTracking && initComplete) ? idleHolds.hold(idleRelease) : 0;
                             nativeUpdateWindowContentAHB(nativeHandle, targetId, ahbPtr,
                                 pixmap.width, pixmap.height, xOff, yOff, targetDrawable.width, targetDrawable.height, idleToken);
+                            boolean fullFrame = xOff == 0 && yOff == 0
+                                && pixmap.width == xServer.screenInfo.width && pixmap.height == xServer.screenInfo.height;
+                            if (scanoutFrameGuard.compositorFrame(targetDrawable, nativeMode, targetDrawable == scanoutCandidate, fullFrame))
+                                queueSceneUpdate();
                             if (pixmap.width == xServer.screenInfo.width && pixmap.height == xServer.screenInfo.height)
                                 ScanoutStats.compositorFrame();
                             return idleToken != 0;
@@ -1123,14 +1132,6 @@ public class VulkanRenderer implements WindowManager.OnWindowModificationListene
 
     /** Called (on the UI thread) after the output mode changed, so the touch view can recompute its pointer mapping. */
     public void setOutputMappingListener(Runnable listener) { outputMappingListener = listener; }
-
-    /** Gamescope owns the picture; this changes only the Android touch transform. */
-    public void setGamescopeInputScaling(int mode) {
-        if (outputScalingMode == mode) return;
-        outputScalingMode = mode;
-        Runnable listener = outputMappingListener;
-        if (listener != null) listener.run();
-    }
 
     public void setFilterMode(int mode) {
         // The same value again (every colour/gamma slider step calls this) changes nothing: no JNI call, no native wake-up and

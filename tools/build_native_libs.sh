@@ -36,6 +36,14 @@ cp "$OUT/vr-build/libvulkan_renderer.so" "$OUT/libvulkan_renderer.so"
 "$CC" -shared -fPIC -O2 -Wall -Werror -Wl,-z,max-page-size=16384 -s \
   "$CPP/wowexec/wow_exec.c" -llog -ldl -o "$OUT/libwowexec.so"
 
+# The DNS shim preloaded into every Wine launch (getaddrinfo AI_V4MAPPED, gethostname/gethostbyname with GAMENATIVE_HOSTNAME;
+# from jaredgei/wow-forever-android 248d8d2 + 17c46d5). It ships from app/src/main/jniLibs; host tests: tools/dns-shim-tests/run.py
+# --exclude-libs keeps the compiler runtime's symbols (__emutls_get_address) private: a preloaded library must export only the
+# functions it means to interpose.
+"$CC" -shared -fPIC -O2 -Wall -Wl,-z,max-page-size=16384 -Wl,--exclude-libs,ALL -s \
+  "$CPP/gamenative_dns_v4mapped.c" -ldl -o "$OUT/libgamenative_dns_v4mapped.so"
+install -m 0755 "$OUT/libgamenative_dns_v4mapped.so" "$ROOT/app/src/main/jniLibs/arm64-v8a/libgamenative_dns_v4mapped.so"
+
 for lib in libvulkan_renderer libwinlator libxconnectorpatch libwowexec; do
   install -m 0755 "$OUT/$lib.so" "$DEST/$lib.so"
   echo "installed $DEST/$lib.so ($(stat -c %s "$DEST/$lib.so") bytes)"

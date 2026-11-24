@@ -72,7 +72,11 @@ class RadialMenuCoordinator(
         }
     }
 
-    private val overlayView = RadialMenuOverlayView(context).apply {
+    // The wheel's "Cancel" label in the app's language, not the phone's.
+    private val overlayView = RadialMenuOverlayView(app.gamenative.ui.screen.wow.WowUiLanguage.current.let { language ->
+        if (language == app.gamenative.ui.screen.wow.WowLanguage.SYSTEM) context
+        else app.gamenative.ui.screen.wow.localizedContext(context, language.code)
+    }).apply {
         listener = object : RadialMenuOverlayView.Listener {
             override fun onPointerPosition(x: Float, y: Float) {
                 updateSelection(PointF(x, y))

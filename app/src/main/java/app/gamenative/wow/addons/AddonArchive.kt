@@ -54,6 +54,8 @@ object AddonArchive {
      * - Each existing folder is moved aside, the new one renamed in, then the old one deleted. A
      *   failed rename rolls every folder back.
      * - A single wrapper folder with no `.toc` whose children have TOCs is unwrapped.
+     * - A `.toc` at the zip's root, or an addon folder named unlike its `.toc` (a GitHub download, `Repo-main/Repo.toc`), is
+     *   installed under the `.toc`'s name: WoW loads a folder only when the names match (jaredgei 0489788).
      * - Entries that are absolute or contain `..` throw `IOException("unsafe path")`.
      */
     fun install(zip: File, addonsDir: File): List<String> = install(zip, addonsDir, MAX_EXTRACTED_BYTES, MAX_ENTRIES)
@@ -66,7 +68,7 @@ object AddonArchive {
         try {
             extract(zip, staging, maxExtractedBytes, maxEntries)
             val root = unwrap(staging)
-            val folders = addonFolders(root)
+            val folders = nameAfterToc(root)
             if (folders.isEmpty()) throw IOException("no addon folders in ${zip.name}")
             swapIn(folders, addonsDir)
             return folders.map { it.name }.sorted()
@@ -119,6 +121,38 @@ object AddonArchive {
     }
 
     private fun addonFolders(root: File): List<File> = childDirs(root)
+
+    /** Optional flavour suffixes of a `.toc` name (`Addon_Mainline.toc`, `Addon-Classic.toc`). */
+    private val tocSuffix = Regex("[-_](Mainline|Classic|Vanilla|TBC|BCC|Wrath|WOTLKC|Cata|Mists|Standard|Forever)$", RegexOption.IGNORE_CASE)
+
+    /** The addon names [dir]'s `.toc` files give (one name for an addon with per-flavour TOCs). */
+    private fun tocNames(dir: File): Set<String> = dir.listFiles().orEmpty()
+        .filter { it.isFile && it.name.endsWith(".toc", ignoreCase = true) }
+        .map { it.name.dropLast(4).replace(tocSuffix, "") }
+        .filter { it.isNotBlank() && it != "." && it != ".." && '/' !in it && '\\' !in it }
+        .toSet()
+
+    /** Gives a `.toc` at [root] its own folder and renames addon folders named unlike their `.toc`; returns the addon folders. */
+    private fun nameAfterToc(root: File): List<File> {
+        val rootNames = tocNames(root)
+        if (rootNames.size == 1 && childDirs(root).none(::hasToc)) {
+            val name = rootNames.single()
+            val holder = File(root, ".$name-${System.nanoTime()}")
+            if (!holder.mkdirs()) throw IOException("cannot create ${holder.path}")
+            root.listFiles().orEmpty().filter { it != holder && it.name != "__MACOSX" && !it.name.startsWith(".") }.forEach {
+                if (!it.renameTo(File(holder, it.name))) throw IOException("cannot move ${it.name}")
+            }
+            val target = File(root, name)
+            if (!holder.renameTo(target)) throw IOException("cannot move $name into place")
+            return listOf(target)
+        }
+        return addonFolders(root).map { folder ->
+            val names = tocNames(folder)
+            val name = names.singleOrNull()
+            if (name == null || names.any { it.equals(folder.name, ignoreCase = true) } || File(root, name).exists()) folder
+            else File(root, name).takeIf { folder.renameTo(it) } ?: folder
+        }
+    }
 
     private fun swapIn(folders: List<File>, addonsDir: File) {
         val nonce = System.nanoTime()

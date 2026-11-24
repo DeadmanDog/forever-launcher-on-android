@@ -504,6 +504,8 @@ private fun WoWForeverScreenContent(
                 } catch (e: Exception) {
                     if (e.message?.contains("EPERM") == true || e.message?.contains("Operation not permitted") == true) {
                         scope.launch(Dispatchers.Main) {
+                            // The start-up splash of an automatic launch would otherwise stay over the permission dialog.
+                            PluviaApp.events.emit(AndroidEvent.ClearBootingSplash)
                             hasStorageAccess = false
                             if (isLaunching) releaseOrientation()
                             isLaunching = false
@@ -530,6 +532,9 @@ private fun WoWForeverScreenContent(
 
                 WowDiagnostics.lifecycle(context,"launcher.failed",e)
                 scope.launch(Dispatchers.Main) {
+                    // Review 2026-11-15: an automatic launch that fails (game files changed, offline, previous session still
+                    // closing) left the start-up splash over the error and the Repair dialog.
+                    PluviaApp.events.emit(AndroidEvent.ClearBootingSplash)
                     if (e is WowClientIntegrity.MismatchException) {
                         changedClientFiles = e.files
                         errorMessage = t("The game program does not match Blizzard's original: ", "A játékprogram nem egyezik a Blizzard eredetijével: ") +

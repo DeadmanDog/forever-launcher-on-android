@@ -1,0 +1,214 @@
+cancel|Annuler
+delete|Supprimer
+copy|Copier
+edit|Modifier
+add|Ajouter
+copy_from|Copier depuis
+ok|OK
+game_executable_not_found_title|Lancement impossible
+game_executable_not_found|L'exécutable n'a pas pu être choisi automatiquement. Indiquez son chemin dans les réglages du conteneur.
+save|Enregistrer
+discard|Abandonner
+resume_game|Reprendre le jeu
+extra|Extra
+clear_search|Effacer la recherche
+face_buttons_category|Boutons de façade
+shoulder_buttons_category|Gâchettes et boutons latéraux
+menu_buttons_category|Boutons de menu
+thumbstick_buttons_category|Boutons des sticks
+left_stick|Stick gauche
+right_stick|Stick droit
+dpad_category|Croix directionnelle
+dpad_up|Croix haut
+dpad_down|Croix bas
+dpad_left|Croix gauche
+dpad_right|Croix droite
+bind_button|Assigner : %1$s
+current_binding|Actuel : %1$s
+search_placeholder|Rechercher…
+category|Catégorie
+mouse|Souris
+gamepad|Manette
+binding_none|Aucune
+clear_binding|Effacer l'assignation
+no_bindings_found|Aucune assignation trouvée
+edit_element|Modifier %1$s
+element_position_size|Position : (%1$d, %2$d) • Taille : %3$.2fx
+appearance|Apparence
+label_text|Texte du libellé
+label_text_subtitle|Texte personnalisé pour ce bouton
+element_type|Type d'élément
+element_type_subtitle|Changer le type de cette commande
+shape|Forme
+shape_subtitle|Aspect visuel
+shape_restricted|%1$s est limité à la forme %2$s
+bindings|Assignations
+bindings_auto_generated|Assignations (automatiques)
+bindings_auto_generated_subtitle|Les assignations du bouton de plage sont générées automatiquement
+range_button_settings|Réglages du bouton de plage
+range_type|Plage de touches
+range_type_subtitle|Touches à parcourir
+range_orientation|Orientation
+range_orientation_subtitle|Disposition du bouton de plage
+range_orientation_horizontal|Horizontale
+range_orientation_vertical|Verticale
+range_visible_segments|Segments visibles
+range_visible_segments_subtitle|Touches affichées à la fois : %1$d
+range_lock_scrolling|Bloquer le défilement
+range_lock_scrolling_subtitle|Empêche de faire défiler la plage
+button_toggleable|Bascule
+button_toggleable_subtitle|Touchez pour activer, touchez à nouveau pour désactiver
+control_appearance|Apparence de la commande
+button_color|Couleur de la commande
+button_color_subtitle|Couleur hex du contour, de l'icône et du texte
+button_active_color|Couleur pressée
+button_active_color_subtitle|Couleur pendant l'appui ou l'activation
+button_opacity|Opacité de la commande
+button_opacity_inherited|%1$d%% (valeur globale)
+control_stroke_width|Épaisseur des traits
+control_stroke_width_subtitle|Épaisseur des contours et des séparateurs
+control_stroke_width_thin|Fin
+control_stroke_width_default|Par défaut
+control_stroke_width_thick|Épais
+control_stroke_width_extra_thick|Très épais
+button_look_through|Glisser au travers
+button_look_through_subtitle|Appuyez et glissez depuis ce bouton pour contrôler aussi le déplacement ou la caméra. Indisponible en mode écran tactile.
+preview|Aperçu
+active|Actif
+apply_all|Appliquer à tous
+copy_appearance_from_button|Copier l'apparence d'une commande
+toast_no_buttons_to_copy_appearance|Aucune autre commande dont copier l'apparence
+toast_copied_button_appearance|Apparence copiée
+toast_applied_button_appearance|Apparence appliquée à toutes les commandes
+primary_action|Action principale
+secondary_action|Action secondaire
+direction_up|Haut
+direction_right|Droite
+direction_down|Bas
+direction_left|Gauche
+mouse_suffix| (souris)
+slot_number|Emplacement %1$d
+button_slots_help|Les boutons acceptent jusqu'à 2 assignations : principale (appui) et secondaire (appui long)
+properties|Propriétés
+position|Position
+position_value|X : %1$d, Y : %2$d
+unsaved_changes|Modifications non enregistrées
+unsaved_changes_message|Des modifications ne sont pas enregistrées. Les enregistrer ou les abandonner ?
+adjust_size|Ajuster la taille
+reset|Réinitialiser
+done|Terminé
+copy_size_from_element|Copier la taille d'un élément
+toast_no_elements_to_copy|Aucun autre élément dont copier la taille
+toast_copied_size|Taille copiée : %.2fx
+quick_presets|Préréglages rapides
+preset_arrows|Flèches
+preset_mouse|Souris
+preset_dpad|Croix directionnelle
+preset_left_stick|Stick gauche
+preset_right_stick|Stick droit
+physical_controller_config|Assignations de la manette physique
+button_a|Bouton A
+button_b|Bouton B
+button_x|Bouton X
+button_y|Bouton Y
+button_start|Start / Options
+button_select|Select / View / Share
+button_l3|L3 (clic du stick gauche)
+button_r3|R3 (clic du stick droit)
+left_stick_up|Stick gauche haut
+left_stick_down|Stick gauche bas
+left_stick_left|Stick gauche gauche
+left_stick_right|Stick gauche droite
+right_stick_up|Stick droit haut
+right_stick_down|Stick droit bas
+right_stick_left|Stick droit gauche
+right_stick_right|Stick droit droite
+button_home|Home / Guide / PS
+not_set|Non défini
+toast_controls_reset|Commandes réinitialisées
+size|Taille
+close|Fermer
+gesture_section_single_finger|Un doigt
+gesture_section_two_finger|Deux doigts
+gesture_section_three_finger|Trois doigts
+gesture_section_other|Autres
+gesture_tap|Toucher
+gesture_drag|Glisser le doigt
+gesture_hold_mouse_button_while_touching|Maintenir le bouton de la souris pendant le contact
+gesture_mouse_button_label|Bouton de la souris
+gesture_long_press|Appui long
+gesture_long_press_delay|Délai d'appui long (ms)
+gesture_double_tap|Double toucher
+gesture_double_tap_subtitle|Double clic gauche
+gesture_double_tap_delay|Délai de double toucher (ms)
+gesture_two_finger_drag|Glisser à deux doigts
+gesture_pinch|Pincer
+gesture_two_finger_tap|Toucher à deux doigts
+gesture_action_left_click|Clic gauche
+gesture_action_right_click|Clic droit
+gesture_action_middle_click|Clic du milieu
+gesture_pan_middle_mouse|Défilement au bouton du milieu
+gesture_pan_inverted_middle_mouse|Défilement inversé au bouton du milieu
+gesture_pan_inverted_wasd|WASD inversé
+gesture_pan_arrow_keys|Touches fléchées
+gesture_pan_inverted_arrow_keys|Touches fléchées inversées
+gesture_pan_left_click_drag|Glisser avec clic gauche
+gesture_pan_right_click_drag|Glisser avec clic droit
+gesture_zoom_scroll_wheel|Molette
+gesture_zoom_plus_minus|Touches +/-
+gesture_zoom_page_up_down|Page préc./suiv.
+gesture_action_label|Action
+gesture_action_show_keyboard|Afficher le clavier
+gesture_mouse_behavior_label|Comportement de la souris
+gesture_mouse_behavior_click|Clic
+gesture_mouse_behavior_hold|Maintien
+gesture_header_special|Spécial
+gesture_header_mouse|Souris
+gesture_header_common_game|Touches de jeu courantes
+gesture_header_navigation_editing|Navigation / Édition
+gesture_header_symbols|Symboles
+gesture_header_letters|Lettres A–Z
+gesture_header_numbers|Chiffres 0–9
+gesture_header_numpad|Pavé numérique
+gesture_header_function_keys|Touches de fonction
+gesture_header_modifiers_locks|Modificateurs / Verrous
+gesture_two_finger_hold|Maintien à deux doigts
+gesture_two_finger_hold_delay|Délai de maintien à deux doigts (ms)
+gesture_three_finger_tap|Toucher à trois doigts
+gesture_three_finger_drag|Glisser à trois doigts
+gesture_three_finger_hold|Maintien à trois doigts
+gesture_three_finger_hold_delay|Délai de maintien à trois doigts (ms)
+gesture_threshold|Seuil des gestes (px)
+gesture_mouse_drag_movement|Mouvement de la souris en glissant
+gesture_mouse_drag_movement_subtitle|Direct convient à la plupart des jeux. Choisissez Relatif si le glissement perturbe la caméra ou le curseur
+gesture_mouse_drag_movement_direct|Direct
+gesture_mouse_drag_movement_relative|Relatif
+gesture_show_click_highlight|Mettre en évidence les clics
+gesture_show_click_highlight_subtitle|Affiche un cercle à l'endroit touché
+gesture_show_debug_overlay|Surcouche de débogage des gestes
+gesture_show_debug_overlay_subtitle|Libellés temporaires des gestes en haut au centre
+gesture_show_cursor_touchscreen_mode|Afficher le curseur en mode tactile
+gesture_show_cursor_touchscreen_mode_subtitle|Le curseur reste visible tant que les gestes tactiles sont actifs
+main_installing_bionic|Installation des composants Bionic...
+download_failed_title|Échec du téléchargement
+install_failed_title|Échec de l'installation
+install_failed_message|Les fichiers système n'ont pas pu être installés. Réessayez. Si le problème persiste, essayez un autre réseau ou un VPN.
+back|Retour
+radial_menu_settings_title|Menu radial
+radial_menu_cancel|Annuler
+radial_menu_slot_count|Emplacements
+radial_menu_slot_count_subtitle|%1$d emplacements actifs
+radial_menu_decrease_slots|Moins d'emplacements
+radial_menu_increase_slots|Plus d'emplacements
+radial_menu_slots|Emplacements de la roue
+radial_menu_slot_title|Emplacement %1$d
+radial_menu_slot_label_hint|Libellé
+radial_menu_slot_binding|Assignation de l'emplacement %1$d
+radial_menu_slot_binding_summary|Assignation : %1$s
+radial_menu_preset_common|Courant
+radial_menu_preset_weapons|Armes
+gesture_action_open_radial_menu|Ouvrir le menu radial
+binding_mode_simultaneous|Simultané
+binding_mode_sequence|Séquence
+binding_sequence_delay_ms|Délai de séquence (ms)
+binding_sequence_current_format|%1$s (%2$d ms)

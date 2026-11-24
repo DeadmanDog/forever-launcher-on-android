@@ -183,12 +183,6 @@
    "WowLaunchExperimentsSection.kt"
   ]
  },
- "Apply display backend": {
-  "hu": "Megjelenítés alkalmazása",
-  "files": [
-   "WowDisplayBackendSection.kt"
-  ]
- },
  "Apply resolution": {
   "hu": "Felbontás alkalmazása",
   "files": [
@@ -211,18 +205,6 @@
   "hu": "A hang-diagnosztika mentve. A következő indítástól érvényes.",
   "files": [
    "WowCacheSettingsDialog.kt"
-  ]
- },
- "Available with Gamescope. XServer uses the app's own compositor.": {
-  "hu": "Gamescope módban érhető el. Az XServer az app saját kompozitorát használja.",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "Available with XServer. Gamescope uses its own compositor.": {
-  "hu": "XServer módban érhető el. A Gamescope saját kompozitort használ.",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
   ]
  },
  "Bags & inventory": {
@@ -251,12 +233,6 @@
  },
  "Battle.net login": {
   "hu": "Battle.net belépés",
-  "files": [
-   "BattleNetSignIn.kt"
-  ]
- },
- "Battle.net login filled in: tap Log In.": {
-  "hu": "Battle.net belépés kitöltve: koppints a Belépés gombra.",
   "files": [
    "BattleNetSignIn.kt"
   ]
@@ -513,12 +489,6 @@
   "hu": "Konténer gyökérkönyvtára",
   "files": [
    "WowSettingsDialog.kt"
-  ]
- },
- "Could not save the Gamescope effects.": {
-  "hu": "A Gamescope-effektek mentése sikertelen.",
-  "files": [
-   "ScreenEffectsPanel.kt"
   ]
  },
  "Couldn't download the game program (Wow-ARM64.exe): ": {
@@ -780,12 +750,6 @@
    "WowVkd3dSection.kt"
   ]
  },
- "Display backend": {
-  "hu": "Megjelenítési háttérrendszer",
-  "files": [
-   "WowDisplayBackendSection.kt"
-  ]
- },
  "Display experiments": {
   "hu": "Megjelenítési kísérletek",
   "files": [
@@ -844,12 +808,6 @@
   "hu": "Meghajtók",
   "files": [
    "WowSettingsDialog.kt"
-  ]
- },
- "DroidDeck picture presets": {
-  "hu": "DroidDeck képprofilok",
-  "files": [
-   "ScreenEffectsPanel.kt"
   ]
  },
  "ENVIRONMENT": {
@@ -1013,6 +971,12 @@
   "hu": "Mentett belépés törlése",
   "files": [
    "WoWForeverScreen.kt"
+  ]
+ },
+ "From file (.zip)": {
+  "hu": "Fájlból (.zip)",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "From link": {
@@ -1199,42 +1163,6 @@
   "hu": "Játék tárolása",
   "files": [
    "WowSettingsDialog.kt"
-  ]
- },
- "Game {0} · Gamescope output {1}×{2}": {
-  "hu": "Játék {0} · Gamescope-kimenet {1}×{2}",
-  "files": [
-   "ScreenEffectsPanel.kt"
-  ]
- },
- "Gamescope (experimental)": {
-  "hu": "Gamescope (kísérleti)",
-  "files": [
-   "WowDisplayBackendSection.kt"
-  ]
- },
- "Gamescope direct scanout (experimental)": {
-  "hu": "Gamescope közvetlen kijelzés (kísérleti)",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "Gamescope only. Gamescope hands the game's own frame to the display instead of redrawing it on the GPU every frame, which saves power. It falls back to redrawing by itself when that is not possible (effects, a refused frame). If the picture flickers or goes black, turn it off. Takes effect from the next launch.": {
-  "hu": "Csak Gamescope-pal. A Gamescope a játék saját képkockáját adja a kijelzőnek, ahelyett hogy minden képkockánál újrarajzolná a GPU-n, így kevesebbet fogyaszt. Ha ez nem lehetséges (effektek, visszautasított képkocka), magától visszavált az újrarajzolásra. Ha villog vagy fekete a kép, kapcsold ki. A következő indítástól él.",
-  "files": [
-   "WowLaunchExperimentsSection.kt"
-  ]
- },
- "Gamescope uses its own Xwayland. Apply while WoW is stopped; used on the next Play. Existing Wine, DXVK and driver selections are retained.": {
-  "hu": "A Gamescope saját Xwaylandet használ. Leállított játék mellett alkalmazd; a következő indításkor lép életbe. A Wine, DXVK és driver választása megmarad.",
-  "files": [
-   "WowDisplayBackendSection.kt"
-  ]
- },
- "Gamescope's game-side FPS limit updates on the next launch.": {
-  "hu": "A Gamescope játékoldali FPS-limitje a következő indításkor frissül.",
-  "files": [
-   "XServerScreen.kt"
   ]
  },
  "Get a key on CurseForge": {
@@ -1427,6 +1355,12 @@
   "hu": "A driver telepítése...",
   "files": [
    "WowBundledComponents.kt"
+  ]
+ },
+ "Installing from file": {
+  "hu": "Telepítés fájlból",
+  "files": [
+   "WowAddonsPage.kt"
   ]
  },
  "Installing from link": {
@@ -1708,12 +1642,6 @@
    "WoWForeverScreen.kt"
   ]
  },
- "Off": {
-  "hu": "Ki",
-  "files": [
-   "ScreenEffectsPanel.kt"
-  ]
- },
  "Off (default)": {
   "hu": "Ki (alapértelmezett)",
   "files": [
@@ -1859,12 +1787,6 @@
    "WowVoiceChatSection.kt"
   ]
  },
- "Picture presets apply to the current game session only.": {
-  "hu": "A képprofil csak az aktuális játékmenetre érvényes.",
-  "files": [
-   "ScreenEffectsPanel.kt"
-  ]
- },
  "Popular": {
   "hu": "Népszerű",
   "files": [
@@ -1888,12 +1810,6 @@
   "files": [
    "WoWForeverScreen.kt",
    "WowDataDownloadService.kt"
-  ]
- },
- "Preparing…": {
-  "hu": "Előkészítés…",
-  "files": [
-   "WowDisplayBackendSection.kt"
   ]
  },
  "Present mode": {
@@ -2197,18 +2113,6 @@
    "WowSettingsDialog.kt"
   ]
  },
- "Saved. FSR and NIS upscale fully from the next game start.": {
-  "hu": "Mentve. Az FSR és a NIS a következő játékindítástól skáláz fel teljesen.",
-  "files": [
-   "ScreenEffectsPanel.kt"
-  ]
- },
- "Saved. Gamescope could not apply every setting live. NIS needs a game resolution smaller than the output.": {
-  "hu": "Mentve. A Gamescope nem tudott minden beállítást élőben alkalmazni. A NIS a kimenetnél kisebb játékfelbontást igényel.",
-  "files": [
-   "ScreenEffectsPanel.kt"
-  ]
- },
  "Saving…": {
   "hu": "Mentés…",
   "files": [
@@ -2231,12 +2135,6 @@
   "hu": "Diagnosztika megosztása",
   "files": [
    "WowCacheSettingsDialog.kt"
-  ]
- },
- "Sharpness": {
-  "hu": "Élesség",
-  "files": [
-   "ScreenEffectsPanel.kt"
   ]
  },
  "Show value": {

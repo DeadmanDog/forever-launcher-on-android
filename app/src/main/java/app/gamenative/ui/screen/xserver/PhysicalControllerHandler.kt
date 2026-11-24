@@ -56,6 +56,8 @@ class PhysicalControllerHandler(
     private val mouseMoveContributions = mutableMapOf<MouseMoveSource, Float>()
     private val sequenceHandler = Handler(Looper.getMainLooper())
     private var mouseMoveTimer: Timer? = null
+    private val stickRestX = com.winlator.math.SubpixelAccumulator()
+    private val stickRestY = com.winlator.math.SubpixelAccumulator()
     private var scrollRepeatTimer: Timer? = null
     private val scrollRepeatLock = Any()
     private val activeScrollBindings = mutableSetOf<Binding>()
@@ -347,9 +349,11 @@ class PhysicalControllerHandler(
 
                     // Look up cursor speed dynamically so it updates when profile changes
                     val cursorSpeed = profile?.cursorSpeed ?: 1f
-                    val deltaX = (mouseMoveOffset.x * 10 * cursorSpeed).toInt()
-                    val deltaY = (mouseMoveOffset.y * 10 * cursorSpeed).toInt()
-                    xServer?.injectPointerMoveDelta(deltaX, deltaY)
+                    // 1.2.25: the fraction of a pixel is carried to the next tick; truncating it each time lost up to a pixel per
+                    // tick (a small stick deflection moved 1 px a tick for 1.9, or not at all below 1).
+                    val deltaX = stickRestX.take(mouseMoveOffset.x * 10 * cursorSpeed)
+                    val deltaY = stickRestY.take(mouseMoveOffset.y * 10 * cursorSpeed)
+                    if (deltaX != 0 || deltaY != 0) xServer?.injectPointerMoveDelta(deltaX, deltaY)
                 }
             }, 0, 1000 / 60)
         }

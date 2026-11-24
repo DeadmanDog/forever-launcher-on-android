@@ -36,14 +36,3 @@ class WowEventPoolTest {
         assertFalse(WowLaunchPolicy.enabled(context, WowRuntimeTuning.EVENT_POOL))
     }
 }
-
-class WowPresentSteerTest {
-    @org.junit.Test fun onlyDx12UnderGamescopeLetsThePresentThreadSteer() {
-        val dx12 = EnvVars(); WowRuntimeTuning.applyPresentSteer(dx12, EnvVars(""), true)
-        org.junit.Assert.assertEquals("1", dx12.get("TU_KGSL_WAITBOOST_PRESENT_STEERS"))
-        val other = EnvVars("TU_KGSL_WAITBOOST_PRESENT_STEERS=1"); WowRuntimeTuning.applyPresentSteer(other, EnvVars(""), false)
-        org.junit.Assert.assertFalse(other.has("TU_KGSL_WAITBOOST_PRESENT_STEERS"))
-        val saved = EnvVars("TU_KGSL_WAITBOOST_PRESENT_STEERS=0"); WowRuntimeTuning.applyPresentSteer(saved, EnvVars("TU_KGSL_WAITBOOST_PRESENT_STEERS=0"), true)
-        org.junit.Assert.assertEquals("0", saved.get("TU_KGSL_WAITBOOST_PRESENT_STEERS"))
-    }
-}

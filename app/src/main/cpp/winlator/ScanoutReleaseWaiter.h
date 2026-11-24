@@ -45,9 +45,9 @@ public:
     /** The completion of [id] arrived. [fenceFd] (owned by this call; -1 = none) signals when the buffer is free. */
     void complete(uint64_t id, int fenceFd) {
         std::lock_guard<std::mutex> lk(mutex_);
-        consecutiveCallbackTimeouts_.store(0, std::memory_order_relaxed);
         for (auto& e : entries_) {
             if (e.id != id || e.completed) continue;
+            consecutiveCallbackTimeouts_.store(0, std::memory_order_relaxed);
             e.completed = true;
             e.fd = fenceFd;
             e.deadlineNs = nowNs() + fenceTimeoutNs_;
@@ -142,8 +142,10 @@ private:
                     if (e.fd >= 0) { fds.push_back(pollfd{e.fd, POLLIN, 0}); ids.push_back(e.id); }
                 }
             }
-            int n;
-            do { n = poll(fds.data(), (nfds_t)fds.size(), timeoutMs); } while (n < 0 && errno == EINTR);
+            const int n = poll(fds.data(), (nfds_t)fds.size(), timeoutMs);
+            // A signal does not extend a deadline. Process expirations now and
+            // rebuild the remaining timeout on the next pass.
+            if (n < 0) for (auto& fd : fds) fd.revents = 0;
             ready.clear();
             {
                 std::lock_guard<std::mutex> lk(mutex_);

@@ -447,17 +447,6 @@ fun preLaunchApp(
 
             val containerManager = ContainerManager(context)
             val container = ContainerUtils.getOrCreateContainer(context, appId, containerManager)
-            if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) {
-                try {
-                    app.gamenative.display.WowGamescopePayload.ensure(context)
-                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                catch (e: Exception) {
-                    fail(MessageDialogState(visible = true, type = DialogType.SYNC_FAIL,
-                        title = "Gamescope", message = e.message ?: "Gamescope runtime preparation failed",
-                        dismissBtnText = context.getString(R.string.ok)))
-                    return@launch
-                }
-            }
 
 
             val legacyImageFsRoot = File(context.filesDir, "imagefs")

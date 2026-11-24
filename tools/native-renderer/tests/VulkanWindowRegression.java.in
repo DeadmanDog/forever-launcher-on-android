@@ -38,6 +38,8 @@ public class VulkanWindowRegression {
  void nativeRemoveWindow(long h,long id){removed.add(id);textures.remove(id);}
  boolean nativeMode, delivered, presentIdleTracking, initComplete;
  Drawable scanoutCandidate;
+ /* GUARD */
+ ScanoutFrameGuard scanoutFrameGuard=new ScanoutFrameGuard();
  Hud hudRef;int hudWindowId=-1;HudFilter hudFilter=new HudFilter();IdleHolds idleHolds=new IdleHolds();ScanoutIdleHand scanoutIdle=new ScanoutIdleHand();
  int gameBuffers;
  boolean nativeIsScanoutActive(long h){return nativeMode;}
@@ -69,6 +71,16 @@ public class VulkanWindowRegression {
    r.delivered=false;
    r.onUpdateWindowContentDirect(w,pixmap,(short)0,(short)0,null);
    check(r.sceneRequests==2,"new scanout lifetime needs first scene rebuild again");
+  }
+  if(n==8){
+   // Review 3 (3): an offset frame of the scanout window must leave scanout (a scene rebuild), not freeze on the last direct buffer.
+   r.nativeMode=true;r.scanoutCandidate=w.content;
+   var pixmap=new Drawable(5);pixmap.texture=new GPUImage();
+   r.onUpdateWindowContentDirect(w,pixmap,(short)0,(short)0,null);
+   int before=r.sceneRequests;
+   r.onUpdateWindowContentDirect(w,pixmap,(short)8,(short)0,null);
+   check(r.sceneRequests==before+1,"an offset frame of the scanout window asks for a scene rebuild");
+   check(r.scanoutFrameGuard.blocks(w.content),"the window stays out of scanout until full frames return");
   }
   System.out.println("PASS window lifecycle "+n);
  }

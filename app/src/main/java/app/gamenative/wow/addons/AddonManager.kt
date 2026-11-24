@@ -188,6 +188,36 @@ class AddonManager(
         commit(record)
     }
 
+    /**
+     * Installs the addons in a zip the player picked on the phone (jaredgei 0489788, #23: players without a PC). The zip is read from
+     * [input] into a temporary file, at most [AddonArchive.MAX_DOWNLOAD_BYTES]. Recorded like an addon found on disk (no source to
+     * update from); a later import of the same folders replaces it.
+     */
+    suspend fun installFromZip(input: java.io.InputStream): InstalledAddon = lock.withLock {
+        val folders = withContext(Dispatchers.IO) {
+            val parent = addonsDir.absoluteFile.parentFile ?: addonsDir
+            parent.mkdirs()
+            val tmp = File(parent, ".foreverywhere-import-${System.nanoTime()}.zip")
+            try {
+                input.use { src -> tmp.outputStream().use { AddonArchive.copyLimited(src, it, AddonArchive.MAX_DOWNLOAD_BYTES, AddonArchive::downloadTooLarge) } }
+                AddonArchive.install(tmp, addonsDir)
+            } finally {
+                tmp.delete()
+            }
+        }
+        val main = folders.firstNotNullOfOrNull { FlavorRules.pickToc(File(addonsDir, it)) }
+        val mainFolder = folders.firstOrNull { FlavorRules.pickToc(File(addonsDir, it)) != null } ?: folders.first()
+        commit(InstalledAddon(
+            id = "${ProviderIds.LOCAL}:$mainFolder",
+            name = main?.title ?: mainFolder,
+            folders = folders,
+            version = main?.version,
+            flavor = classifyFolders(folders),
+            source = null,
+            installedAt = System.currentTimeMillis(),
+        ))
+    }
+
     // --- browsing -------------------------------------------------------------------------------
 
     private suspend fun browse(
@@ -258,11 +288,19 @@ class AddonManager(
             // A file kept off third-party apps still counts when the project names a source repo to update from (alternateFor).
             best == null || (!best.installable && own?.sourceUrl == null) -> false
             source.fileId != null -> best.fileId != source.fileId
-            else -> installed.version == null || !sameVersion(best.version, installed.version)
+            // Review 3 (9): an addon copied in by hand whose TOC has no usable version (none, or the packager's unfilled
+            // "@project-version@") was offered an update forever; unknown is not "older". A leading "v" is ignored.
+            else -> knownVersion(installed.version)?.let { !sameVersion(best.version, it) } ?: false
         }
         val switchToForever = installed.flavor == AddonFlavor.CLASSIC &&
             group.any { it.latest[AddonFlavor.FOREVER]?.installable == true }
         return changed || switchToForever
+    }
+
+    /** The TOC version to compare, or null when it says nothing (missing, blank, an unfilled packager token). */
+    internal fun knownVersion(version: String?): String? {
+        val v = version?.trim()?.removePrefix("v")?.removePrefix("V")?.trim() ?: return null
+        return v.takeIf { it.isNotEmpty() && '@' !in it && it.any(Char::isDigit) }
     }
 
     /** [installed] appears in [remote] as a whole version token ("2.1" is not in "12.1.0", "1.2.3" not in "1.2.30"). */
@@ -312,6 +350,8 @@ class AddonManager(
 
     private suspend fun installLocked(remote: RemoteAddon, visiting: MutableSet<String>): InstalledAddon {
         visiting += "${remote.provider}:${remote.projectId}"
+        // 1.2.8: addons whose own GitHub release is the complete bundle are always installed from it (see BUNDLED_RELEASES).
+        bundledRelease(remote)?.let { return installLocked(it, visiting) }
         val (flavor, file) = bestFile(remote) ?: throw IOException("${remote.name} has no compatible file")
         if (!file.installable) {
             // 1.3.5: the author keeps this file off third-party apps on CurseForge (DBM, Details, Auctionator ...). Their own
@@ -423,6 +463,17 @@ class AddonManager(
      * source (its own releases), else WoWInterface or the GitHub catalog under the very same name. Null when none has an
      * installable file.
      */
+    /**
+     * The author's complete GitHub bundle for [remote] when it comes from another source and is listed in [BUNDLED_RELEASES]; null
+     * otherwise or when GitHub has no usable Forever file (then the original source is used as before).
+     */
+    internal suspend fun bundledRelease(remote: RemoteAddon): RemoteAddon? {
+        if (remote.provider == ProviderIds.GITHUB) return null
+        val repo = BUNDLED_RELEASES[normalizedName(remote.name)] ?: return null
+        val github = providers.firstOrNull { it.id == ProviderIds.GITHUB } ?: return null
+        return safely { github.get(repo) }?.takeIf { bestFile(it)?.second?.installable == true }
+    }
+
     internal suspend fun alternateFor(remote: RemoteAddon): RemoteAddon? {
         fun usable(r: RemoteAddon?) = r?.takeIf { c -> c.provider != remote.provider && bestFile(c)?.second?.installable == true }
         remote.sourceUrl?.let(GitHubProvider::fromUrl)?.let { repo ->
@@ -498,3 +549,11 @@ class AddonManager(
         null
     }
 }
+
+/**
+ * Addons made of several folders whose only complete release is the author's GitHub bundle. Questie 12 split its data into QuestieDB,
+ * which its TOC lists only as optional, so a CurseForge/WoWInterface Questie arrived without it and stopped with "QuestieDB not
+ * installed" (Questie issues #8149, #8161, #8174; user video 2026-11-21). The GitHub bundle has Questie, QuestieDB and QuestieTrace
+ * with a release.json naming the Forever flavour. Keys are normalized names (lower case, letters and digits).
+ */
+internal val BUNDLED_RELEASES = mapOf("questie" to "Questie/Questie")

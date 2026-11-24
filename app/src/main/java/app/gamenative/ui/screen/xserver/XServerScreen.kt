@@ -605,19 +605,38 @@ fun XServerScreen(
     LaunchedEffect(xServerView?.renderer) {
         val screenEffectsConfig = loadScreenEffectsConfig(container)
         when (val renderer = xServerView?.renderer) {
-            is VulkanRenderer -> {
-                if (!app.gamenative.display.WowDisplayBackend.isGamescope(container))
-                    applyScreenEffectsConfig(renderer, screenEffectsConfig)
-            }
+            is VulkanRenderer -> applyScreenEffectsConfig(renderer, screenEffectsConfig)
         }
     }
 
     // WoW: the app's Present limiter (vsync-locked by default) paces frames unless DXVK/VKD3D own pacing.
     val wowApiPacing = remember(container) {
-        container.id == "wow_forever" && !app.gamenative.ui.screen.wow.WowRuntimeTuning.appPacing(context, container)
+        (container.id == "wow_forever" && !app.gamenative.ui.screen.wow.WowRuntimeTuning.appPacing(context, container)).also { api ->
+            // 1.2.26: before the first applyFpsLimiterToEngines, the coming launch's API limit, not the previous session's (only when
+            // no game runs, so a screen rebuilt mid-session keeps the value the running game really started with).
+            if (api && PluviaApp.xEnvironment == null) app.gamenative.ui.screen.wow.WowRuntimeTuning.expectLaunch(context, container)
+        }
     }
 
     // WoW: CPU ADPF runs inside the game process (TurnRIP 1.1.11+); the app-side socket bridge is no longer started.
+
+    // 1.2.20: one writer for TU_FPS_FILE; the panel's rate is re-read when Android switches the display mode (see DriverFpsFile).
+    val driverFpsFile = remember(container) {
+        app.gamenative.ui.screen.wow.WowRuntimeTuning.DriverFpsFile(app.gamenative.ui.screen.wow.WowRuntimeTuning.fpsFile(context))
+    }
+    DisposableEffect(container) {
+        val displayManager = context.getSystemService(DisplayManager::class.java)
+        val listener = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) {}
+            override fun onDisplayRemoved(displayId: Int) {}
+            override fun onDisplayChanged(displayId: Int) {
+                if (displayId == Display.DEFAULT_DISPLAY && container.id == "wow_forever")
+                    driverFpsFile.setPanelHz(app.gamenative.ui.screen.wow.WowRuntimeTuning.panelHz(context))
+            }
+        }
+        displayManager?.registerDisplayListener(listener, android.os.Handler(android.os.Looper.getMainLooper()))
+        onDispose { displayManager?.unregisterDisplayListener(listener) }
+    }
 
     fun applyFpsLimiterToEngines(limit: Int) {
         // With DXVK/VKD3D owning the pacing their limit cannot change in the running game: a lower request is enforced by the app
@@ -626,12 +645,13 @@ fun XServerScreen(
         FrameRating.setLimitHint(live.inForce)
         // TurnRIP 1.1.28 takes the new frame period (ADPF target, frame steering) from this file, read once a second.
         if (container.id == "wow_forever") {
-            val fpsFile = app.gamenative.ui.screen.wow.WowRuntimeTuning.fpsFile(context)
-            val hz = app.gamenative.ui.screen.wow.WowRuntimeTuning.panelHz(context)
-            val fps = app.gamenative.ui.screen.wow.WowRuntimeTuning.driverFps(live.inForce, hz)
-            com.winlator.core.OneShotTasks.execute { app.gamenative.ui.screen.wow.WowRuntimeTuning.writeFpsFile(fpsFile, fps, hz) }
+            driverFpsFile.setLimit(live.inForce, app.gamenative.ui.screen.wow.WowRuntimeTuning.panelHz(context))
+            // 1.2.19: in the background the X limiter runs the game at 15 FPS; the driver is told, or its Balanced mode took those
+            // frames for a scene too slow to count (and, since 1.1.47 counts slow frames, would raise the clock in the background).
+            xServerView?.getxServer()?.getExtension<PresentExtension>(PresentExtension.MAJOR_OPCODE.toInt())
+                ?.setBackgroundListener { background -> driverFpsFile.setBackground(background) }
         }
-        xServerView?.setFrameRateLimit(if (container.id == "wow_forever" && !app.gamenative.display.WowDisplayBackend.isGamescope(container)) live.inForce else limit)
+        xServerView?.setFrameRateLimit(if (container.id == "wow_forever") live.inForce else limit)
         xServerView?.getxServer()
             ?.getExtension<PresentExtension>(PresentExtension.MAJOR_OPCODE.toInt())
             ?.apply {
@@ -644,15 +664,6 @@ fun XServerScreen(
 
     fun tellIfLimitWaitsForRestart(limit: Int) {
         val live = app.gamenative.ui.screen.wow.WowRuntimeTuning.live(wowApiPacing, limit)
-        if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) {
-            val apiLimit = app.gamenative.ui.screen.wow.WowRuntimeTuning.apiLimitAtLaunch
-            if (app.gamenative.ui.screen.wow.WowRuntimeTuning.gamescopeLimitWaitsForRestart(limit, apiLimit)) {
-                app.gamenative.ui.util.SnackbarManager.show(app.gamenative.ui.screen.wow.WowI18n.pick(context,
-                    "Gamescope's game-side FPS limit updates on the next launch.",
-                    "A Gamescope játékoldali FPS-limitje a következő indításkor frissül."))
-            }
-            return
-        }
         if (wowApiPacing && live.deferred) app.gamenative.ui.util.SnackbarManager.show(app.gamenative.ui.screen.wow.WowRuntimeTuning.liveNotice(context, live))
     }
 
@@ -1405,9 +1416,12 @@ fun XServerScreen(
 
     val onKeyEvent: (AndroidEvent.KeyEvent) -> Boolean = keyEvent@{
         if (session.isExiting) return@keyEvent false
-        val isKeyboard = Keyboard.isKeyboardDevice(it.event.device)
-        val isPhysicalKeyboard = isKeyboard && it.event.device?.isVirtual != true
         val isGamepad = ExternalController.isGameController(it.event.device)
+        // Keys from an external non-keyboard device (an MMO mouse's side buttons) go to the game as keys too
+        // (jaredgei/wow-forever-android 85f5d19, #99).
+        val isKeyboard = Keyboard.isKeyboardDevice(it.event.device) ||
+            (!isGamepad && Keyboard.isExternalKeySource(it.event.device))
+        val isPhysicalKeyboard = isKeyboard && it.event.device?.isVirtual != true
         val waitingForManualResume =
             manualResumeMode &&
                 PluviaApp.isOverlayPaused &&
@@ -1793,7 +1807,7 @@ fun XServerScreen(
             val existingXServer =
                 PluviaApp.xEnvironment
                     ?.getComponent<XServerComponent>(XServerComponent::class.java)
-                    ?.xServer
+                    ?.xServer ?: PluviaApp.settingUpXServer
             com.winlator.core.DisplayThreadPriority.configure(container.id == "wow_forever" &&
                 app.gamenative.ui.screen.wow.WowLaunchPolicy.enabled(context,"priority"))
             val xServerToUse = existingXServer ?: XServer(
@@ -1801,41 +1815,11 @@ fun XServerScreen(
                 false,
             )
             // The Vulkan renderer is the only compositor (the OpenGL/VirGL path was removed in v0.1.117).
-            val xServerViewInstance: XServerRendererView = XServerView(context, xServerToUse, container.displayRenderer).apply {
-                val gamescope = app.gamenative.display.WowDisplayBackend.isGamescope(container)
-                setGamescopeMode(gamescope)
-                if (gamescope) {
-                    val guest = xServerToUse.screenInfo.width.toInt() to xServerToUse.screenInfo.height.toInt()
-                    val effects = app.gamenative.display.GamescopeEffects.load(container)
-                    val panelMode = ContextCompat.getSystemService(context, DisplayManager::class.java)
-                        ?.getDisplay(Display.DEFAULT_DISPLAY)?.mode
-                    // A display-sized output only when an upscaling effect needs it: otherwise Gamescope composites and
-                    // publishes 4x the pixels of a 1344x608 game every frame (measured ~3 W more than XServer), while the
-                    // panel's own scaler enlarges a game-sized layer for free.
-                    val output = panelMode?.takeIf { effects.needsPanelOutput }?.let {
-                        app.gamenative.display.GamescopeEffects.outputSize(guest, it.physicalWidth, it.physicalHeight)
-                    } ?: guest
-                    // Review 2026-11-13: only a new session begins one. A view rebuilt for a running game (activity recreation)
-                    // keeps the session's readiness watcher, cursor state and input sink (the pointer position it tracks).
-                    if (existingXServer == null) {
-                        app.gamenative.display.GameNativeDrm.beginSession(
-                            app.gamenative.display.GamescopeWindowPolicy.gameLaunch(true, container.executablePath), output, effects,
-                            app.gamenative.ui.screen.wow.WowRuntimeTuning.gamescopeOwnsFifoPacing(context, container))
-                    }
-                    if (existingXServer == null || xServerToUse.inputEventSink !is app.gamenative.display.GamescopeInputSink) {
-                        xServerToUse.setInputEventSink(app.gamenative.display.GamescopeInputSink(guest.first, guest.second))
-                    }
-                    (renderer as? VulkanRenderer)?.setGamescopeInputScaling(effects.inputScalingMode)
-                    app.gamenative.display.GameNativeDrm.frameListener = {
-                        frameRating?.updateNanos(SystemClock.elapsedRealtimeNanos())
-                        app.gamenative.ui.screen.wow.WowDiagnostics.gamescopeFrame()
-                    }
-                }
-            }
+            val xServerViewInstance: XServerRendererView = XServerView(context, xServerToUse, container.displayRenderer)
             val xServerView = xServerViewInstance.apply {
                 xServerView = this
                 FrameRating.setLimitHint(app.gamenative.ui.screen.wow.WowRuntimeTuning.live(wowApiPacing, if (fpsLimiterEnabled) fpsLimiterTarget else 0).inForce)
-                setFrameRateLimit(if (container.id == "wow_forever" && !app.gamenative.display.WowDisplayBackend.isGamescope(container)) app.gamenative.ui.screen.wow.WowRuntimeTuning.surfaceTarget(container, if (fpsLimiterEnabled) fpsLimiterTarget else 0) else if (fpsLimiterEnabled) fpsLimiterTarget else 0)
+                setFrameRateLimit(if (container.id == "wow_forever") app.gamenative.ui.screen.wow.WowRuntimeTuning.surfaceTarget(container, if (fpsLimiterEnabled) fpsLimiterTarget else 0) else if (fpsLimiterEnabled) fpsLimiterTarget else 0)
                 val renderer = this.renderer
                 if (renderer is VulkanRenderer) {
                     renderer.setSchedulingHints(
@@ -2035,7 +2019,10 @@ fun XServerScreen(
                 windowModificationListener = wmListener
                 mainRoot.tag = XServerViewReleaseBinding(this, wmListener, screenWidth = screenWidth)
 
-                if (PluviaApp.xEnvironment == null) {
+                // Review 3 (5): a screen rebuilt while the first setup still runs shows that setup's X server and starts no second one.
+                val setupXServer = getxServer()
+                if (PluviaApp.xEnvironment == null && PluviaApp.settingUpXServer !== setupXServer) {
+                    PluviaApp.settingUpXServer = setupXServer
                     // Launch all blocking wine setup operations on a background thread to avoid blocking main thread
                     val setupExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
                         Thread(r, "WineSetup-Thread").apply { isDaemon = false }
@@ -2050,6 +2037,8 @@ fun XServerScreen(
                             var preparedEnvironment: XEnvironment? = null
                             try {
                                 if (session.isExiting) return@setup
+                                // A setup queued behind another one that already made the environment has nothing left to do.
+                                if (PluviaApp.xEnvironment != null) return@setup
                                 val containerManager = ContainerManager(context)
                                 // Configure WinHandler with container's input API settings
                                 val handler = getxServer().winHandler
@@ -2136,8 +2125,16 @@ fun XServerScreen(
                                     )
                                 }
 
-                                // An exit during the (long, first-boot) prefix extraction: nothing more is extracted for a session that ended.
-                                if (session.isExiting) return@setup
+                                // After the prefix setup above, which can re-extract a stock system.reg: this install's own Windows
+                                // identity (the bundled prefix gives every player the same MachineGuid; jaredgei 248d8d2, #57).
+                                if (container.id == "wow_forever")
+                                    runCatching { app.gamenative.ui.screen.wow.WowMachineIdentity.load(context).applyTo(File(container.rootDir, ".wine")) }
+                                        .onFailure { android.util.Log.w("XServerScreen", "machine identity not applied: $it") }
+
+                                // Review 2026-11-15: no exit check between the prefix setup and the driver files. The prefix setup already
+                                // wrote its version markers, and the wrapper is re-extracted only on a first boot or a wrapper change, so a
+                                // session that stopped here left libvulkan_wrapper.so missing for good after an imagefs reinstall. The
+                                // check after the driver files below still stops the launch.
                                 app.gamenative.ui.screen.wow.WowLaunchProgress.reach(0.52f, 0.60f, 2500)
                                 runBlocking {
                                     extractGraphicsDriverFiles(
@@ -2196,11 +2193,13 @@ fun XServerScreen(
                                 "Az előző játékmenet még záródik. Próbáld újra egy pillanat múlva."))
                         }
                       } finally {
+                        if (PluviaApp.settingUpXServer === setupXServer) PluviaApp.settingUpXServer = null
                         PluviaApp.endGameSetup()
                         setupExecutor.shutdown()
                       }
                     }
                     } catch (rejected: java.util.concurrent.RejectedExecutionException) {
+                        if (PluviaApp.settingUpXServer === setupXServer) PluviaApp.settingUpXServer = null
                         PluviaApp.endGameSetup()
                         throw rejected
                     }
@@ -2706,7 +2705,8 @@ fun XServerScreen(
     }
 
     // Element Editor Dialog
-    if (showElementEditor && elementToEdit != null && PluviaApp.inputControlsView != null) {
+    // Review 3: the touch editor, gesture and controller dialogs speak the app's language, not the phone's.
+    if (showElementEditor && elementToEdit != null && PluviaApp.inputControlsView != null) app.gamenative.ui.screen.wow.WowLocalizedResources {
         app.gamenative.ui.component.dialog.ElementEditorDialog(
             element = elementToEdit!!,
             view = PluviaApp.inputControlsView!!,
@@ -2722,7 +2722,7 @@ fun XServerScreen(
     }
 
     // Touch Gesture Settings Dialog
-    if (showTouchGestureDialog) {
+    if (showTouchGestureDialog) app.gamenative.ui.screen.wow.WowLocalizedResources {
         app.gamenative.ui.component.dialog.TouchGestureSettingsDialog(
             gestureConfig = currentGestureConfig,
             onDismiss = { showTouchGestureDialog = false },
@@ -2792,7 +2792,7 @@ fun XServerScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.95f))
-                ) {
+                ) { app.gamenative.ui.screen.wow.WowLocalizedResources {
                     app.gamenative.ui.component.dialog.PhysicalControllerConfigSection(
                         profile = profile,
                         onDismiss = {
@@ -2823,7 +2823,7 @@ fun XServerScreen(
                             resumeIfAllowedAfterOverlay()
                         }
                     )
-                }
+                } }
             }
         }
     }
@@ -3110,10 +3110,9 @@ private fun setupXEnvironment(
         val wow64Mode = container.isWoW64Mode
         guestProgramLauncherComponent.setContainer(container)
         guestProgramLauncherComponent.setWineInfo(xServerState.value.wineInfo)
-        val gameExecutable = app.gamenative.display.GamescopeWindowPolicy.command(
-            xServer.screenInfo.toString(), getWineStartCommand(context, appId, container, envVars, guestProgramLauncherComponent), container.execArgs,
-            app.gamenative.display.GamescopeWindowPolicy.gameLaunch(
-                app.gamenative.display.WowDisplayBackend.isGamescope(container), container.executablePath))
+        val gameExecutable = "wine explorer /desktop=shell,${xServer.screenInfo} " +
+            getWineStartCommand(context, appId, container, envVars, guestProgramLauncherComponent) +
+            if (container.execArgs.isNotEmpty()) " ${container.execArgs}" else ""
         guestProgramLauncherComponent.guestExecutable = gameExecutable
         guestProgramLauncherComponent.isWoW64Mode = wow64Mode
 
@@ -3150,12 +3149,7 @@ private fun setupXEnvironment(
             UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.SYSVSHM_SERVER_PATH),
         ),
     )
-    if (app.gamenative.display.WowDisplayBackend.isGamescope(container)) {
-        environment.addComponent(app.gamenative.display.WowGamescopeComponent(imageFs.rootDir,
-            app.gamenative.display.GamescopeWindowPolicy.gameLaunch(true, container.executablePath)))
-    } else {
-        environment.addComponent(XServerComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.XSERVER_PATH)))
-    }
+    environment.addComponent(XServerComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.XSERVER_PATH)))
     environment.addComponent(NetworkInfoUpdateComponent())
 
     // Microphone support is published through PulseAudio (module-pipe-source), which Wine/Proton's

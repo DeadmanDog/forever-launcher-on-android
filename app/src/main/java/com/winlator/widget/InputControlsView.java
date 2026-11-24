@@ -38,8 +38,6 @@ import java.util.EnumMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
 
 public class InputControlsView extends View {
     public static final float DEFAULT_OVERLAY_OPACITY = 0.4f;
@@ -65,8 +63,22 @@ public class InputControlsView extends View {
     private TouchpadView touchpadView;
     private XServer xServer;
     private final Bitmap[] icons = new Bitmap[40];
-    private Timer mouseMoveTimer;
+    // 1.2.23: runs only while a mouse-move binding is held (MouseMoveTicker); the cursor speed is read on every step.
+    private final MouseMoveTicker mouseMoveTicker = new MouseMoveTicker(new MouseMoveTicker.Source() {
+        @Override public boolean moving() { return mouseMoveOffset.x != 0 || mouseMoveOffset.y != 0; }
+        @Override public void move() {
+            XServer server = xServer;
+            ControlsProfile current = profile;
+            if (server == null || current == null) return;
+            final float cursorSpeed = current.getCursorSpeed();
+            // 1.2.25: fractions carried between ticks (SubpixelAccumulator), not truncated away on each one.
+            int dx = stickRestX.take(mouseMoveOffset.x * 10 * cursorSpeed), dy = stickRestY.take(mouseMoveOffset.y * 10 * cursorSpeed);
+            if (dx != 0 || dy != 0) server.injectPointerMoveDelta(dx, dy);
+        }
+    });
     private final PointF mouseMoveOffset = new PointF();
+    private final com.winlator.math.SubpixelAccumulator stickRestX = new com.winlator.math.SubpixelAccumulator();
+    private final com.winlator.math.SubpixelAccumulator stickRestY = new com.winlator.math.SubpixelAccumulator();
     private boolean showTouchscreenControls = true;
 
     // General look-through owns one movement-only pointer and quarantines background pointers.
@@ -329,6 +341,8 @@ public class InputControlsView extends View {
     }
 
     private void setProfileInternal(ControlsProfile profile, boolean preserveOverlayVisibility) {
+        // deselectAllElements() below clears the latch flag, and a replaced profile's elements are gone: release first.
+        releaseLatchedButtons();
         cancelTouchRouting();
 
         final boolean profileChanged;
@@ -360,10 +374,21 @@ public class InputControlsView extends View {
 
     /** Hides the on-screen controls without losing the active controller profile. */
     public void hideProfileForOverlay() {
+        releaseLatchedButtons();
         cancelTouchRouting();
         synchronized (this) {
             this.profile = null;
         }
+    }
+
+    /** Releases latched toggle / kept-pressed buttons (their key, mouse or gamepad binding) and shows them unlatched. */
+    public void releaseLatchedButtons() {
+        ControlsProfile current;
+        synchronized (this) { current = profile; }
+        if (current == null) return;
+        boolean released = false;
+        for (ControlElement element : current.getElements()) released |= element.releaseLatchedButton();
+        if (released) commitGamepadState();
     }
 
     public boolean isShowTouchscreenControls() {
@@ -423,10 +448,7 @@ public class InputControlsView extends View {
     @Override
     protected void onDetachedFromWindow() {
         cancelTouchRouting();
-        if (mouseMoveTimer != null) {
-            mouseMoveTimer.cancel();
-            mouseMoveTimer = null; // a cancelled Timer cannot be reused; onAttachedToWindow recreates it
-        }
+        mouseMoveTicker.stop();
         super.onDetachedFromWindow();
     }
 
@@ -441,23 +463,7 @@ public class InputControlsView extends View {
     }
 
     private void createMouseMoveTimer() {
-        if (profile != null && mouseMoveTimer == null) {
-            final float cursorSpeed = profile.getCursorSpeed();
-            mouseMoveTimer = new Timer();
-            mouseMoveTimer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    // An exception would end the Timer thread for good and freeze touch mouse movement.
-                    try {
-                        XServer server = xServer;
-                        int dx = (int)(mouseMoveOffset.x * 10 * cursorSpeed), dy = (int)(mouseMoveOffset.y * 10 * cursorSpeed);
-                        // Nothing to move most of the time: a zero delta still cost Gamescope thread hops 60 times a second.
-                        if (server != null && (dx != 0 || dy != 0)) server.injectPointerMoveDelta(dx, dy);
-                    } catch (RuntimeException ignored) {
-                    }
-                }
-            }, 0, 1000 / 60);
-        }
+        if (profile != null) mouseMoveTicker.start();
     }
 
     private void processJoystickInput(ExternalController controller) {

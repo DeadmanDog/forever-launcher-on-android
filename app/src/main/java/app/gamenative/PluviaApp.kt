@@ -51,6 +51,13 @@ class PluviaApp : Application() {
         internal var xEnvironment: XEnvironment? = null
 
         /**
+         * Review 3 (5): the X server of a game setup that is still running. A game screen rebuilt meanwhile (activity recreation)
+         * shows this one and starts no second setup; cleared when the setup ends (its environment then holds the X server).
+         */
+        @Volatile
+        internal var settingUpXServer: com.winlator.xserver.XServer? = null
+
+        /**
          * The game screen that is on display now. The environment outlives a screen that is rebuilt, and its guest-termination
          * callback was created for the first one: it reports to this one, so a recreation cannot swallow the "game ended" event.
          */
@@ -226,10 +233,6 @@ class PluviaApp : Application() {
             return true
         }
 
-        /** True while a game environment exists (Java callers: [xEnvironment] is internal). */
-        @JvmStatic
-        fun hasLiveEnvironment(): Boolean = xEnvironment != null
-
         /**
          * full environment teardown — shared by XServerScreen.exit() and
          * MainActivity.onDestroy fallback so both paths clean up identically
@@ -246,6 +249,8 @@ class PluviaApp : Application() {
                 .onFailure { Unit }
 
             xEnvironment = null
+            // An exit during setup: the next game screen must not take over this session's X server.
+            settingUpXServer = null
             inputControlsView = null
             inputControlsManager = null
             touchpadView = null

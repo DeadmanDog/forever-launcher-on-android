@@ -24,6 +24,7 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
     private final Handler autoRepeatHandler = new Handler(Looper.getMainLooper());
     private byte currentRepeatingKeycode;
     private int currentRepeatingKeysym;
+    private int currentRepeatingShiftedKeysym;
     private int repeatDelayMs = 500;
     private int repeatRateMs = 50;
 
@@ -40,14 +41,20 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
         autoRepeatHandler.removeCallbacksAndMessages(null);
         currentRepeatingKeycode = 0;
         currentRepeatingKeysym = 0;
+        currentRepeatingShiftedKeysym = 0;
     }
 
     private final Runnable autoRepeatRunnable = new Runnable() {
         @Override
         public void run() {
-            if (!sessionClosed && xServer.keyboard.getPressedKeys().contains(currentRepeatingKeycode)) {
-                onKeyPress(currentRepeatingKeycode, currentRepeatingKeysym);
-                autoRepeatHandler.postDelayed(this, repeatRateMs);
+            // 1.2.26: the main looper runs this outside XServer.inject*; it takes the same locks, as the X client thread changes the
+            // window tree and the listener lists under them (the unlocked walk could throw ConcurrentModificationException on the
+            // main thread and end the app while a movement key was held; AutoRepeatLockTest).
+            try (XLock lock = xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.INPUT_DEVICE)) {
+                if (!sessionClosed && xServer.keyboard.getPressedKeys().contains(currentRepeatingKeycode)) {
+                    onKeyPress(currentRepeatingKeycode, currentRepeatingKeysym, currentRepeatingShiftedKeysym, true);
+                    autoRepeatHandler.postDelayed(this, repeatRateMs);
+                }
             }
         }
     };
@@ -257,6 +264,16 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
 
     @Override
     public void onKeyPress(byte keycode, int keysym) {
+        onKeyPress(keycode, keysym, true);
+    }
+
+    @Override
+    public void onKeyPress(byte keycode, int keysym, boolean autoRepeat) {
+        onKeyPress(keycode, keysym, 0, autoRepeat);
+    }
+
+    @Override
+    public void onKeyPress(byte keycode, int keysym, int shiftedKeysym, boolean autoRepeat) {
         Window focusedWindow = xServer.windowManager.getFocusedWindow();
         if (focusedWindow == null) return;
         updatePointWindow();
@@ -280,7 +297,12 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
         short y = xServer.pointer.getY();
         short[] localPoint = eventWindow.rootPointToLocal(x, y);
 
-        if (keysym != 0 && !xServer.keyboard.hasKeysym(keycode, keysym)) {
+        if (shiftedKeysym != 0) {
+            if (keysym != 0 && !xServer.keyboard.hasKeysyms(keycode, keysym, shiftedKeysym)) {
+                xServer.keyboard.setKeysyms(keycode, keysym, shiftedKeysym);
+                eventWindow.sendEvent(new MappingNotify(MappingNotify.Request.KEYBOARD, keycode, 1));
+            }
+        } else if (keysym != 0 && !xServer.keyboard.hasKeysym(keycode, keysym)) {
             xServer.keyboard.setKeysyms(keycode, keysym, keysym);
             eventWindow.sendEvent(new MappingNotify(MappingNotify.Request.KEYBOARD, keycode, 1));
         }
@@ -288,9 +310,10 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
         eventWindow.sendEvent(Event.KEY_PRESS, new KeyPress(keycode, xServer.windowManager.rootWindow, eventWindow, child, x, y, localPoint[0], localPoint[1], keyButMask));
 
         autoRepeatHandler.removeCallbacks(autoRepeatRunnable);
-        if (sessionClosed) return;
+        if (sessionClosed || !autoRepeat) return;
         currentRepeatingKeycode = keycode;
         currentRepeatingKeysym = keysym;
+        currentRepeatingShiftedKeysym = shiftedKeysym;
         autoRepeatHandler.postDelayed(autoRepeatRunnable, repeatDelayMs);
     }
 
@@ -362,10 +385,12 @@ public class InputDeviceManager implements Pointer.OnPointerMotionListener, Keyb
         return new Bitmask(keyButMask.getBits() & CORE_KEY_BUT_MASK);
     }
 
+    /** Primitive protocol state, avoiding a temporary Bitmask for QueryPointer replies. */
+    public long getKeyButMaskBits() {
+        return xServer.pointer.getButtonMask().getBits() | xServer.keyboard.getModifiersMask().getBits();
+    }
+
     public Bitmask getKeyButMask() {
-        Bitmask keyButMask = new Bitmask();
-        keyButMask.join(xServer.pointer.getButtonMask());
-        keyButMask.join(xServer.keyboard.getModifiersMask());
-        return keyButMask;
+        return new Bitmask(getKeyButMaskBits());
     }
 }

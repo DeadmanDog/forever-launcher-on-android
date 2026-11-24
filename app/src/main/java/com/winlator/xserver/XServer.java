@@ -163,19 +163,7 @@ public class XServer {
         return null;
     }
 
-    public interface InputEventSink {
-        void pointerMove(int x, int y);
-        void pointerMoveDelta(int dx, int dy);
-        void pointerButton(Pointer.Button button, boolean pressed);
-        void keyPress(XKeycode key, int keysym);
-        void keyRelease(XKeycode key);
-    }
-    private volatile InputEventSink inputEventSink;
-    public void setInputEventSink(InputEventSink sink) { inputEventSink = sink; }
-    public InputEventSink getInputEventSink() { return inputEventSink; }
     public void injectPointerMove(int x, int y) {
-        InputEventSink sink = inputEventSink;
-        if (sink != null) { try (XLock ignored = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) { pointer.setX((short)x); pointer.setY((short)y); sink.pointerMove(x,y); } return; }
 
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             pointer.setPosition(x, y);
@@ -183,8 +171,6 @@ public class XServer {
     }
 
     public void injectPointerMoveDelta(int dx, int dy) {
-        InputEventSink sink = inputEventSink;
-        if (sink != null) { try (XLock ignored = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) { sink.pointerMoveDelta(dx,dy); pointer.setX((short)(pointer.getX()+dx)); pointer.setY((short)(pointer.getY()+dy)); } return; }
         if (dx == 0 && dy == 0) return;
 
         WinHandler handler = winHandler;
@@ -249,8 +235,6 @@ public class XServer {
     }
 
     public void injectPointerButtonPress(Pointer.Button buttonCode) {
-        InputEventSink sink = inputEventSink;
-        if (sink != null) { try (XLock ignored = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) { if (pointer.updateButtonState(buttonCode, true)) sink.pointerButton(buttonCode,true); } return; }
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             pointer.setButton(buttonCode, true);
 
@@ -261,8 +245,6 @@ public class XServer {
     }
 
     public void injectPointerButtonRelease(Pointer.Button buttonCode) {
-        InputEventSink sink = inputEventSink;
-        if (sink != null) { try (XLock ignored = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) { if (pointer.updateButtonState(buttonCode, false)) sink.pointerButton(buttonCode,false); } return; }
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             pointer.setButton(buttonCode, false);
 
@@ -277,16 +259,49 @@ public class XServer {
     }
 
     public void injectKeyPress(XKeycode xKeycode, int keysym) {
-        InputEventSink sink = inputEventSink;
-        if (sink != null) { try (XLock ignored = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) { keyboard.trackSinkKey(xKeycode.getId(), true); sink.keyPress(xKeycode,keysym); } return; }
+        injectKeyPress(xKeycode, keysym, true);
+    }
+
+    /** As injectKeyPress, telling X what the key types without ([keysym]) and with Shift ([shiftedKeysym]) (jaredgei 83cdbc9). */
+    public void injectKeyPress(XKeycode xKeycode, int keysym, int shiftedKeysym, boolean autoRepeat) {
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
-            keyboard.setKeyPress(xKeycode.getId(), keysym);
+            keyboard.setKeyPress(xKeycode.getId(), keysym, shiftedKeysym, autoRepeat);
+        }
+    }
+
+    /**
+     * jaredgei 634d1e9 (#43): types one character no key on the US layout produces (Hungarian ő, ű, á, é ..., Cyrillic) from the
+     * on-screen keyboard. It goes through a keycode no physical key uses, so the real keys keep their keysyms and Wine its virtual
+     * keys (WASD and keybinds unchanged).
+     */
+    public static final byte TEXT_KEYCODE = 93;
+
+    /**
+     * 1.2.15: puts [text] on the X CLIPBOARD, owned by the server itself (see SelectionManager.setServerText). Wine takes it into
+     * the Windows clipboard, so the game pastes it at once with Ctrl+V instead of receiving it as one key press per character.
+     */
+    public int setClipboardText(String text) {
+        try (XLock lock = lock(Lockable.WINDOW_MANAGER)) {
+            return selectionManager.setServerText(Atom.internAtom("CLIPBOARD"), text, 0);
+        }
+    }
+
+    public void injectTextCharacter(int codePoint) {
+        int keysym = Keyboard.unicodeKeysym(codePoint);
+        try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
+            keyboard.setKeyPress(TEXT_KEYCODE, keysym, false);
+            keyboard.setKeyRelease(TEXT_KEYCODE);
+        }
+    }
+
+    /** [autoRepeat] false for a key that repeats by itself (hardware keyboard): the X server does not start its own repeat. */
+    public void injectKeyPress(XKeycode xKeycode, int keysym, boolean autoRepeat) {
+        try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
+            keyboard.setKeyPress(xKeycode.getId(), keysym, autoRepeat);
         }
     }
 
     public void injectKeyRelease(XKeycode xKeycode) {
-        InputEventSink sink = inputEventSink;
-        if (sink != null) { try (XLock ignored = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) { keyboard.trackSinkKey(xKeycode.getId(), false); sink.keyRelease(xKeycode); } return; }
         try (XLock lock = lock(Lockable.WINDOW_MANAGER, Lockable.INPUT_DEVICE)) {
             keyboard.setKeyRelease(xKeycode.getId());
         }

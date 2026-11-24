@@ -23,7 +23,7 @@ struct VulkanRendererContext {
  bool waitForFrameFence(int){++waits;return true;}
  void freeRetiredTextures(std::vector<WinTex>&);
  void commitTextureRetirements();
- void drainFinishedOtherSlots(){}void deliverReleasedIdle(){}
+ void drainFinishedOtherSlots(){}void pollIdleTokens(){}void deliverReleasedIdle(){}
  void capture(){/* CAPTURE */}
  void completedSlot(){/* COMPLETED */}
 };

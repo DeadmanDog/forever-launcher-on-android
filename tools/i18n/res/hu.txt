@@ -1,0 +1,214 @@
+cancel|Mégse
+delete|Törlés
+copy|Másolás
+edit|Szerkesztés
+add|Hozzáadás
+copy_from|Másolás innen
+ok|OK
+game_executable_not_found_title|Nem indítható
+game_executable_not_found|A futtatható fájlt nem sikerült automatikusan kiválasztani. Add meg az útvonalát a konténer beállításaiban.
+save|Mentés
+discard|Elvetés
+resume_game|Játék folytatása
+extra|Extra
+clear_search|Keresés törlése
+face_buttons_category|Előlapi gombok
+shoulder_buttons_category|Vállgombok
+menu_buttons_category|Menügombok
+thumbstick_buttons_category|Kargombok
+left_stick|Bal kar
+right_stick|Jobb kar
+dpad_category|D-pad
+dpad_up|D-pad fel
+dpad_down|D-pad le
+dpad_left|D-pad balra
+dpad_right|D-pad jobbra
+bind_button|Hozzárendelés: %1$s
+current_binding|Jelenlegi: %1$s
+search_placeholder|Keresés…
+category|Kategória
+mouse|Egér
+gamepad|Kontroller
+binding_none|Nincs
+clear_binding|Hozzárendelés törlése
+no_bindings_found|Nincs találat
+edit_element|%1$s szerkesztése
+element_position_size|Pozíció: (%1$d, %2$d) • Méret: %3$.2fx
+appearance|Megjelenés
+label_text|Felirat
+label_text_subtitle|Egyéni szöveg ehhez a gombhoz
+element_type|Elem típusa
+element_type_subtitle|A vezérlő típusának módosítása
+shape|Alak
+shape_subtitle|Megjelenés
+shape_restricted|%1$s csak %2$s alakú lehet
+bindings|Hozzárendelések
+bindings_auto_generated|Hozzárendelések (automatikus)
+bindings_auto_generated_subtitle|A tartománygomb hozzárendelései automatikusan készülnek
+range_button_settings|Tartománygomb beállításai
+range_type|Billentyűtartomány
+range_type_subtitle|Melyik billentyűkön lépkedjen végig
+range_orientation|Irány
+range_orientation_subtitle|A tartománygomb elrendezése
+range_orientation_horizontal|Vízszintes
+range_orientation_vertical|Függőleges
+range_visible_segments|Látható részek
+range_visible_segments_subtitle|Egyszerre látható billentyűk száma: %1$d
+range_lock_scrolling|Görgetés zárolása
+range_lock_scrolling_subtitle|Ne lehessen görgetni a tartományon
+button_toggleable|Kapcsoló mód
+button_toggleable_subtitle|Koppintásra bekapcsol, újabb koppintásra kikapcsol
+control_appearance|Vezérlő megjelenése
+button_color|Vezérlő színe
+button_color_subtitle|Hex szín a vezérlő keretéhez, ikonjához és szövegéhez
+button_active_color|Lenyomott szín
+button_active_color_subtitle|Szín lenyomva vagy aktívan
+button_opacity|Vezérlő átlátszatlansága
+button_opacity_inherited|%1$d%% (általános alapérték)
+control_stroke_width|Vonalvastagság
+control_stroke_width_subtitle|A vezérlők keretének és elválasztóinak vastagsága
+control_stroke_width_thin|Vékony
+control_stroke_width_default|Alapértelmezett
+control_stroke_width_thick|Vastag
+control_stroke_width_extra_thick|Extra vastag
+button_look_through|Átnyúlás
+button_look_through_subtitle|Ebből a gombból húzva a mozgást vagy a kamerát is irányíthatod. Érintőképernyős módban nem érhető el.
+preview|Előnézet
+active|Aktív
+apply_all|Mindre alkalmaz
+copy_appearance_from_button|Megjelenés másolása másik vezérlőről
+toast_no_buttons_to_copy_appearance|Nincs másik vezérlő, amelyről a megjelenést másolni lehetne
+toast_copied_button_appearance|Vezérlő megjelenése átmásolva
+toast_applied_button_appearance|Megjelenés alkalmazva minden vezérlőre
+primary_action|Elsődleges művelet
+secondary_action|Másodlagos művelet
+direction_up|Fel
+direction_right|Jobbra
+direction_down|Le
+direction_left|Balra
+mouse_suffix| (egér)
+slot_number|%1$d. hely
+button_slots_help|A gombok legfeljebb 2 hozzárendelést kaphatnak: elsődleges (nyomás) és másodlagos (hosszú nyomás)
+properties|Tulajdonságok
+position|Pozíció
+position_value|X: %1$d, Y: %2$d
+unsaved_changes|Mentetlen módosítások
+unsaved_changes_message|Mentetlen módosításaid vannak. Mented vagy elveted őket?
+adjust_size|Méret igazítása
+reset|Visszaállítás
+done|Kész
+copy_size_from_element|Méret másolása másik elemről
+toast_no_elements_to_copy|Nincs másik elem, amelyről a méretet másolni lehetne
+toast_copied_size|Méret átmásolva: %.2fx
+quick_presets|Gyors előbeállítások
+preset_arrows|Nyilak
+preset_mouse|Egér
+preset_dpad|D-pad
+preset_left_stick|Bal kar
+preset_right_stick|Jobb kar
+physical_controller_config|Fizikai kontroller hozzárendelései
+button_a|A gomb
+button_b|B gomb
+button_x|X gomb
+button_y|Y gomb
+button_start|Start / Options
+button_select|Select / View / Share
+button_l3|L3 (bal kar lenyomása)
+button_r3|R3 (jobb kar lenyomása)
+left_stick_up|Bal kar fel
+left_stick_down|Bal kar le
+left_stick_left|Bal kar balra
+left_stick_right|Bal kar jobbra
+right_stick_up|Jobb kar fel
+right_stick_down|Jobb kar le
+right_stick_left|Jobb kar balra
+right_stick_right|Jobb kar jobbra
+button_home|Home / Guide / PS
+not_set|Nincs beállítva
+toast_controls_reset|Vezérlők visszaállítva
+size|Méret
+close|Bezárás
+gesture_section_single_finger|Egy ujj
+gesture_section_two_finger|Két ujj
+gesture_section_three_finger|Három ujj
+gesture_section_other|Egyéb
+gesture_tap|Koppintás
+gesture_drag|Ujj húzása
+gesture_hold_mouse_button_while_touching|Egérgomb nyomva tartása érintés közben
+gesture_mouse_button_label|Egérgomb
+gesture_long_press|Hosszú nyomás
+gesture_long_press_delay|Hosszú nyomás késleltetése (ms)
+gesture_double_tap|Dupla koppintás
+gesture_double_tap_subtitle|Dupla bal kattintás
+gesture_double_tap_delay|Dupla koppintás késleltetése (ms)
+gesture_two_finger_drag|Kétujjas húzás
+gesture_pinch|Csippentés be/ki
+gesture_two_finger_tap|Kétujjas koppintás
+gesture_action_left_click|Bal kattintás
+gesture_action_right_click|Jobb kattintás
+gesture_action_middle_click|Középső kattintás
+gesture_pan_middle_mouse|Pásztázás középső egérgombbal
+gesture_pan_inverted_middle_mouse|Fordított pásztázás középső egérgombbal
+gesture_pan_inverted_wasd|Fordított WASD
+gesture_pan_arrow_keys|Nyílbillentyűk
+gesture_pan_inverted_arrow_keys|Fordított nyílbillentyűk
+gesture_pan_left_click_drag|Húzás bal kattintással
+gesture_pan_right_click_drag|Húzás jobb kattintással
+gesture_zoom_scroll_wheel|Görgő
+gesture_zoom_plus_minus|+/- billentyűk
+gesture_zoom_page_up_down|Page Up/Down
+gesture_action_label|Művelet
+gesture_action_show_keyboard|Billentyűzet megjelenítése
+gesture_mouse_behavior_label|Egér viselkedése
+gesture_mouse_behavior_click|Kattintás
+gesture_mouse_behavior_hold|Nyomva tartás
+gesture_header_special|Különleges
+gesture_header_mouse|Egér
+gesture_header_common_game|Gyakori játékbillentyűk
+gesture_header_navigation_editing|Navigáció / szerkesztés
+gesture_header_symbols|Szimbólumok
+gesture_header_letters|Betűk A–Z
+gesture_header_numbers|Számok 0–9
+gesture_header_numpad|Numerikus billentyűzet
+gesture_header_function_keys|Funkcióbillentyűk
+gesture_header_modifiers_locks|Módosítók / zárak
+gesture_two_finger_hold|Kétujjas nyomva tartás
+gesture_two_finger_hold_delay|Kétujjas nyomva tartás késleltetése (ms)
+gesture_three_finger_tap|Háromujjas koppintás
+gesture_three_finger_drag|Háromujjas húzás
+gesture_three_finger_hold|Háromujjas nyomva tartás
+gesture_three_finger_hold_delay|Háromujjas nyomva tartás késleltetése (ms)
+gesture_threshold|Gesztusküszöb (px)
+gesture_mouse_drag_movement|Egérmozgás húzáskor
+gesture_mouse_drag_movement_subtitle|A Közvetlen a legtöbb játékhoz jó. Ha húzáskor a kamera vagy a kurzor rosszul mozog, válaszd a Relatívat
+gesture_mouse_drag_movement_direct|Közvetlen
+gesture_mouse_drag_movement_relative|Relatív
+gesture_show_click_highlight|Kattintás jelzése
+gesture_show_click_highlight_subtitle|Kör a koppintás helyén
+gesture_show_debug_overlay|Gesztus-hibakereső réteg
+gesture_show_debug_overlay_subtitle|Átmeneti gesztusfeliratok fent középen
+gesture_show_cursor_touchscreen_mode|Kurzor érintőképernyős módban
+gesture_show_cursor_touchscreen_mode_subtitle|Az egérkurzor látható marad, amíg az érintőgesztusok aktívak
+main_installing_bionic|Bionic összetevők telepítése...
+download_failed_title|Sikertelen letöltés
+install_failed_title|Sikertelen telepítés
+install_failed_message|A rendszerfájlokat nem sikerült telepíteni. Próbáld újra. Ha a hiba megmarad, próbálj másik hálózatot vagy VPN-t.
+back|Vissza
+radial_menu_settings_title|Radiálmenü
+radial_menu_cancel|Mégse
+radial_menu_slot_count|Helyek
+radial_menu_slot_count_subtitle|%1$d hely bekapcsolva
+radial_menu_decrease_slots|Kevesebb hely
+radial_menu_increase_slots|Több hely
+radial_menu_slots|Kerék helyei
+radial_menu_slot_title|%1$d. hely
+radial_menu_slot_label_hint|Felirat
+radial_menu_slot_binding|%1$d. hely hozzárendelése
+radial_menu_slot_binding_summary|Hozzárendelés: %1$s
+radial_menu_preset_common|Gyakori
+radial_menu_preset_weapons|Fegyverek
+gesture_action_open_radial_menu|Radiálmenü megnyitása
+binding_mode_simultaneous|Egyszerre
+binding_mode_sequence|Sorban
+binding_sequence_delay_ms|Sorrend késleltetése (ms)
+binding_sequence_current_format|%1$s (%2$d ms)

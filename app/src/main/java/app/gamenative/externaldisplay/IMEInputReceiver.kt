@@ -39,6 +39,26 @@ class IMEInputReceiver(
     }
 
     companion object {
+        /**
+         * The text to paste: Android's own clipboard when it holds the pasted text and more (a keyboard may cut a very long paste
+         * short), else what the keyboard committed. Carriage returns are ignored in the comparison (\r\n vs \n, a cut inside \r\n).
+         */
+        @JvmStatic
+        fun fullClipboardText(committed: String, clipboard: String?): String {
+            if (clipboard == null || clipboard.length <= committed.length) return committed
+            val normal = { t: String -> t.replace("\r", "") }
+            val clip = normal(clipboard)
+            val got = normal(committed)
+            return if (got.isNotEmpty() && clip.startsWith(got)) clipboard else committed
+        }
+
+        /** Commits this long (in characters) are pasted through the clipboard; typing is fine below (WoW chat takes 255). */
+        const val PASTE_VIA_CLIPBOARD_MIN = 64
+        /** Pieces of one paste that arrive within this time of each other are joined. */
+        const val PASTE_GATHER_MS = 250L
+        /** How long to wait for Wine to read the new clipboard before Ctrl+V (it checks every 2 s, at once after SelectionClear). */
+        const val CLIPBOARD_READ_TIMEOUT_MS = 3000L
+
         private val SHIFTED_SYMBOLS = setOf(
             ')', '!', '@', '#', '$', '%', '^', '&', '*', '(',
             '_', '+', '{', '}', '|', ':', '"', '<', '>', '?', '~',
@@ -74,8 +94,17 @@ class IMEInputReceiver(
 
         return object : BaseInputConnection(this, false) {
             override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-
-                text?.let(::typeText)
+                if (text == null) return true
+                // 1.2.15: a long paste (a RestedXP guide is tens of thousands of characters) went in as one key press per character
+                // on the UI thread and froze everything; it now goes through the clipboard and one Ctrl+V.
+                // 1.2.16: a keyboard may hand a very long paste over in several pieces (each one replaced the previous on the
+                // clipboard, so only a part arrived): pieces that follow within PASTE_GATHER_MS are joined into one paste.
+                if (pendingPaste.isNotEmpty() || Character.codePointCount(text, 0, text.length) >= PASTE_VIA_CLIPBOARD_MIN) {
+                    pendingPaste.append(text)
+                    removeCallbacks(flushPaste)
+                    postDelayed(flushPaste, PASTE_GATHER_MS)
+                }
+                else typeText(text)
                 return true
             }
 
@@ -116,8 +145,98 @@ class IMEInputReceiver(
         val requiresShift: Boolean,
     )
 
+    private val pasteDeliveryLock = Any()
+    private var pasteRevision = 0L
+    private var pasteWorker: Thread? = null
+    private val pendingPaste = StringBuilder()
+    private val flushPaste = Runnable {
+        val pasted = pendingPaste.toString()
+        pendingPaste.setLength(0)
+        if (imeSessionActive && isAttachedToWindow && pasted.isNotEmpty()) {
+            pasteViaClipboard(fullClipboardText(pasted, androidClipboardText()))
+        }
+    }
+
+    private fun androidClipboardText(): String? = runCatching {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+    }.getOrNull()
+
+    /**
+     * [text] goes to the X CLIPBOARD (owned by the X server); once Wine has read the new clipboard (or after
+     * [CLIPBOARD_READ_TIMEOUT_MS]) the game gets Ctrl+V. Off the UI thread: the wait can take up to Wine's 2 s check.
+     */
+    fun pasteViaClipboard(text: String) {
+        synchronized(pasteDeliveryLock) {
+            pasteWorker?.interrupt()
+            val revision = ++pasteRevision
+            val generation = xServer.setClipboardText(text)
+            pasteWorker = Thread({
+                try {
+                    val deadline = android.os.SystemClock.uptimeMillis() + CLIPBOARD_READ_TIMEOUT_MS
+                    while (xServer.selectionManager.servedGeneration < generation && android.os.SystemClock.uptimeMillis() < deadline) {
+                        Thread.sleep(20)
+                    }
+                    // Check and delivery are atomic against hide/detach or another paste.
+                    synchronized(pasteDeliveryLock) delivery@ {
+                        if (revision != pasteRevision || Thread.currentThread().isInterrupted) return@delivery
+                        if (xServer.selectionManager.servedGeneration < generation) android.util.Log.w("IMEInputReceiver", "Clipboard not read by Wine yet; sending Ctrl+V anyway")
+                        xServer.injectKeyPress(com.winlator.xserver.XKeycode.KEY_CTRL_L, 0, false)
+                        try {
+                            try { xServer.injectKeyPress(com.winlator.xserver.XKeycode.KEY_V, 0, false) }
+                            finally { xServer.injectKeyRelease(com.winlator.xserver.XKeycode.KEY_V) }
+                        } finally {
+                            xServer.injectKeyRelease(com.winlator.xserver.XKeycode.KEY_CTRL_L)
+                        }
+                    }
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                } finally {
+                    synchronized(pasteDeliveryLock) {
+                        if (pasteWorker === Thread.currentThread()) pasteWorker = null
+                    }
+                }
+            }, "clipboard-paste").apply { isDaemon = true; start() }
+        }
+    }
+
+    /** A gathered paste goes out at once (its worker still waits for Wine before Ctrl+V). */
+    private fun deliverPendingPaste() {
+        if (pendingPaste.isEmpty()) return
+        removeCallbacks(flushPaste)
+        flushPaste.run()
+    }
+
+    /** No queued paste may cross a session boundary (the receiver leaving its window). */
+    private fun cancelPendingPaste() {
+        removeCallbacks(flushPaste)
+        pendingPaste.setLength(0)
+        synchronized(pasteDeliveryLock) {
+            ++pasteRevision
+            pasteWorker?.interrupt()
+            pasteWorker = null
+        }
+    }
+
+    override fun onDetachedFromWindow() {
+        cancelPendingPaste()
+        imeSessionActive = false
+        super.onDetachedFromWindow()
+    }
+
     fun typeText(text: CharSequence) {
-        text.forEach(::sendCharacterToGame)
+        var index = 0
+        while (index < text.length) {
+            val codePoint = Character.codePointAt(text, index)
+            index += Character.charCount(codePoint)
+            when {
+                codePoint <= 0xFFFF && charToKeyDispatch(codePoint.toChar()) != null -> sendCharacterToGame(codePoint.toChar())
+                // jaredgei 634d1e9 (#43): a character with no key on the US layout (Hungarian ő, ű, á, é ..., Cyrillic) used to be
+                // dropped; it is sent as the character itself.
+                !Character.isISOControl(codePoint) -> xServer.injectTextCharacter(codePoint)
+                else -> Unit // Never log input-derived codepoints: this path also types login secrets.
+            }
+        }
     }
 
     private fun sendCharacterToGame(char: Char) {
@@ -226,6 +345,9 @@ class IMEInputReceiver(
 
     fun hideKeyboard() {
         post {
+            // Closing the keyboard (Back right after pasting a guide) sends the paste instead of dropping it; only a receiver
+            // that leaves the window (game exit, screen gone) cancels it.
+            deliverPendingPaste()
             val imm = displayContext.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
             imm?.hideSoftInputFromWindow(windowToken, 0)
             clearFocus()

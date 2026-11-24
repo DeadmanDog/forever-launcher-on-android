@@ -1072,10 +1072,10 @@ public class WinHandler {
         GamepadState state = controller.state;
         buffer.putInt(OFF_CONNECTED, 1);
 
-        buffer.putShort(OFF_LX, (short)(state.thumbLX * 32767));
-        buffer.putShort(OFF_LY, (short)(state.thumbLY * 32767));
-        buffer.putShort(OFF_RX, (short)(state.thumbRX * 32767));
-        buffer.putShort(OFF_RY, (short)(state.thumbRY * 32767));
+        buffer.putShort(OFF_LX, GamepadAxis.toShort(state.thumbLX));
+        buffer.putShort(OFF_LY, GamepadAxis.toShort(state.thumbLY));
+        buffer.putShort(OFF_RX, GamepadAxis.toShort(state.thumbRX));
+        buffer.putShort(OFF_RY, GamepadAxis.toShort(state.thumbRY));
         // Clamp the raw value first – some firmwares report 1.00–1.02 at the top end
         float rawL = Math.max(0f, Math.min(1f, state.triggerL));
         float rawR = Math.max(0f, Math.min(1f, state.triggerR));
@@ -1117,10 +1117,10 @@ public class WinHandler {
         buffer.putInt(OFF_CONNECTED, 1);
 
         // Axes: write by fixed offsets, not sequential position
-        buffer.putShort(OFF_LX, (short) (state.thumbLX * 32767));
-        buffer.putShort(OFF_LY, (short) (state.thumbLY * 32767));
-        buffer.putShort(OFF_RX, (short) (state.thumbRX * 32767));
-        buffer.putShort(OFF_RY, (short) (state.thumbRY * 32767));
+        buffer.putShort(OFF_LX, GamepadAxis.toShort(state.thumbLX));
+        buffer.putShort(OFF_LY, GamepadAxis.toShort(state.thumbLY));
+        buffer.putShort(OFF_RX, GamepadAxis.toShort(state.thumbRX));
+        buffer.putShort(OFF_RY, GamepadAxis.toShort(state.thumbRY));
 
         // Triggers: curve and map to signed short range like your current code
         float rawL = Math.max(0f, Math.min(1f, state.triggerL));

@@ -95,13 +95,23 @@ public class PresentExtension implements Extension {
         background = value;
         if (vsyncBefore != (vsyncPacing && !background)) replacePacer();
         else idlePacer.setFrameRateLimit(effectiveLimit());
+        java.util.function.Consumer<Boolean> listener = backgroundListener;
+        if (listener != null) listener.accept(value);
     }
+
+    private volatile java.util.function.Consumer<Boolean> backgroundListener;
+
+    /**
+     * 1.2.19: told every background/foreground switch (it must only queue work). The driver's Balanced GPU mode has to know the
+     * background rate: with the foreground limit it took the 15 FPS frames for a scene too slow to count.
+     */
+    public void setBackgroundListener(java.util.function.Consumer<Boolean> listener) { backgroundListener = listener; }
 
     /**
      * Frames per second while the app is in the background: nobody sees them, but the game kept rendering at the full limit
      * (about 6 W on the RedMagic). 15 still turns the game's main loop over often enough to keep its connection.
      */
-    static final int BACKGROUND_FPS = 15;
+    public static final int BACKGROUND_FPS = 15;
 
     int effectiveLimit() {
         if (!background) return frameRateLimit;

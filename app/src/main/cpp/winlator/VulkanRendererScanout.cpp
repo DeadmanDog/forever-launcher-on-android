@@ -453,8 +453,15 @@ void VulkanRendererContext::scanoutSetCursorVisible(bool visible) {
 void VulkanRendererContext::scanoutSetDst(int x, int y, int w, int h) {
     // The four numbers are one rectangle: the render and X threads read them as a snapshot under the same mutex.
     std::lock_guard<std::mutex> lk(scanoutMutex);
+    if (scanoutDstX == x && scanoutDstY == y && scanoutDstW == w && scanoutDstH == h) return;
     scanoutDstX=x; scanoutDstY=y; scanoutDstW=w; scanoutDstH=h;
     scanoutGeoDirty = true;
+    // The stationary cursor uses the same viewport as the game layer.
+    if (scanoutActive.load()) {
+        cursorPosDirty = true;
+        cursorMoved.store(true, std::memory_order_relaxed);
+        renderWake.notify();
+    }
 }
 
 void VulkanRendererContext::scanoutSetCursorImage(void* pixels, short w, short h, short stride) {
@@ -516,6 +523,9 @@ void VulkanRendererContext::scanoutSetCursorPos(short x, short y, short hotX, sh
     if (cw > 0) x = (short)std::max<int32_t>(0, std::min<int32_t>(x, cw - 1));
     if (ch > 0) y = (short)std::max<int32_t>(0, std::min<int32_t>(y, ch - 1));
     { std::lock_guard<std::mutex> lk(scanoutMutex);
+      if (pendingCursorX == x && pendingCursorY == y &&
+          pendingCursorHotX == hotX && pendingCursorHotY == hotY &&
+          !cursorImageDirty) return;
       pendingCursorX=x; pendingCursorY=y; pendingCursorHotX=hotX; pendingCursorHotY=hotY;
       cursorPosDirty=true; }
     cursorMoved.store(true, std::memory_order_relaxed);

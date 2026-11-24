@@ -379,4 +379,38 @@ class AddonManagerTest {
         assertEquals(AddonFlavor.CLASSIC, result.flavor)
         assertThrows(IllegalArgumentException::class.java) { runBlocking { manager().installFromUrl("not a url") } }
     }
+
+    /** 1.2.8 (user video): a CurseForge/WoWInterface Questie came without QuestieDB; Questie installs from its GitHub bundle. */
+    @Test
+    fun questieFromAnotherSourceInstallsTheCompleteGitHubBundle() = runBlocking {
+        zips["/zips/QuestieOnly.zip"] = TestZips.addon("Questie")
+        siteA.addons = listOf(remote("site-a", "334372", "Questie", latest = mapOf(AddonFlavor.FOREVER to file("q1", "${server.base()}/zips/QuestieOnly.zip"))))
+        zips["/zips/QuestieBundle.zip"] = TestZips.text(
+            "Questie/Questie_Forever.toc" to "## Interface: 16001\n## Title: Questie\n## Version: 12.11.1\n",
+            "QuestieDB/QuestieDB_Forever.toc" to "## Interface: 16001\n## Title: QuestieDB\n",
+            "QuestieTrace/QuestieTrace-Forever.toc" to "## Interface: 16001\n## Title: QuestieTrace\n")
+        jsonRoutes["/repos/Questie/Questie/releases/latest"] = """
+            {"tag_name":"bundle/v12.11.1","name":"Questie","assets":[
+              {"id":21,"name":"Questie-v12.11.1.zip","content_type":"application/zip","browser_download_url":"${server.base()}/zips/QuestieBundle.zip"},
+              {"id":22,"name":"release.json","content_type":"application/json","browser_download_url":"${server.base()}/rel/release.json"}]}
+        """.trimIndent()
+        jsonRoutes["/rel/release.json"] = """{"releases":[{"filename":"Questie-v12.11.1.zip","nolib":false,"metadata":[{"flavor":"classic","interface":11508},{"flavor":"forever","interface":16001}]}]}"""
+        val github = GitHubProvider(OkHttpClient(), apiBase = server.base(), catalogUrl = "${server.base()}/no-catalog.json")
+
+        val result = manager(siteA, github).install(siteA.addons.single())
+
+        assertEquals("github:Questie/Questie", result.id)
+        assertEquals(listOf("Questie", "QuestieDB", "QuestieTrace"), result.folders)
+        assertTrue(File(addonsDir, "QuestieDB/QuestieDB_Forever.toc").isFile)
+        assertFalse("/zips/QuestieOnly.zip" in requested)
+    }
+
+    @Test
+    fun withoutAGitHubBundleQuestieStillInstallsFromItsOwnSource() = runBlocking {
+        zips["/zips/QuestieOnly.zip"] = TestZips.addon("Questie")
+        siteA.addons = listOf(remote("site-a", "334372", "Questie", latest = mapOf(AddonFlavor.FOREVER to file("q1", "${server.base()}/zips/QuestieOnly.zip"))))
+        val result = manager(siteA).install(siteA.addons.single())
+        assertEquals("site-a:334372", result.id)
+        assertEquals(listOf("Questie"), result.folders)
+    }
 }

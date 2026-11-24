@@ -45,17 +45,18 @@ class WowRadioRowAlignmentTest {
         }
     }).around(rule)
 
-    @Test fun displayBackendLabelsSitLevelWithTheirDots() {
+    /** 1.2.7: the display backend choice is gone; the game image output choice has the same radio rows. */
+    @Test fun gameImageOutputLabelsSitLevelWithTheirDots() {
         rule.setContent {
             Box(Modifier.requiredSize(400.dp, 800.dp)) {
-                WowLauncherTheme { WowDisplayBackendSection(blocked = false, onBusyChanged = {}, onSaved = {}) }
+                WowLauncherTheme { HardwareScaleSwitch(resolution = "1344x608", blocked = false) }
             }
         }
         rule.waitForIdle()
         val radios = rule.onAllNodes(SemanticsMatcher("radio") { it.config.getOrNull(SemanticsProperties.Role) == Role.RadioButton },
             useUnmergedTree = true).fetchSemanticsNodes()
         assertTrue("no radio buttons", radios.size >= 2)
-        for (label in listOf("XServer", "Gamescope (experimental)")) {
+        for (label in listOf("Hardware scaling (default)", "App compositing")) {
             val text = rule.onAllNodesWithText(label, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInRoot
             // The radio of this row: the nearest one.
             val radio = radios.map { it.boundsInRoot }.minBy { abs(it.center.y - text.center.y) }

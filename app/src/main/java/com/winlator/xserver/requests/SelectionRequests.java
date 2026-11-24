@@ -52,7 +52,10 @@ public abstract class SelectionRequests {
 
         SelectionManager.Selection selection = client.xServer.selectionManager.getSelection(atom);
         XClient ownerClient = selection.getOwnerClient();
-        if (selection.owner != null && ownerClient != null) {
+        if (client.xServer.selectionManager.isServerOwned(selection)) {
+            client.xServer.selectionManager.serveServerSelection(client, requestor, atom, target, property, timestamp);
+        }
+        else if (selection.owner != null && ownerClient != null) {
             ownerClient.sendEvent(new SelectionRequest(timestamp, selection.owner.id, requestorId, atom, target, property));
         }
         else client.sendEvent(new SelectionNotify(timestamp, requestorId, atom, target, 0));

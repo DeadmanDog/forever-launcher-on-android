@@ -66,4 +66,3 @@
 -keep class androidx.lifecycle.ViewTreeViewModelStoreOwner { *; }
 
 # GameNative DRM calls these Java methods by JNI name.
--keep class app.gamenative.display.GameNativeDrm { *; }

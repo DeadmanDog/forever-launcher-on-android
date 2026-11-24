@@ -15,7 +15,7 @@ production = '\n'.join(method(m) for m in ['bool VulkanRendererContext::frameUnc
 with tempfile.TemporaryDirectory(prefix='wow-present-tests-') as temp:
     cpp = Path(temp) / 'present.cpp'; exe = Path(temp) / 'present'
     cpp.write_text((Path(__file__).with_name('RenderPresentRegression.cpp.in')).read_text().replace('/* PRODUCTION */', production))
-    subprocess.run(['g++', '-std=c++17', '-O1', '-g', '-fsanitize=address,undefined', '-idirafter', str(include), str(cpp), '-o', str(exe)], check=True)
+    subprocess.run(['g++', '-std=c++17', '-O1', '-g', '-fsanitize=address,undefined', '-I', str(project / 'app/src/main/cpp/winlator'), '-idirafter', str(include), str(cpp), '-o', str(exe)], check=True)
     failed = 0
     for case in (0, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28):
         r = subprocess.run([str(exe), str(case)], capture_output=True, text=True, timeout=30)

@@ -35,6 +35,13 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
     public static final byte MAX_TAP_TRAVEL_DISTANCE = 10;
     public static final short MAX_TAP_MILLISECONDS = 200;
     public static final float CURSOR_ACCELERATION = 1.5f;
+    // 1.2.25: fractions of a pixel carried between events instead of rounded away from zero each time (SubpixelAccumulator).
+    private final com.winlator.math.SubpixelAccumulator dragRestX = new com.winlator.math.SubpixelAccumulator();
+    private final com.winlator.math.SubpixelAccumulator dragRestY = new com.winlator.math.SubpixelAccumulator();
+    private final com.winlator.math.SubpixelAccumulator lookRestX = new com.winlator.math.SubpixelAccumulator();
+    private final com.winlator.math.SubpixelAccumulator lookRestY = new com.winlator.math.SubpixelAccumulator();
+    private final com.winlator.math.SubpixelAccumulator capturedRestX = new com.winlator.math.SubpixelAccumulator();
+    private final com.winlator.math.SubpixelAccumulator capturedRestY = new com.winlator.math.SubpixelAccumulator();
     public static final byte CURSOR_ACCELERATION_THRESHOLD = 6;
     private Finger fingerPointerButtonLeft;
     private Finger fingerPointerButtonRight;
@@ -350,13 +357,13 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
         public int deltaX() {
             float dx = (this.x - this.lastX) * TouchpadView.this.sensitivity;
             if (Math.abs(dx) > CURSOR_ACCELERATION_THRESHOLD) dx *= CURSOR_ACCELERATION;
-            return Mathf.roundPoint(dx);
+            return TouchpadView.this.dragRestX.take(dx);
         }
 
         public int deltaY() {
             float dy = (this.y - this.lastY) * TouchpadView.this.sensitivity;
             if (Math.abs(dy) > CURSOR_ACCELERATION_THRESHOLD) dy *= CURSOR_ACCELERATION;
-            return Mathf.roundPoint(dy);
+            return TouchpadView.this.dragRestY.take(dy);
         }
 
         public boolean isTap() {
@@ -490,6 +497,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
                 scrolling = false;
                 suppressNextLeftTap = false;
                 fingers[pointerId] = new Finger(event.getX(actionIndex), event.getY(actionIndex));
+                if (numFingers == 0) { dragRestX.reset(); dragRestY.reset(); }
                 numFingers++;
                 if (simTouchScreen) {
                     if (pointerId == 0) {
@@ -1504,9 +1512,8 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
         }
     }
 
-    // Gamescope owns pointer input through its Wayland sink; no WinHandler mouse RPC.
     private boolean useWinHandlerMouse() {
-        return xServer.isRelativeMouseMovement() && xServer.getInputEventSink() == null;
+        return xServer.isRelativeMouseMovement();
     }
 
     private void moveCursorTo(int x, int y) {
@@ -2135,8 +2142,8 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
         if (Math.abs(moveX) > CURSOR_ACCELERATION_THRESHOLD) moveX *= CURSOR_ACCELERATION;
         if (Math.abs(moveY) > CURSOR_ACCELERATION_THRESHOLD) moveY *= CURSOR_ACCELERATION;
 
-        int dx = Mathf.roundPoint(moveX);
-        int dy = Mathf.roundPoint(moveY);
+        int dx = lookRestX.take(moveX);
+        int dy = lookRestY.take(moveY);
         if (useWinHandlerMouse()) {
             xServer.getWinHandler().mouseEvent(MouseEventFlags.MOVE, dx, dy, 0);
         } else {
@@ -2242,7 +2249,7 @@ public class TouchpadView extends View implements View.OnCapturedPointerListener
 
             dx += event.getAxisValue(MotionEvent.AXIS_RELATIVE_X);
             dy += event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y);
-            this.xServer.injectPointerMoveDelta(Mathf.roundPoint(dx), Mathf.roundPoint(dy));
+            this.xServer.injectPointerMoveDelta(capturedRestX.take(dx), capturedRestY.take(dy));
             return true;
         }
         event.setSource(event.getSource() | InputDevice.SOURCE_MOUSE);

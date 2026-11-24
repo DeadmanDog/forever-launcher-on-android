@@ -233,7 +233,7 @@ class ReviewCoreRequestTest {
         assertEquals(2, one(req(18, 0, int(w), int(atom("REVIEW_PROP")), int(atom("STRING")), byte(7), pad(3), int(4), ByteArray(4))).errorCode)
         assertEquals(2, one(req(1, 0, int(c.newId()), int(x.root.id), short(0), short(0), short(5), short(5), short(0),
             short(7), int(0), int(0))).errorCode)                                                      // window class 7
-        assertEquals(2, one(req(53, 24, int(c.newId()), int(w), short(4), short(4))).errorCode)      // depth 24: no visual
+        assertEquals(2, one(req(53, 12, int(c.newId()), int(w), short(4), short(4))).errorCode)      // depth 12: no visual
         assertEquals(8, one(req(73, 1, int(w), short(0), short(0), short(1), short(1), int(-1))).errorCode) // XYPixmap
         assertEquals(2, one(req(2, 0, int(w), int(1 shl 4), int(99))).errorCode)                      // bit gravity 99
         // Background pixel on an InputOnly window: ignored (was a NullPointerException).

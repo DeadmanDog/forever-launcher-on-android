@@ -26,3 +26,17 @@ run fsr_gpu run_fsr_gpu_regressions.py
 run scanout_waiter run_scanout_waiter_regressions.py
 run scanout_release run_scanout_release_regressions.py
 run native_fix run_native_fix_regressions.py
+
+run hidden_cursor_work run_hidden_cursor_work_regressions.py --out "$O/hidden_cursor_work"
+
+run teardown_oom run_teardown_oom_regressions.py --out "$O/teardown_oom"
+
+run hidden_cursor_pacing run_hidden_cursor_pacing_regressions.py --out "$O/hidden_cursor_pacing"
+run fifo_gate run_fifo_gate_regressions.py
+run neutral_gpu run_neutral_gpu_regressions.py
+run drain_hold run_drain_hold_regressions.py
+run drain_step run_drain_step_regressions.py
+run drain_replay run_drain_replay_regressions.py
+run handback run_handback_regressions.py
+run gate_jitter run_gate_jitter_regressions.py
+run replay_jitter run_replay_jitter_regressions.py

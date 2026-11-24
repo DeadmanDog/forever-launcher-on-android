@@ -1,7 +1,6 @@
 package app.gamenative.ui.screen.wow
 
 import android.app.Application
-import app.gamenative.display.GamescopeWindowPolicy
 import app.gamenative.ui.component.dialog.SwitchNeeds
 import app.gamenative.ui.component.dialog.switchNeeds
 import com.winlator.container.Container
@@ -76,9 +75,9 @@ class Review5SettingsTest {
         val two = EnvVars().apply { put("VKD3D_SWAPCHAIN_LATENCY_FRAMES", "2"); put("TU_KGSL_WAITBOOST_FRAME_STEER", "1") }
         WowRuntimeTuning.applyVkd3dSteer(two, EnvVars(), xserverDx12 = true)
         assertFalse(two.has("TU_KGSL_WAITBOOST_FRAME_STEER"))
-        val gamescope = EnvVars().apply { put("VKD3D_SWAPCHAIN_LATENCY_FRAMES", "1") }
-        WowRuntimeTuning.applyVkd3dSteer(gamescope, EnvVars(), xserverDx12 = false)
-        assertFalse(gamescope.has("TU_KGSL_WAITBOOST_FRAME_STEER"))
+        val notDx12 = EnvVars().apply { put("VKD3D_SWAPCHAIN_LATENCY_FRAMES", "1") }
+        WowRuntimeTuning.applyVkd3dSteer(notDx12, EnvVars(), xserverDx12 = false)
+        assertFalse(notDx12.has("TU_KGSL_WAITBOOST_FRAME_STEER"))
         // A saved value wins: FRAME_STEER=0 gives the 1.1.24 share controller back for an A/B test.
         val savedOff = EnvVars("TU_KGSL_WAITBOOST_FRAME_STEER=0")
         val ab = EnvVars(savedOff.toString()).apply { put("VKD3D_SWAPCHAIN_LATENCY_FRAMES", "1") }
@@ -88,19 +87,14 @@ class Review5SettingsTest {
 
     // The Advanced tab greys out a switch that does nothing with the current API or display backend, and only then.
     @Test fun switchesThatDoNothingNowAreGreyedOutWithTheReason() {
-        // The GPU wait acts on XServer + DX12 only (WowLaunchEnvironment): it looked active under DX11 and Gamescope.
-        assertEquals(SwitchNeeds.DX12, switchNeeds(WowRuntimeTuning.GAME_GPU_WAIT, dx12 = false, gamescope = false))
-        assertEquals(SwitchNeeds.XSERVER, switchNeeds(WowRuntimeTuning.GAME_GPU_WAIT, dx12 = true, gamescope = true))
-        assertNull(switchNeeds(WowRuntimeTuning.GAME_GPU_WAIT, dx12 = true, gamescope = false))
-        // Gamescope direct scanout is a Gamescope flag: it looked active under XServer.
-        assertEquals(SwitchNeeds.GAMESCOPE, switchNeeds(GamescopeWindowPolicy.DIRECT_SCANOUT, dx12 = false, gamescope = false))
-        assertNull(switchNeeds(GamescopeWindowPolicy.DIRECT_SCANOUT, dx12 = true, gamescope = true))
-        // Unchanged: DXVK-only switches under DX12, XServer-only ones under Gamescope, the rest always.
-        assertEquals(SwitchNeeds.DX11, switchNeeds(WowRuntimeTuning.HYBRID_GPL, dx12 = true, gamescope = false))
-        assertEquals(SwitchNeeds.DX11, switchNeeds(WowRuntimeTuning.VEGAS_BINDSKIP, dx12 = true, gamescope = true))
-        assertEquals(SwitchNeeds.XSERVER, switchNeeds("scanout", dx12 = false, gamescope = true))
-        assertNull(switchNeeds("scanout", dx12 = true, gamescope = false))
-        assertNull(switchNeeds(WowRuntimeTuning.EVENT_POOL, dx12 = true, gamescope = true))
-        assertNull(switchNeeds(WowRuntimeTuning.CPU_CLASSES, dx12 = false, gamescope = false))
+        // The GPU wait acts on DX12 only (WowLaunchEnvironment): it looked active under DX11. 1.2.7: no display backend any more.
+        assertEquals(SwitchNeeds.DX12, switchNeeds(WowRuntimeTuning.GAME_GPU_WAIT, dx12 = false))
+        assertNull(switchNeeds(WowRuntimeTuning.GAME_GPU_WAIT, dx12 = true))
+        assertEquals(SwitchNeeds.DX11, switchNeeds(WowRuntimeTuning.HYBRID_GPL, dx12 = true))
+        assertEquals(SwitchNeeds.DX11, switchNeeds(WowRuntimeTuning.VEGAS_BINDSKIP, dx12 = true))
+        assertNull(switchNeeds("scanout", dx12 = true))
+        assertNull(switchNeeds("scanout", dx12 = false))
+        assertNull(switchNeeds(WowRuntimeTuning.EVENT_POOL, dx12 = true))
+        assertNull(switchNeeds(WowRuntimeTuning.CPU_CLASSES, dx12 = false))
     }
 }
